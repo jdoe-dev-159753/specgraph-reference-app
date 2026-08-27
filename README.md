@@ -16,25 +16,9 @@ The reference application is intentionally realistic enough to exercise the full
 
 ## Relationship to SpecGraph Harness
 
-```text
-specgraph-harness
-    reusable engineering method
-    knowledge graph
-    context derivation
-    provider abstractions
-    reviewers
-    ratchets
-    evidence and views
-            │
-            ▼
-specgraph-reference-app
-    domain requirements
-    invariants
-    acceptance criteria
-    design and ADRs
-    implementation
-    tests
-    domain evidence
+```mermaid
+flowchart TD
+    H["specgraph-harness<br/>Reusable engineering method<br/>Knowledge graph<br/>Context derivation<br/>Provider abstractions<br/>Reviewers<br/>Ratchets<br/>Evidence and views"] --> A["specgraph-reference-app<br/>Domain requirements<br/>Invariants<br/>Acceptance criteria<br/>Design and ADRs<br/>Implementation<br/>Tests<br/>Domain evidence"]
 ```
 
 The dependency points in one direction: this application may consume the harness, but the harness must never learn employer-specific or domain-specific concepts from this repository.
@@ -75,40 +59,24 @@ If a mechanism is useful independently of this application's domain, it should n
 
 The reference application is expected to exercise a workflow broadly shaped like this:
 
-```text
-Problem statement
-      │
-      ▼
-Facts / ambiguities / assumptions
-      │
-      ▼
-Requirements + invariants
-      │
-      ▼
-Acceptance criteria
-      │
-      ▼
-Design + ADRs + UML/SysML where useful
-      │
-      ▼
-Verification skeleton
-      │
-      ▼
-AI-assisted implementation
-      │
-      ▼
-GitHub pull request
-      │
-      ├── deterministic gates
-      ├── architecture review
-      ├── adversarial review
-      └── requirements / verification review
-      │
-      ▼
-Human decision
-      │
-      ▼
-Merge + retained evidence
+```mermaid
+flowchart TD
+    P["Problem statement"] --> F["Facts / ambiguities / assumptions"]
+    F --> R["Requirements + invariants"]
+    R --> A["Acceptance criteria"]
+    A --> D["Design + ADRs + UML/SysML where useful"]
+    D --> V["Verification skeleton"]
+    V --> I["AI-assisted implementation"]
+    I --> PR["GitHub pull request"]
+    PR --> G["Deterministic gates"]
+    PR --> AR["Architecture review"]
+    PR --> ADV["Adversarial review"]
+    PR --> VR["Requirements / verification review"]
+    G --> H["Human decision"]
+    AR --> H
+    ADV --> H
+    VR --> H
+    H --> M["Merge + retained evidence"]
 ```
 
 The business solution should remain as simple as the problem permits. Methodological sophistication is valuable only when it improves correctness, traceability, maintainability, reviewability, or cost.
@@ -117,14 +85,16 @@ The business solution should remain as simple as the problem permits. Methodolog
 
 The application is expected to expose relationships such as:
 
-```text
-REQ-SM-017
-    ├── refined by ──> acceptance/design artefacts
-    ├── constrains ──> state-transition behaviour
-    └── verified by ──> deterministic tests/evidence
+```mermaid
+flowchart LR
+    R["REQ-SM-017"] -->|refined by| D["Acceptance / design artefacts"]
+    R -->|constrains| S["State-transition behaviour"]
+    R -->|verified by| T["Deterministic tests / evidence"]
 ```
 
 Generated matrices and diagrams are views over authoritative sources. They should not become manually maintained duplicate truths.
+
+For simple flow, dependency, topology, and conceptual views, use GitHub-native Mermaid. For UML diagram families where UML semantics improve precision or readability, use PlantUML and keep the `.puml` source authoritative; rendered SVG/HTML/PDF artefacts remain generated views.
 
 The resulting evidence should make practical questions cheap to answer:
 
