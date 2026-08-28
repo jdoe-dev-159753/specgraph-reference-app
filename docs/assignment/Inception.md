@@ -25,7 +25,9 @@ This avoids both waterfall sequencing and disposable-prototype rewrites.
 This document contains two kinds of material:
 
 1. **Inception constraints and principles** — intended to guide the project unless superseded by evidence or a later explicit decision.
-2. **Illustrative blueprints** — concrete examples of requirements structure, UML relationships, modules, adapters, CI gates, issue/PR decomposition, dashboard composition, and test strategy. These preserve the reasoning from inception but become authoritative only if adopted by the SRS, SDD, ADRs, V&V artefacts, code, or GitHub-native work graph.
+2. **Illustrative blueprints** — concrete examples of requirements structure, UML relationships, modules, adapters, CI gates, dashboard composition, and test strategy. These preserve the reasoning from inception but become authoritative only if adopted by the SRS, SDD, ADRs, V&V artefacts, or code.
+
+The document deliberately does **not** contain an illustrative issue hierarchy, dependency graph, PR queue, or lifecycle snapshot. Those dimensions are mechanically representable and therefore belong only in GitHub-native metadata when the preflight instantiates the real work graph.
 
 When a blueprint conflicts with a later controlled artefact, the later artefact wins within its semantic domain. The inception document should then be amended if the historical rationale itself has materially changed.
 
@@ -132,6 +134,8 @@ Use-case bubbles carry delivery priority visually and textually so the view rema
 
 Use UML `<<include>>` and `<<extend>>` only where their semantics are real. Authentication should normally be a protected-use-case precondition rather than a decorative `include` repeated from every bubble.
 
+Because these colours express **delivery priority**, a deferred MUST_HAVE capability should not appear as an unconditional `include` of a MANDATORY centre capability. Layered variants can be represented as extensions in this inception view even when the final accepted product requires those extensions to be enabled.
+
 ### 8.1 Functional UML relationship sketch
 
 A candidate structure to validate in the SRS is:
@@ -155,11 +159,11 @@ Request AI Analysis
   <<include>> Produce Findings Summary
   <<include>> Produce Recommendations
 
-Build Analysis Context
-  <<include>> Retrieve Relevant Policies
+Ground Analysis with Relevant Policies
+  <<extend>> Request AI Analysis
 
-Request AI Analysis
-  <<include>> Persist Analysis
+Retain Analysis for Later Review
+  <<extend>> Request AI Analysis
 
 Filter Activity
   <<extend>> Review Customer Activity
@@ -170,6 +174,8 @@ Inspect Transaction Details
 Review Analysis History
   <<extend>> Review Customer Dashboard
 ```
+
+The RAG and persistence extensions model concentric delivery, not optional final acceptance criteria: both remain MUST_HAVE capabilities of the completed submission.
 
 This is intentionally a semantic sketch rather than the final PlantUML source.
 
@@ -193,8 +199,8 @@ usecase "Review PAYMENT Activity" as UC_Payment <<MANDATORY>>
 usecase "Review CRYPTO Activity" as UC_Crypto <<MANDATORY>>
 usecase "Review Risk Signals" as UC_Risk <<MANDATORY>>
 usecase "Request AI Analysis" as UC_AI <<MANDATORY>>
-usecase "Retrieve Relevant Policies" as UC_RAG <<MUST_HAVE>>
-usecase "Persist Analysis" as UC_Persist <<MUST_HAVE>>
+usecase "Ground Analysis with Relevant Policies" as UC_Grounded <<MUST_HAVE>>
+usecase "Retain Analysis for Later Review" as UC_Retain <<MUST_HAVE>>
 usecase "Review Analysis History" as UC_History <<MUST_HAVE>>
 usecase "Filter Activity" as UC_Filter <<NICE_TO_HAVE>>
 
@@ -206,8 +212,8 @@ Operator --> UC_History
 UC_Activity .> UC_Card : <<include>>
 UC_Activity .> UC_Payment : <<include>>
 UC_Activity .> UC_Crypto : <<include>>
-UC_AI .> UC_RAG : <<include>>
-UC_AI .> UC_Persist : <<include>>
+UC_Grounded .> UC_AI : <<extend>>
+UC_Retain .> UC_AI : <<extend>>
 UC_Filter .> UC_Activity : <<extend>>
 @enduml
 ```
@@ -807,7 +813,7 @@ Generated views
 
 The useful comparison is between intended design and generated implementation evidence. Maintaining two hand-edited architecture descriptions would merely create two places to be wrong.
 
-## 22. GitHub issues and pull requests
+## 22. GitHub work-graph discipline
 
 Issues and PRs are complementary:
 
@@ -815,87 +821,17 @@ Issues and PRs are complementary:
 - a PR owns one concrete reviewable change and its proving tests;
 - native GitHub parent/sub-issue, dependency, duplicate, lifecycle, assignee, milestone, and Development/closing semantics represent the work graph;
 - labels are non-exclusive semantic tags, never workflow enums;
-- stacked PRs are encouraged where dependency topology makes them useful.
+- stacked PRs are encouraged where the native dependency topology makes them useful.
 
 Useful semantic labels may include `architecture`, `backend`, `frontend`, `database`, `data-generation`, `security`, `ai`, `rag`, `deployment`, `testing`, `documentation`, `observability`, `bug`, and `enhancement`.
 
-Likely capability umbrellas include technical hollow mock-up, customer activity, operator identity, risk overview, AI analysis, and RAG. Their exact native work graph is intentionally deferred until the SRS/SDD/V&V preflight establishes authoritative scope.
+The fresh-context preflight derives actual work nodes from the controlled SRS/SDD/V&V scope and materializes hierarchy, dependencies, ownership, and PR links **only through GitHub-native relations**. This document intentionally does not predict those edges or maintain an illustrative queue.
 
-## 23. Illustrative capability work graph
+The process remains iterative: create only the thin controlled baseline needed to make R0 reviewable, then evolve requirements, design, ADRs, UML, and verification material in the same feature PR when a vertical slice changes their semantics. Reviews may overlap through stacked branches; the documents are never considered “finished before coding starts”.
 
-The fresh-context preflight may converge on a structure broadly resembling:
+Before a PR is integrated into `main`, reconcile its final base, native Development/closing ownership, exact-head checks, and review threads. Tests proving a behavior belong in the same PR that introduces that behavior rather than a final catch-all test change.
 
-```text
-Customer Activity Analytics delivery
-├── Technical hollow mock-up
-│   ├── backend shell
-│   ├── frontend shell
-│   └── Compose/Caddy/VPS path
-├── Customer activity
-│   ├── activity domain/ports
-│   ├── deterministic synthetic scenarios
-│   ├── activity API/UI
-│   └── persistence adapter
-├── Operator identity
-│   └── Spring Security/operator persistence
-├── Risk overview
-│   ├── risk evidence projection
-│   └── dashboard presentation
-├── AI analysis
-│   ├── analysis contract/orchestration
-│   ├── deterministic model adapter
-│   ├── persistence/history
-│   └── optional live provider adapter
-└── RAG
-    ├── policy corpus/ingestion
-    └── pgvector retrieval adapter
-```
-
-This diagram is illustrative only. If adopted, hierarchy and dependencies must exist as GitHub-native relations rather than prose declarations.
-
-## 24. Illustrative PR topology
-
-The initial controlled artefacts and the first deployable slice should be **interleaved**, not executed as a documentation phase followed by implementation. A plausible decomposition, subject to the actual SRS/SDD and independent-rejection test, is:
-
-```text
-PR01  docs: establish the thin SRS/SDD/V&V baseline needed to authorize R0
-PR02  build: establish backend hollow shell and architecture gates; update design/V&V where the executable skeleton teaches us something
-PR03  feat: establish frontend hollow shell and end-to-end stub journey; update requirements/design/tests with any semantic refinement
-PR04  ops: establish Compose/Caddy/live R0 deployment; update deployment design and smoke-verification obligations
-PR05  feat: add customer/activity ports and deterministic scenarios; evolve SRS/SDD/V&V in the same change where semantics move
-PR06  feat: add customer activity dashboard slice
-PR07  data: add Flyway/JPA/PostgreSQL persistence and seeded scenarios
-PR08  feat: add risk projection and dashboard evidence
-PR09  feat: add analysis orchestration and deterministic AI adapter
-PR10  feat: persist and review analysis history
-PR11  feat: add real RAG ingestion/retrieval with pgvector
-PR12  feat: add multi-operator Spring Security path
-PR13  feat: add optional live LLM adapter and provider hardening
-```
-
-PR01 is intentionally thin and timeboxed. It captures enough controlled intent to make R0 reviewable; it is not an attempt to finish specification and design before code exists. From PR02 onward, the controlled artefacts evolve alongside progressively real vertical slices whenever implementation evidence changes semantics or reveals a design decision.
-
-This is an example, not a queue. Some nodes can be parallel/stacked, and some may split or collapse after design review.
-
-Tests proving each behavior belong in the same PR that introduces that behavior. Do not create a final “testing PR” that retroactively tries to prove the entire application.
-
-## 25. Stacked PR behavior
-
-Use stacked PRs to maintain momentum while preserving reviewability. The first stack should look more like a thin controlled baseline immediately followed by executable proof than three document-only prerequisites:
-
-```text
-thin SRS/SDD/V&V baseline
-  -> backend hollow shell + architecture evidence + design/V&V deltas
-    -> frontend hollow shell + end-to-end stub journey + artefact deltas
-      -> Compose/Caddy/VPS R0 + deployment/smoke deltas
-        -> progressively real customer/risk/AI/RAG slices
-```
-
-A minimal baseline should exist before the implementation decision it governs, but the documents are not “finished” before coding starts. Each later feature PR updates the SRS, SDD, ADRs, UML, or V&V material in the same reviewable change when that feature changes their semantics. This is the intended specification-driven iteration loop, not a document stage followed by an implementation stage.
-
-Reviews can run while the next small branch is stacked on top. Before a PR is integrated into `main`, reconcile its final base, native Development/closing ownership, exact-head checks, and review threads. Do not encode stack state in titles or bodies as a substitute for GitHub metadata.
-
-## 26. Review is continuous
+## 23. Review is continuous
 
 Route review according to the change:
 
@@ -915,7 +851,7 @@ Continue dependent work in stacks while parent review is active. Day 5 includes 
 
 A reviewer finding that is independently reviewable work should become or map to a real GitHub issue. A correction that clearly belongs to the current PR is fixed there. Native duplicate/dependency/PR relations remain the work authority.
 
-## 27. Five-day execution envelope
+## 24. Five-day execution envelope
 
 | Day | Main objective | Required visible state by evening |
 | --- | --- | --- |
@@ -929,7 +865,7 @@ Daily invariant:
 
 > The currently deployed SHA must support a coherent demonstration of everything already claimed complete.
 
-## 28. Demo path blueprint
+## 25. Demo path blueprint
 
 A 10–15 minute rehearsal should roughly permit:
 
@@ -956,7 +892,7 @@ login
 
 If the live provider fails, switch to the deterministic supported adapter without changing the user workflow.
 
-## 29. Stop rules
+## 26. Stop rules
 
 1. No unfinished SpecGraph Harness capability may block challenge delivery.
 2. A framework integration consuming roughly 60–90 minutes without vertical progress triggers reevaluation or fallback.
@@ -967,7 +903,7 @@ If the live provider fails, switch to the deterministic supported adapter withou
 7. Do not implement generic infrastructure that a mature component already provides behind a clean boundary.
 8. Do not finish SpecGraph in order to start the exercise.
 
-## 30. Bounded SpecGraph usage
+## 27. Bounded SpecGraph usage
 
 Use the mature engineering method:
 
@@ -990,10 +926,10 @@ Do not place unfinished harness machinery on the critical path:
 
 The harness supplies the engineering method. The consumer repository owns the challenge-specific SRS, SDD, ADRs, implementation, tests, deployment, and evidence.
 
-## 31. Success criterion
+## 28. Success criterion
 
 The desired final signal is not “a framework was built around the exercise”. It is:
 
 > A small financial-services application can be run locally and reached on a real deployment; its behavior traces back to explicit requirements and design decisions; AI is bounded behind replaceable interfaces and grounded by real retrieval; important claims are mechanically verified where possible; the GitHub history shows incremental reviewed delivery; and the whole system can be explained clearly in 10–15 minutes.
 
-The next step after this inception document is a fresh-context preflight: instantiate the native Customer Activity Analytics work graph, produce the controlled SRS/SDD/ADR/V&V baseline with PlantUML views, review those artefacts, and immediately start the R0 hollow mock-up stack.
+The next step after this inception document is a fresh-context preflight: instantiate the native Customer Activity Analytics work graph, produce the thin controlled SRS/SDD/ADR/V&V baseline with PlantUML views, review those artefacts, and immediately start the R0 hollow mock-up stack.
