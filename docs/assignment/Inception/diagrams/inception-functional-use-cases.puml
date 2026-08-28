@@ -1,0 +1,66 @@
+@startuml
+left to right direction
+actor "Customer Care Operator" as Operator
+
+skinparam usecase {
+  BackgroundColor<<MANDATORY>> #FFB3B3
+  BackgroundColor<<MUST_HAVE>> #FFD699
+  BackgroundColor<<NICE_TO_HAVE>> #CDECCF
+}
+
+usecase "Authenticate Operator" as UC_Auth <<MUST_HAVE>>
+usecase "Search Customer" as UC_Search <<MANDATORY>>
+usecase "Review Customer Dashboard" as UC_Dashboard <<MANDATORY>>
+usecase "Review Customer Activity" as UC_Activity <<MANDATORY>>
+usecase "Review CARD Activity" as UC_Card <<MANDATORY>>
+usecase "Review PAYMENT Activity" as UC_Payment <<MANDATORY>>
+usecase "Review CRYPTO Activity" as UC_Crypto <<MANDATORY>>
+usecase "Review Risk Signals" as UC_Risk <<MANDATORY>>
+usecase "Request AI Analysis" as UC_AI <<MANDATORY>>
+usecase "Build Analysis Context" as UC_Context <<MANDATORY>>
+usecase "Produce Risk Level" as UC_Level <<MANDATORY>>
+usecase "Produce Findings Summary" as UC_Findings <<MANDATORY>>
+usecase "Produce Recommendations" as UC_Recommendations <<MANDATORY>>
+usecase "Ground Analysis with Relevant Policies" as UC_Grounded <<MUST_HAVE>>
+usecase "Retain Analysis for Later Review" as UC_Retain <<MUST_HAVE>>
+usecase "Review Analysis History" as UC_History <<MUST_HAVE>>
+usecase "Filter Activity" as UC_Filter <<NICE_TO_HAVE>>
+usecase "Inspect Transaction Details" as UC_Detail <<NICE_TO_HAVE>>
+
+Operator --> UC_Auth
+Operator --> UC_Search
+Operator --> UC_Dashboard
+Operator --> UC_Activity
+Operator --> UC_Risk
+Operator --> UC_AI
+Operator --> UC_History
+UC_Dashboard .> UC_Activity : <<include>>
+UC_Dashboard .> UC_Risk : <<include>>
+UC_Activity .> UC_Card : <<include>>
+UC_Activity .> UC_Payment : <<include>>
+UC_Activity .> UC_Crypto : <<include>>
+UC_AI .> UC_Context : <<include>>
+UC_AI .> UC_Level : <<include>>
+UC_AI .> UC_Findings : <<include>>
+UC_AI .> UC_Recommendations : <<include>>
+UC_Grounded .> UC_Context : <<extend>>
+UC_Retain .> UC_AI : <<extend>>
+UC_History .> UC_Dashboard : <<extend>>
+UC_Filter .> UC_Activity : <<extend>>
+UC_Detail .> UC_Activity : <<extend>>
+
+note right of UC_Auth
+  Precondition for protected use cases;
+  not repeated as an <<include>> edge.
+end note
+
+note bottom of UC_Grounded
+  MUST_HAVE in the completed submission,
+  layered after the mandatory centre.
+end note
+
+note bottom of UC_Retain
+  MUST_HAVE in the completed submission,
+  layered after the mandatory centre.
+end note
+@enduml
