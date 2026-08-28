@@ -596,6 +596,14 @@ The exact layout belongs to implementation/design review, but the demo should ma
 
 ## 18. Concentric delivery rings
 
+The delivery model is intentionally onion-shaped: each outer ring retains the same application shell, deployment topology, and stable ports while replacing or enriching adapters and capabilities. The centre is therefore already the product skeleton rather than a disposable prototype.
+
+![Concentric R0-R5 delivery rings](diagrams/inception-concentric-rings.svg)
+
+[Authoritative PlantUML/Graphviz source](diagrams/inception-concentric-rings.puml)
+
+The ring titles summarize the progression; the subsections below retain the detailed intent and acceptance evidence for each ring.
+
 ### R0 — Hollow mock-up and architecture proof
 
 Build the real shell immediately:
