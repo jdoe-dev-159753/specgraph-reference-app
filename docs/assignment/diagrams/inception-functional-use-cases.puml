@@ -10,6 +10,7 @@ skinparam usecase {
 
 usecase "Authenticate Operator" as UC_Auth <<MUST_HAVE>>
 usecase "Search Customer" as UC_Search <<MANDATORY>>
+usecase "Review Customer Dashboard" as UC_Dashboard <<MANDATORY>>
 usecase "Review Customer Activity" as UC_Activity <<MANDATORY>>
 usecase "Review CARD Activity" as UC_Card <<MANDATORY>>
 usecase "Review PAYMENT Activity" as UC_Payment <<MANDATORY>>
@@ -28,10 +29,13 @@ usecase "Inspect Transaction Details" as UC_Detail <<NICE_TO_HAVE>>
 
 Operator --> UC_Auth
 Operator --> UC_Search
+Operator --> UC_Dashboard
 Operator --> UC_Activity
 Operator --> UC_Risk
 Operator --> UC_AI
 Operator --> UC_History
+UC_Dashboard .> UC_Activity : <<include>>
+UC_Dashboard .> UC_Risk : <<include>>
 UC_Activity .> UC_Card : <<include>>
 UC_Activity .> UC_Payment : <<include>>
 UC_Activity .> UC_Crypto : <<include>>
@@ -41,6 +45,7 @@ UC_AI .> UC_Findings : <<include>>
 UC_AI .> UC_Recommendations : <<include>>
 UC_Grounded .> UC_Context : <<extend>>
 UC_Retain .> UC_AI : <<extend>>
+UC_History .> UC_Dashboard : <<extend>>
 UC_Filter .> UC_Activity : <<extend>>
 UC_Detail .> UC_Activity : <<extend>>
 
