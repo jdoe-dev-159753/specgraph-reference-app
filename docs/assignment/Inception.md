@@ -855,24 +855,25 @@ This diagram is illustrative only. If adopted, hierarchy and dependencies must e
 
 ## 24. Illustrative PR topology
 
-A plausible decomposition, subject to the actual SRS/SDD and independent-rejection test, is:
+The initial controlled artefacts and the first deployable slice should be **interleaved**, not executed as a documentation phase followed by implementation. A plausible decomposition, subject to the actual SRS/SDD and independent-rejection test, is:
 
 ```text
-PR01  docs: establish SRS baseline and 2TUP UML
-PR02  docs: establish SDD/ADR baseline and design UML
-PR03  test: establish V&V skeleton and architecture gates
-PR04  build: establish Spring/React hollow shell
-PR05  ops: establish Compose/Caddy/live deployment path
-PR06  feat: add customer/activity ports and deterministic scenarios
-PR07  feat: add customer activity dashboard slice
-PR08  data: add Flyway/JPA/PostgreSQL persistence and seeded scenarios
-PR09  feat: add risk projection and dashboard evidence
-PR10  feat: add analysis orchestration and deterministic AI adapter
-PR11  feat: persist and review analysis history
-PR12  feat: add real RAG ingestion/retrieval with pgvector
-PR13  feat: add multi-operator Spring Security path
-PR14  feat: add optional live LLM adapter and provider hardening
+PR01  docs: establish the thin SRS/SDD/V&V baseline needed to authorize R0
+PR02  build: establish backend hollow shell and architecture gates; update design/V&V where the executable skeleton teaches us something
+PR03  feat: establish frontend hollow shell and end-to-end stub journey; update requirements/design/tests with any semantic refinement
+PR04  ops: establish Compose/Caddy/live R0 deployment; update deployment design and smoke-verification obligations
+PR05  feat: add customer/activity ports and deterministic scenarios; evolve SRS/SDD/V&V in the same change where semantics move
+PR06  feat: add customer activity dashboard slice
+PR07  data: add Flyway/JPA/PostgreSQL persistence and seeded scenarios
+PR08  feat: add risk projection and dashboard evidence
+PR09  feat: add analysis orchestration and deterministic AI adapter
+PR10  feat: persist and review analysis history
+PR11  feat: add real RAG ingestion/retrieval with pgvector
+PR12  feat: add multi-operator Spring Security path
+PR13  feat: add optional live LLM adapter and provider hardening
 ```
+
+PR01 is intentionally thin and timeboxed. It captures enough controlled intent to make R0 reviewable; it is not an attempt to finish specification and design before code exists. From PR02 onward, the controlled artefacts evolve alongside progressively real vertical slices whenever implementation evidence changes semantics or reveals a design decision.
 
 This is an example, not a queue. Some nodes can be parallel/stacked, and some may split or collapse after design review.
 
@@ -880,20 +881,19 @@ Tests proving each behavior belong in the same PR that introduces that behavior.
 
 ## 25. Stacked PR behavior
 
-Use stacked PRs to maintain momentum while preserving reviewability:
+Use stacked PRs to maintain momentum while preserving reviewability. The first stack should look more like a thin controlled baseline immediately followed by executable proof than three document-only prerequisites:
 
 ```text
-SRS baseline
-  -> SDD baseline
-    -> V&V skeleton
-      -> backend shell
-        -> frontend shell
-          -> deployment shell
+thin SRS/SDD/V&V baseline
+  -> backend hollow shell + architecture evidence + design/V&V deltas
+    -> frontend hollow shell + end-to-end stub journey + artefact deltas
+      -> Compose/Caddy/VPS R0 + deployment/smoke deltas
+        -> progressively real customer/risk/AI/RAG slices
 ```
 
-This does not imply waiting for every parent merge before beginning dependent work. Reviews can run while the next small branch is stacked on top.
+A minimal baseline should exist before the implementation decision it governs, but the documents are not “finished” before coding starts. Each later feature PR updates the SRS, SDD, ADRs, UML, or V&V material in the same reviewable change when that feature changes their semantics. This is the intended specification-driven iteration loop, not a document stage followed by an implementation stage.
 
-Before a PR is integrated into `main`, reconcile its final base, native Development/closing ownership, exact-head checks, and review threads. Do not encode stack state in titles or bodies as a substitute for GitHub metadata.
+Reviews can run while the next small branch is stacked on top. Before a PR is integrated into `main`, reconcile its final base, native Development/closing ownership, exact-head checks, and review threads. Do not encode stack state in titles or bodies as a substitute for GitHub metadata.
 
 ## 26. Review is continuous
 
@@ -919,7 +919,7 @@ A reviewer finding that is independently reviewable work should become or map to
 
 | Day | Main objective | Required visible state by evening |
 | --- | --- | --- |
-| J1 | Work-graph/artifact preflight, SRS/SDD/V&V baseline, R0, first read slice | Live HTTPS URL; complete architecture shell; customer activity visible through stubs/synthetic data |
+| J1 | Work-graph/artifact preflight, thin SRS/SDD/V&V baseline, R0, first read slice | Live HTTPS URL; complete architecture shell; customer activity visible through stubs/synthetic data |
 | J2 | Persistence, deterministic data, identity, risk | Real database; multiple operators; meaningful activity/risk dashboard |
 | J3 | Structured AI stub, persistence/history, real RAG | Every explicitly requested final capability demonstrable without an external LLM dependency |
 | J4 | Optional live provider, failure paths, test/architecture hardening, UX | Complete robust product; only optional work remains |
