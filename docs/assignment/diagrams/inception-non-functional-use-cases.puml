@@ -1,0 +1,43 @@
+@startuml
+left to right direction
+actor "Developer / Reviewer" as Dev
+actor "Customer Care Operator" as Operator
+actor "Architecture Verification" as Arch
+actor "Operations / Deployment" as Ops
+
+skinparam usecase {
+  BackgroundColor<<MANDATORY>> #FFB3B3
+  BackgroundColor<<MUST_HAVE>> #FFD699
+  BackgroundColor<<NICE_TO_HAVE>> #CDECCF
+}
+
+usecase "Reproduce System Locally" as NF_Reproduce <<MANDATORY>>
+usecase "Verify Change Deterministically" as NF_Verify <<MANDATORY>>
+usecase "Operate without External LLM" as NF_OfflineAI <<MANDATORY>>
+usecase "Protect Operator Access" as NF_Access <<MUST_HAVE>>
+usecase "Preserve Module / Hexagonal Boundaries" as NF_Architecture <<MUST_HAVE>>
+usecase "Persist and Reset Demo Data" as NF_Data <<MUST_HAVE>>
+usecase "Use Equivalent Local / Remote Topology" as NF_Topology <<MUST_HAVE>>
+usecase "Degrade Gracefully on AI Failure" as NF_Degrade <<MUST_HAVE>>
+usecase "Expose Health / Readiness" as NF_Health <<MUST_HAVE>>
+usecase "Generate Technical / API Documentation" as NF_Docs <<NICE_TO_HAVE>>
+usecase "Inspect Advanced Telemetry" as NF_Telemetry <<NICE_TO_HAVE>>
+
+Dev --> NF_Reproduce
+Dev --> NF_Verify
+Dev --> NF_OfflineAI
+Operator --> NF_Access
+Operator --> NF_Degrade
+Operator --> NF_Topology
+Arch --> NF_Architecture
+Ops --> NF_Data
+Ops --> NF_Topology
+Ops --> NF_Health
+Dev --> NF_Docs
+Ops --> NF_Telemetry
+
+note bottom of NF_Architecture
+  Architecture constraints are mechanically verified
+  where possible rather than reviewed only by prose.
+end note
+@enduml
