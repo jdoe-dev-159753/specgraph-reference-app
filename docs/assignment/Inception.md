@@ -65,6 +65,14 @@ The source statement leaves several details deliberately or accidentally open. T
 
 Resolve only what is needed to build and demonstrate a coherent application. Do not invent a banking platform around the exercise.
 
+A minimal working schema extension is a reasonable starting assumption for the SRS/SDD preflight:
+
+- a small `customers` table containing only fields required by search and dashboard context;
+- operator users/authorities sufficient for multiple authenticated operators;
+- persisted AI-analysis records carrying customer, operator, timestamp, risk level, summary and recommendations, plus provider/model/prompt version and retrieved policy references or other provenance where practical.
+
+These are candidate assumptions, not permission to invent unrelated banking-domain tables.
+
 ## 5. Planning model: source obligation != delivery priority
 
 Two independent dimensions must not be conflated:
@@ -136,116 +144,25 @@ Use UML `<<include>>` and `<<extend>>` only where their semantics are real. Auth
 
 Because these colours express **delivery priority**, a deferred MUST_HAVE capability should not appear as an unconditional `include` of a MANDATORY centre capability. Layered variants can be represented as extensions in this inception view even when the final accepted product requires those extensions to be enabled.
 
-### 8.1 Functional UML relationship sketch
+### 8.1 Functional use-case view
 
-A candidate structure to validate in the SRS is:
+The functional view covers customer search, activity review, risk review, the structured AI result, authentication as a protected-use-case precondition, and the later RAG/persistence layers. Activity filtering and transaction detail remain NICE_TO_HAVE extensions.
 
-```text
-Customer Care Operator
-  -> Search Customer
-  -> Review Customer Activity
-  -> Review Risk Signals
-  -> Request AI Analysis
-  -> Review Analysis History
+![Functional 2TUP use-case view](diagrams/inception-functional-use-cases.svg)
 
-Review Customer Activity
-  <<include>> Review CARD Activity
-  <<include>> Review PAYMENT Activity
-  <<include>> Review CRYPTO Activity
-
-Request AI Analysis
-  <<include>> Build Analysis Context
-  <<include>> Produce Risk Level
-  <<include>> Produce Findings Summary
-  <<include>> Produce Recommendations
-
-Ground Analysis with Relevant Policies
-  <<extend>> Request AI Analysis
-
-Retain Analysis for Later Review
-  <<extend>> Request AI Analysis
-
-Filter Activity
-  <<extend>> Review Customer Activity
-
-Inspect Transaction Details
-  <<extend>> Review Customer Activity
-
-Review Analysis History
-  <<extend>> Review Customer Dashboard
-```
+[Authoritative PlantUML source](diagrams/inception-functional-use-cases.puml)
 
 The RAG and persistence extensions model concentric delivery, not optional final acceptance criteria: both remain MUST_HAVE capabilities of the completed submission.
 
-This is intentionally a semantic sketch rather than the final PlantUML source.
+### 8.2 Non-functional 2TUP view
 
-### 8.2 Functional PlantUML style sketch
+The second view exposes system qualities as explicit engineering obligations. It is a pragmatic 2TUP-oriented requirements view, not a claim that every NFR is a classical end-user use case.
 
-```plantuml
-@startuml
-left to right direction
-actor "Customer Care Operator" as Operator
+![Non-functional 2TUP use-case view](diagrams/inception-non-functional-use-cases.svg)
 
-skinparam usecase {
-  BackgroundColor<<MANDATORY>> #FFB3B3
-  BackgroundColor<<MUST_HAVE>> #FFD699
-  BackgroundColor<<NICE_TO_HAVE>> #CDECCF
-}
+[Authoritative PlantUML source](diagrams/inception-non-functional-use-cases.puml)
 
-usecase "Search Customer" as UC_Search <<MANDATORY>>
-usecase "Review Customer Activity" as UC_Activity <<MANDATORY>>
-usecase "Review CARD Activity" as UC_Card <<MANDATORY>>
-usecase "Review PAYMENT Activity" as UC_Payment <<MANDATORY>>
-usecase "Review CRYPTO Activity" as UC_Crypto <<MANDATORY>>
-usecase "Review Risk Signals" as UC_Risk <<MANDATORY>>
-usecase "Request AI Analysis" as UC_AI <<MANDATORY>>
-usecase "Ground Analysis with Relevant Policies" as UC_Grounded <<MUST_HAVE>>
-usecase "Retain Analysis for Later Review" as UC_Retain <<MUST_HAVE>>
-usecase "Review Analysis History" as UC_History <<MUST_HAVE>>
-usecase "Filter Activity" as UC_Filter <<NICE_TO_HAVE>>
-
-Operator --> UC_Search
-Operator --> UC_Activity
-Operator --> UC_Risk
-Operator --> UC_AI
-Operator --> UC_History
-UC_Activity .> UC_Card : <<include>>
-UC_Activity .> UC_Payment : <<include>>
-UC_Activity .> UC_Crypto : <<include>>
-UC_Grounded .> UC_AI : <<extend>>
-UC_Retain .> UC_AI : <<extend>>
-UC_Filter .> UC_Activity : <<extend>>
-@enduml
-```
-
-The normative SRS may adjust actors and relationships after requirement review.
-
-### 8.3 Non-functional 2TUP sketch
-
-A pragmatic second use-case view can expose system qualities as explicit engineering obligations:
-
-```text
-Developer / Reviewer
-  -> Reproduce System Locally                  [MANDATORY]
-  -> Verify Change Deterministically           [MANDATORY]
-
-Operator
-  -> Access System Securely                    [MUST_HAVE]
-  -> Receive Graceful AI Failure               [MUST_HAVE]
-
-Operator / Reviewer
-  -> Use Same Product Locally and Remotely     [MUST_HAVE]
-  -> Reset Deterministic Demo Data             [MUST_HAVE]
-
-Architecture Verification
-  -> Preserve Module / Hexagonal Boundaries    [MUST_HAVE]
-
-Operations
-  -> Verify Health and Readiness               [MUST_HAVE]
-  -> Inspect Advanced Telemetry                [NICE_TO_HAVE]
-```
-
-This is a 2TUP-oriented requirements view, not a claim that every NFR is a classical end-user use case.
+The two `.puml` files are the authored semantic sources. The SVG files are generated views embedded here so GitHub renders the diagrams rather than displaying PlantUML source verbatim.
 
 ## 9. Documents are illustrated engineering artefacts
 
@@ -449,6 +366,22 @@ Prefer composition to inheritance: constructor injection, final classes/records 
 
 The actual SDD may rename or refine modules if implementation evidence warrants it.
 
+### 11.2 Explicit architecture exclusions
+
+Do not add infrastructure merely because it is fashionable or easy for an agent to scaffold. Unless an accepted requirement demonstrates a residual need, this exercise does **not** need:
+
+- microservices;
+- Kafka or another event broker;
+- Kubernetes;
+- Keycloak or a separate identity platform;
+- Redis;
+- Neo4j;
+- a separate vector database beside PostgreSQL/pgvector;
+- a generic runtime risk-rule engine;
+- a local LLM runtime on the demo VPS.
+
+The burden of proof is on additional infrastructure, not on the simpler architecture.
+
 ## 12. Reuse-first and restrained patterns
 
 Minimize project-owned infrastructure code.
@@ -478,6 +411,8 @@ Minimize project-owned infrastructure code.
 | Deployment | Docker Compose + Caddy | small scripts/configuration |
 | UML | PlantUML | authored design diagrams |
 | Implementation module docs | Spring Modulith Documenter | generated views only |
+
+Before pinning framework versions, run a short compatibility spike across the chosen Java, Spring Boot, Spring Modulith, Spring AI, PostgreSQL/pgvector and test stack. Prefer current stable compatible releases and avoid turning dependency upgrades into a side project. Version freshness is evidence to re-check at implementation time, not timeless architecture truth.
 
 Adopt extra dependencies only when they remove real project-owned complexity. For example, MapStruct is useful if mapping volume justifies it; it is not a badge to collect on day one.
 
@@ -579,6 +514,8 @@ Representative profiles:
 - high-value wire transfer;
 - mixed anomalous behaviour.
 
+Each persona should have a coherent baseline spanning transaction rate, amount distribution, CARD/PAYMENT/CRYPTO activity mix, currencies/countries, statuses and failure/reversal behavior. Inject anomaly bursts relative to that customer baseline rather than generating unrelated uniformly random suspicious rows.
+
 Use Datafaker for generic identities, accounts, merchants, and descriptors. Keep the project-specific temporal generator small: baseline distributions plus a lightweight random walk or mean-reverting evolution and explicit injected shocks.
 
 A simple family of generated signals is sufficient, for example:
@@ -613,7 +550,7 @@ persisted risk assessments
 
 Do not introduce Drools, untrusted expression evaluation, a custom DSL, or equivalent machinery unless a later normative requirement explicitly demands rule execution.
 
-`risk_rules.threshold_logic` can remain auditable explanatory metadata for seeded rules/scenarios if needed.
+`risk_rules.threshold_logic` can remain auditable explanatory metadata for seeded rules/scenarios if needed. The application does not execute that field as a runtime rule language by default.
 
 ## 17. Demonstration UX blueprint
 
@@ -684,9 +621,9 @@ The intended evolution is:
 ```text
 R0: real shell + real topology + real interfaces + fake adapters
 R1: same shell + same topology + same interfaces + fewer fake adapters
-R2: same shell + same topology + same interfaces + real persistence/identity
-R3: same shell + same topology + same interfaces + real risk/analysis flow
-R4: same shell + same topology + same interfaces + real retrieval
+R2: same shell + same topology + same interfaces + real persistence/risk
+R3: same shell + same topology + same interfaces + real analysis persistence/history
+R4: same shell + same topology + same interfaces + real retrieval and application auth
 R5: same shell + same topology + same interfaces + optional live provider/hardening
 ```
 
@@ -694,17 +631,19 @@ R5: same shell + same topology + same interfaces + optional live provider/harden
 
 Replace the customer/activity stub with the deterministic synthetic adapter. Customer ID search and CARD/PAYMENT/CRYPTO activity become behaviorally meaningful. Add unit/contract/UI tests, minimal OpenAPI, and module-boundary checks.
 
-### R2 — Real persistence and operator identity
+### R2 — Real persistence and risk evidence
 
-Introduce Flyway, JPA/Hibernate, PostgreSQL persistence, deterministic database seeding, and Testcontainers. Replace synthetic storage behind the same port. Implement Spring Security/operator persistence on its own independent path where possible. Add schema validation, health/readiness, secret handling, and deterministic demo reset.
+Introduce Flyway, JPA/Hibernate, PostgreSQL persistence, deterministic database seeding, and Testcontainers. Replace synthetic storage behind the same port. Use the supplied `risk_assessments` shape as persisted risk evidence and expose aggregate risk on the dashboard. Add schema validation, health/readiness, secret handling, and deterministic demo reset.
 
-### R3 — Risk + end-to-end AI analysis with deterministic model stub
+### R3 — End-to-end AI analysis with deterministic model stub
 
-Use supplied `risk_assessments` as risk evidence, aggregate it into the dashboard, and connect the real analysis orchestration to `DeterministicAnalysisStub`. Persist results and expose history. At this point the core demo works end to end without a network LLM.
+Connect the real analysis orchestration to `DeterministicAnalysisStub`, persist results, expose history, and complete the analysis UI. At this point the central assignment flow works end to end without a network LLM.
 
-### R4 — Real RAG independently of the LLM provider
+### R4 — Real RAG and multi-operator application authentication
 
 Replace static policy lookup with document ingestion, embeddings, pgvector storage, and actual retrieval while keeping the deterministic AI adapter. Prove retrieval correctness independently from provider behavior.
+
+Implement Spring Security/operator persistence on its own independent track and integrate the multi-operator login path. Authentication can progress in parallel with earlier slices, but it must be complete by the final required-capability checkpoint.
 
 Then, if healthy, replace only `AnalysisModelPort` with the Spring AI external-provider adapter.
 
@@ -728,16 +667,20 @@ DNS
   |
 HTTPS
   |
-Caddy
+Caddy / web container
   |-------------------------|
 React static content       /api/*
                             |
-                       Spring Boot
+                       Spring Boot / api container
                             |
-                    PostgreSQL + pgvector
+                    PostgreSQL + pgvector / db container
 ```
 
-Do not expose the database port publicly. Keep provider secrets outside Git. Provide deterministic demo-data reset. Prefer a simple known-good deployment script taking an exact Git SHA before automating the same procedure through CI/CD.
+A simple three-service Compose shape (`web`, `api`, `db`) is sufficient. Do not expose the database port publicly. Keep provider secrets outside Git, for example in the VPS environment rather than the repository. Provide deterministic demo-data reset.
+
+A small VPS around 2 vCPU / 4 GB RAM is a reasonable starting point for this Java/React/PostgreSQL demo when the model remains external or stubbed. Do not spend the exercise installing Ollama or a large local model on the demo host unless a later requirement provides a compelling reason.
+
+Prefer a simple known-good deployment script taking an exact Git SHA before automating the same procedure through CI/CD.
 
 Useful operational scripts may be:
 
@@ -780,7 +723,7 @@ frontend
   -> production build
 
 documentation
-  -> render PlantUML
+  -> render PlantUML .puml sources to SVG
   -> generate implementation module views where useful
   -> check generated artefact freshness where mechanically reliable
 
@@ -789,6 +732,8 @@ system
   -> service health/readiness smoke
   -> critical Playwright scenario once the vertical path exists
 ```
+
+No CI gate should depend on a live external LLM network call. Use deterministic model adapters or mocks for chat/model behavior and deterministic/test embedding adapters where appropriate; test pgvector retrieval independently from model stochasticity. Provider integration can have bounded non-blocking or explicitly invoked evidence outside the deterministic default gate.
 
 Likely concrete quality tools include Checkstyle or equivalent Java static checks, Spotless or equivalent deterministic formatting, ESLint, TypeScript strict mode, and the test tools listed above. Select the smallest coherent set rather than collecting overlapping linters.
 
@@ -856,10 +801,10 @@ A reviewer finding that is independently reviewable work should become or map to
 | Day | Main objective | Required visible state by evening |
 | --- | --- | --- |
 | J1 | Work-graph/artifact preflight, thin SRS/SDD/V&V baseline, R0, first read slice | Live HTTPS URL; complete architecture shell; customer activity visible through stubs/synthetic data |
-| J2 | Persistence, deterministic data, identity, risk | Real database; multiple operators; meaningful activity/risk dashboard |
-| J3 | Structured AI stub, persistence/history, real RAG | Every explicitly requested final capability demonstrable without an external LLM dependency |
-| J4 | Optional live provider, failure paths, test/architecture hardening, UX | Complete robust product; only optional work remains |
-| J5 | Freeze, consolidation reviews, README/evidence, demo rehearsal | Exact deployed SHA ready for a practiced 10–15 minute demonstration |
+| J2 | Persistence, deterministic data, risk, deterministic AI analysis | Real database; meaningful risk dashboard; structured AI-stub analysis and its UI working end to end |
+| J3 | Analysis history, real RAG, multi-operator application auth; live provider only if healthy | Every explicitly requested final capability demonstrable without an external LLM dependency |
+| J4 | Deployment hardening, Compose smoke, critical Playwright, failure/degradation paths, PlantUML/OpenAPI/docs, architecture cleanup | Complete robust product; only optional work remains |
+| J5 | Feature freeze except blockers, requirements/verification review, architecture/adversarial review, fixes, README/evidence, demo rehearsal | Exact deployed SHA ready for a practiced 10–15 minute demonstration |
 
 Daily invariant:
 
