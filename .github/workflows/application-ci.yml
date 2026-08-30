@@ -1,0 +1,45 @@
+name: application-ci
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'compose.yaml'
+      - '.github/workflows/application-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'compose.yaml'
+      - '.github/workflows/application-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Verify backend
+        working-directory: backend
+        run: mvn -B verify
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+      - name: Validate deployment topology
+        run: docker compose config --quiet
