@@ -7,7 +7,8 @@ participant "analysis application" as Analysis
 participant "CustomerActivityPort" as Activity
 participant "JpaCustomerActivityAdapter" as ActivityAdapter
 participant "PolicyKnowledgePort" as Policy
-participant "PgVectorPolicyAdapter" as PolicyAdapter
+participant "StaticPolicyAdapter" as StaticPolicy
+participant "PgVectorPolicyAdapter" as VectorPolicy
 participant "AnalysisModelPort" as Model
 participant "DeterministicAnalysisStub" as Deterministic
 participant "SpringAiAnalysisAdapter" as LiveAdapter
@@ -26,11 +27,16 @@ DB --> ActivityAdapter : activity + risk evidence
 ActivityAdapter --> Activity : CustomerSnapshot projection
 Activity --> Analysis : CustomerSnapshot
 Analysis -> Policy : retrieveRelevant(context) [in-process]
-Policy -> PolicyAdapter : dispatch when R4 adapter active [in-process]
-PolicyAdapter -> DB : pgvector query
-DB --> PolicyAdapter : retrieved corpus evidence
-PolicyAdapter --> Policy : PolicyEvidence[]
-Policy --> Analysis : PolicyEvidence[]
+alt deterministic/offline policy adapter
+  Policy -> StaticPolicy : dispatch [in-process]
+  StaticPolicy --> Policy : synthetic PolicyEvidence[]
+else R4 vector policy adapter
+  Policy -> VectorPolicy : dispatch [in-process]
+  VectorPolicy -> DB : pgvector query
+  DB --> VectorPolicy : retrieved corpus evidence
+  VectorPolicy --> Policy : PolicyEvidence[]
+end
+Policy --> Analysis : PolicyEvidence[] / explicit no-evidence
 Analysis -> Model : analyze(context, evidence) [in-process port]
 alt deterministic baseline adapter
   Model -> Deterministic : dispatch [in-process]
@@ -54,8 +60,8 @@ Http --> UI : 200 JSON
 UI --> Operator : risk level + findings + recommendations + provenance
 
 note over Policy,Model
-  Application-facing ports remain project-owned boundaries. JDBC/pgvector and
-  provider HTTPS occur only beyond adapters; R3/R4 replace implementations
-  without changing the application contracts.
+  Application-facing ports remain project-owned boundaries. Static/deterministic
+  adapters provide the offline path; pgvector/live-provider adapters are R4
+  substitutions. JDBC/pgvector and provider HTTPS occur only beyond adapters.
 end note
 @enduml
