@@ -19,8 +19,8 @@ else authenticated
   History -> Jpa : dispatch [in-process]
   Jpa -> DB : JDBC SELECT analysis_history by customer
   DB --> Jpa : persisted prior analyses
-  Jpa --> History : project-owned history projections
-  History --> Analysis : prior analysis summaries/details
+  Jpa --> History : AnalysisHistoryEntry[]
+  History --> Analysis : AnalysisHistoryEntry[]
   Analysis --> Boundary : generation time + generating operator +\nrisk level + findings + recommendations
   Boundary --> UI : 200 JSON
   UI --> Operator : list and inspect previous result

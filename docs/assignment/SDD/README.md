@@ -35,6 +35,8 @@ The stable application contracts are `CustomerSnapshot`, project-owned activity/
 
 [PlantUML source](diagrams/domain-contracts.puml)
 
+`AnalysisHistoryEntry` is the project-owned history read/write projection: analysis/customer identity, generating operator, generation time, structured result, and reviewable evidence provenance. JPA rows never cross `AnalysisHistoryPort`.
+
 ## Relational design
 
 The source schema remains authoritative for supplied transaction/activity/risk relations. The SDD adds only extensions permitted by accepted assumptions: a minimal `customers` anchor and analysis-history persistence sufficient for customer/operator/time/result/provenance attribution. Exact source DDL that is not present in the SRS is not reverse-invented here. The R4 policy-chunk physical schema remains deferred with `AMB-RAG-001`.
