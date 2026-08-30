@@ -7,7 +7,7 @@ on:
       - '.github/workflows/temp-render-functional-usecase.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   render:
@@ -15,8 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.ref }}
       - name: Render authoritative PlantUML source
         run: |
           docker run --rm \
@@ -24,9 +23,14 @@ jobs:
             -w /workspace \
             plantuml/plantuml:1.2026.6 \
             -tsvg docs/assignment/Inception/diagrams/inception-functional-use-cases.puml
-      - name: Emit rendered SVG for branch update
+      - name: Commit rendered SVG
         run: |
-          echo 'SVG_BASE64_BEGIN'
-          base64 -w0 docs/assignment/Inception/diagrams/inception-functional-use-cases.svg
-          echo
-          echo 'SVG_BASE64_END'
+          if git diff --quiet -- docs/assignment/Inception/diagrams/inception-functional-use-cases.svg; then
+            echo 'Rendered SVG is already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/assignment/Inception/diagrams/inception-functional-use-cases.svg
+          git commit -m 'docs: render factored functional use-case view'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
