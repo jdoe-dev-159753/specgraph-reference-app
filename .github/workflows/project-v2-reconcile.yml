@@ -1,0 +1,251 @@
+name: project-v2-reconcile
+
+on:
+  issues:
+    types: [opened, labeled, unlabeled, reopened, closed]
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, closed, ready_for_review]
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  reconcile:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci]
+    steps:
+      - name: Reconcile Project v2 discovery disposition
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const repoFull = `${owner}/${repo}`;
+            const projectTitle = 'SpecGraph Reference App';
+            const dispositionFieldName = 'Discovery disposition';
+            const discoveryLabel = 'discovery';
+
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: discoveryLabel });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.issues.createLabel({
+                owner,
+                repo,
+                name: discoveryLabel,
+                color: '5319e7',
+                description: 'Material discovery requiring Project disposition reconciliation',
+              });
+            }
+
+            let project = null;
+            let projectsCursor = null;
+            do {
+              const projectPage = await github.graphql(`
+                query($login: String!, $after: String) {
+                  user(login: $login) {
+                    projectsV2(first: 20, after: $after) {
+                      nodes {
+                        id
+                        number
+                        title
+                        fields(first: 50) {
+                          nodes {
+                            __typename
+                            ... on ProjectV2SingleSelectField {
+                              id
+                              name
+                              options { id name }
+                            }
+                          }
+                        }
+                      }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                  }
+                }
+              `, { login: owner, after: projectsCursor });
+              const connection = projectPage.user.projectsV2;
+              project = connection.nodes.find(candidate => candidate.title === projectTitle) ?? null;
+              if (project || !connection.pageInfo.hasNextPage) break;
+              projectsCursor = connection.pageInfo.endCursor;
+            } while (true);
+
+            if (!project) {
+              core.setFailed(`User-owned Project v2 not visible: ${projectTitle}`);
+              return;
+            }
+
+            const dispositionField = project.fields.nodes.find(
+              field => field?.__typename === 'ProjectV2SingleSelectField' &&
+                       field.name === dispositionFieldName
+            );
+            if (!dispositionField) {
+              core.setFailed(`Missing Project field: ${dispositionFieldName}`);
+              return;
+            }
+
+            const optionIds = Object.fromEntries(
+              dispositionField.options.map(option => [option.name, option.id])
+            );
+            for (const required of ['IN_SCOPE', 'FOLLOW_UP', 'ALREADY_TRACKED', 'NON_ACTIONABLE']) {
+              if (!optionIds[required]) {
+                core.setFailed(`Missing ${dispositionFieldName} option: ${required}`);
+                return;
+              }
+            }
+
+            const getDisposition = item => {
+              const value = item.fieldValues.nodes.find(
+                node => node?.__typename === 'ProjectV2ItemFieldSingleSelectValue' &&
+                        node.field?.name === dispositionFieldName
+              );
+              return value?.name ?? null;
+            };
+
+            const allItems = [];
+            let itemsCursor = null;
+            do {
+              const itemPage = await github.graphql(`
+                query($projectId: ID!, $after: String) {
+                  node(id: $projectId) {
+                    ... on ProjectV2 {
+                      items(first: 100, after: $after) {
+                        nodes {
+                          id
+                          fieldValues(first: 50) {
+                            nodes {
+                              __typename
+                              ... on ProjectV2ItemFieldSingleSelectValue {
+                                name
+                                field {
+                                  ... on ProjectV2SingleSelectField { id name }
+                                }
+                              }
+                            }
+                          }
+                          content {
+                            __typename
+                            ... on Issue {
+                              id
+                              number
+                              state
+                              labels(first: 20) { nodes { name } }
+                              repository { nameWithOwner }
+                              closedByPullRequestsReferences(first: 10) {
+                                nodes {
+                                  number
+                                  state
+                                  mergedAt
+                                  repository { nameWithOwner }
+                                }
+                              }
+                            }
+                          }
+                        }
+                        pageInfo { hasNextPage endCursor }
+                      }
+                    }
+                  }
+                }
+              `, { projectId: project.id, after: itemsCursor });
+              const connection = itemPage.node.items;
+              allItems.push(...connection.nodes);
+              if (!connection.pageInfo.hasNextPage) break;
+              itemsCursor = connection.pageInfo.endCursor;
+            } while (true);
+
+            const repoItems = allItems.filter(
+              item => item.content?.__typename === 'Issue' &&
+                      item.content.repository.nameWithOwner === repoFull
+            );
+
+            for (const item of repoItems) {
+              const issue = item.content;
+              const current = getDisposition(item);
+              const labels = new Set(issue.labels.nodes.map(label => label.name));
+              if (current && !labels.has(discoveryLabel)) {
+                await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels: [discoveryLabel] });
+                labels.add(discoveryLabel);
+              }
+              issue._labels = labels;
+            }
+
+            const openPrData = await github.graphql(`
+              query($owner: String!, $repo: String!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequests(first: 50, states: [OPEN], orderBy: {field: UPDATED_AT, direction: DESC}) {
+                    nodes {
+                      number
+                      closingIssuesReferences(first: 50) {
+                        nodes { number repository { nameWithOwner } }
+                      }
+                    }
+                  }
+                }
+              }
+            `, { owner, repo });
+
+            const ownedByOpenPr = new Set();
+            for (const pr of openPrData.repository.pullRequests.nodes) {
+              for (const issue of pr.closingIssuesReferences.nodes) {
+                if (issue.repository.nameWithOwner === repoFull) ownedByOpenPr.add(issue.number);
+              }
+            }
+
+            const updateMutation = `
+              mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $project,
+                  itemId: $item,
+                  fieldId: $field,
+                  value: { singleSelectOptionId: $option }
+                }) { projectV2Item { id } }
+              }
+            `;
+
+            let updates = 0;
+            for (const item of repoItems) {
+              const issue = item.content;
+              if (!issue._labels.has(discoveryLabel)) continue;
+              const current = getDisposition(item);
+              const { data: liveIssue } = await github.rest.issues.get({ owner, repo, issue_number: issue.number });
+
+              let desired = null;
+              if (liveIssue.state_reason === 'duplicate') {
+                desired = 'ALREADY_TRACKED';
+              } else if (liveIssue.state_reason === 'not_planned') {
+                desired = 'NON_ACTIONABLE';
+              } else {
+                const hasOpenOwningPr = ownedByOpenPr.has(issue.number);
+                const closedByPr = issue.closedByPullRequestsReferences.nodes.some(
+                  pr => pr.repository.nameWithOwner === repoFull
+                );
+                if (hasOpenOwningPr || closedByPr) {
+                  desired = 'IN_SCOPE';
+                } else if (liveIssue.state === 'open' && !current) {
+                  desired = 'FOLLOW_UP';
+                } else if (liveIssue.state === 'open' && current === 'IN_SCOPE') {
+                  core.warning(`Discovery #${issue.number} has an explicit active disposition but no native owning PR yet; preserving it while ownership settles.`);
+                } else if (liveIssue.state !== 'open' && !current) {
+                  core.warning(`Discovery #${issue.number} is closed without native facts that mechanically determine disposition.`);
+                }
+              }
+
+              if (!desired || desired === current) continue;
+              await github.graphql(updateMutation, {
+                project: project.id,
+                item: item.id,
+                field: dispositionField.id,
+                option: optionIds[desired],
+              });
+              core.info(`#${issue.number}: discovery disposition reconciled.`);
+              updates += 1;
+            }
+
+            core.info(`Project v2 reconciliation complete: ${updates} disposition update(s).`);
