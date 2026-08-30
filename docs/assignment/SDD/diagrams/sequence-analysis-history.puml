@@ -1,0 +1,34 @@
+@startuml
+hide footbox
+actor Operator
+participant "React UI" as UI
+participant "Spring Security / HTTP boundary" as Boundary
+participant "analysis application" as Analysis
+participant "AnalysisHistoryPort" as History
+participant "JpaAnalysisHistoryAdapter" as Jpa
+database "PostgreSQL" as DB
+
+Operator -> UI : open prior analyses for selected customer
+UI -> Boundary : GET analysis history [HTTP/JSON]
+alt unauthenticated
+  Boundary --> UI : reject / redirect
+  UI --> Operator : authentication required
+else authenticated
+  Boundary -> Analysis : listHistory(customerId, operatorContext) [in-process]
+  Analysis -> History : listByCustomer(customerId) [in-process port]
+  History -> Jpa : dispatch [in-process]
+  Jpa -> DB : JDBC SELECT analysis_history by customer
+  DB --> Jpa : persisted prior analyses
+  Jpa --> History : project-owned history projections
+  History --> Analysis : prior analysis summaries/details
+  Analysis --> Boundary : generation time + generating operator +
+risk level + findings + recommendations
+  Boundary --> UI : 200 JSON
+  UI --> Operator : list and inspect previous result
+end
+
+note bottom of History
+  FR-HIST-002 / AC-HIST-002 read path is distinct from persistence.
+  Persistence infrastructure does not leak JPA rows through the port.
+end note
+@enduml
