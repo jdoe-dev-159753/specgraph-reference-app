@@ -31,4 +31,4 @@ jobs:
       - name: Reject competing prose work-state
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/work_graph_guard.py
+        run: python3 scripts/work_graph_guard.py
