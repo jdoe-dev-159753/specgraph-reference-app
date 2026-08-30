@@ -2,7 +2,6 @@
 left to right direction
 actor "Developer / Reviewer" as Dev
 actor "Customer Care Operator" as Operator
-actor "Architecture Verifier" as Arch
 actor "Operations / Deployment" as Ops
 
 skinparam usecase {
@@ -21,9 +20,6 @@ rectangle "Customer Risk Analysis Reference Application" as SystemBoundary {
   usecase "Expose Health / Readiness" as NF_Health <<MUST_HAVE>>
   usecase "Generate Technical / API Documentation" as NF_Docs <<NICE_TO_HAVE>>
   usecase "Inspect Advanced Telemetry" as NF_Telemetry <<NICE_TO_HAVE>>
-
-  note "<<constraint>>\nModule and hexagonal boundaries\nare preserved and mechanically verified\nwhere practical." as C_Architecture
-  note "<<constraint>>\nLocal and remote deployments expose\nequivalent application topology." as C_Topology
 }
 
 Dev -- NF_Reproduce
@@ -36,8 +32,18 @@ Operator -- NF_Degrade
 Ops -- NF_Data
 Ops -- NF_Health
 Ops -- NF_Telemetry
-Arch -- C_Architecture
-Ops -- C_Topology
+
+note right of SystemBoundary
+  <<constraint>>
+  Module and hexagonal boundaries are preserved
+  and mechanically verified where practical.
+end note
+
+note right of SystemBoundary
+  <<constraint>>
+  Local and remote deployments expose
+  equivalent application topology.
+end note
 
 note bottom of NF_Verify
   Deterministic verification is executable evidence,
