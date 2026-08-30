@@ -1,0 +1,41 @@
+name: render-inception-uml-temp
+
+on:
+  push:
+    branches: [docs/uml-2-5-use-cases]
+    paths:
+      - 'docs/assignment/Inception/diagrams/inception-functional-use-cases.puml'
+      - 'docs/assignment/Inception/diagrams/inception-non-functional-use-cases.puml'
+      - '.github/workflows/render-inception-uml-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Render authoritative PlantUML sources
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            plantuml/plantuml:1.2026.6 \
+            -tsvg \
+            docs/assignment/Inception/diagrams/inception-functional-use-cases.puml \
+            docs/assignment/Inception/diagrams/inception-non-functional-use-cases.puml
+      - name: Commit generated SVG views
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            docs/assignment/Inception/diagrams/inception-functional-use-cases.svg \
+            docs/assignment/Inception/diagrams/inception-non-functional-use-cases.svg
+          if git diff --cached --quiet; then
+            echo "SVG views already current"
+            exit 0
+          fi
+          git commit -m "docs: regenerate inception use-case SVGs"
+          git push
