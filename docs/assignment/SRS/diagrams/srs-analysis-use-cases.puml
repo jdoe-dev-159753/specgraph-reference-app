@@ -26,8 +26,8 @@ rectangle "Customer Activity Analytics" as SystemBoundary {
 
   UC_Request .> UC_Context : <<include>>
   UC_Request .> UC_RAG : <<include>>
-  UC_Request .> UC_Result : <<include>>
-  UC_Request .> UC_Persist : <<include>>
+  UC_Result .> UC_Request : <<extend>>\n[grounding sufficient]
+  UC_Persist .> UC_Result : <<extend>>\n[valid result produced]
 
   UC_Context -[hidden]-> UC_RAG
   UC_RAG -[hidden]-> UC_Result
@@ -46,9 +46,9 @@ end note
 
 note bottom of UC_Request
   Protected capability.
-  The completed target always performs the included
-  grounding, structured-result and persistence behaviours.
-  Delivery priority does not change <<include>> semantics.
+  Context construction and grounding retrieval are always attempted.
+  Structured production and persistence are conditionally reached
+  only after their stated success conditions are satisfied.
 end note
 
 note right of UC_RAG
