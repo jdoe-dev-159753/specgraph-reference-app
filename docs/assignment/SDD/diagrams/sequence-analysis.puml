@@ -5,24 +5,31 @@ participant "React UI" as UI
 participant "Authenticated HTTP adapter" as Http
 participant "analysis application" as Analysis
 participant "CustomerActivityPort" as Activity
+participant "JpaCustomerActivityAdapter" as ActivityAdapter
 participant "PolicyKnowledgePort" as Policy
+participant "PgVectorPolicyAdapter" as PolicyAdapter
 participant "AnalysisModelPort" as Model
 participant "DeterministicAnalysisStub" as Deterministic
 participant "SpringAiAnalysisAdapter" as LiveAdapter
 participant "External AI provider" as Provider
 participant "AnalysisHistoryPort" as History
+participant "JpaAnalysisHistoryAdapter" as HistoryAdapter
 database "PostgreSQL / pgvector" as DB
 
 Operator -> UI : Analyze Customer Activity
 UI -> Http : POST analysis request [HTTP/JSON]
 Http -> Analysis : analyze(customerId, operatorId) [in-process]
 Analysis -> Activity : loadSnapshot(customerId) [in-process]
-Activity -> DB : JDBC queries when R2+ adapter active
-DB --> Activity : activity + risk evidence
+Activity -> ActivityAdapter : dispatch when R2+ adapter active [in-process]
+ActivityAdapter -> DB : JDBC customer/activity/risk queries
+DB --> ActivityAdapter : activity + risk evidence
+ActivityAdapter --> Activity : CustomerSnapshot projection
 Activity --> Analysis : CustomerSnapshot
 Analysis -> Policy : retrieveRelevant(context) [in-process]
-Policy -> DB : pgvector query when R4 adapter active
-DB --> Policy : retrieved corpus evidence
+Policy -> PolicyAdapter : dispatch when R4 adapter active [in-process]
+PolicyAdapter -> DB : pgvector query
+DB --> PolicyAdapter : retrieved corpus evidence
+PolicyAdapter --> Policy : PolicyEvidence[]
 Policy --> Analysis : PolicyEvidence[]
 Analysis -> Model : analyze(context, evidence) [in-process port]
 alt deterministic baseline adapter
@@ -37,17 +44,18 @@ end
 Model --> Analysis : candidate AnalysisResult / failure
 Analysis -> Analysis : validate structured result
 Analysis -> History : persist(result, customer, operator, time, provenance)
-History -> DB : JDBC INSERT analysis history
-DB --> History : persisted
+History -> HistoryAdapter : dispatch [in-process]
+HistoryAdapter -> DB : JDBC INSERT analysis history
+DB --> HistoryAdapter : persisted
+HistoryAdapter --> History : analysis identity
 History --> Analysis : analysis identity
 Analysis --> Http : completed structured analysis
 Http --> UI : 200 JSON
 UI --> Operator : risk level + findings + recommendations + provenance
 
 note over Policy,Model
-  The application-facing port interaction is stable. R3 uses deterministic
-  adapters; R4 may substitute pgvector/live-provider adapters without changing
-  project-owned application contracts. Network transport exists only beyond
-  the live adapter boundary.
+  Application-facing ports remain project-owned boundaries. JDBC/pgvector and
+  provider HTTPS occur only beyond adapters; R3/R4 replace implementations
+  without changing the application contracts.
 end note
 @enduml
