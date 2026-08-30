@@ -1,0 +1,48 @@
+@startuml
+skinparam linetype ortho
+skinparam activity {
+  BackgroundColor #F7F7F7
+  BorderColor #303030
+}
+
+start
+:Operator authenticates;
+if (Credentials valid?) then (yes)
+  :Submit Customer ID;
+  if (Customer exists?) then (yes)
+    :Load persisted base transactions;
+    :Resolve CARD / PAYMENT / CRYPTO
+specialization from activity_type;
+    note right
+      INV-DATA-001 / INV-DATA-002
+      A specialization must remain attributable
+      to the selected customer's base transaction
+      and must match activity_type.
+    end note
+    :Load persisted risk assessments
+and risk-rule evidence;
+    note right
+      INV-RISK-001
+      Existing risk evidence comes from persisted
+      risk_assessments / risk_rules, never AI prose.
+    end note
+    :Present customer dashboard with
+activity and risk evidence;
+    stop
+  else (no)
+    :Report customer not found;
+    :Do not fabricate a customer record;
+    note right
+      AC-CUST-002
+    end note
+    stop
+  endif
+else (no)
+  :Reject protected access
+or redirect to authentication;
+  note right
+    AC-SEC-001
+  end note
+  stop
+endif
+@enduml
