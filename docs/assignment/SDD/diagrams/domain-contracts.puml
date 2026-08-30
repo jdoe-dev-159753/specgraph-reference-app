@@ -5,8 +5,24 @@ skinparam linetype ortho
 
 class CustomerSnapshot <<project contract>> {
   customerIdentity
-  activities
-  riskEvidence
+  activities : ActivityProjection[*]
+  riskEvidence : RiskEvidence[*]
+}
+class ActivityProjection <<project contract>> {
+  transactionId
+  family : CARD|PAYMENT|CRYPTO
+  amount
+  currency
+  status
+  occurredAt
+  familyDetails
+}
+class RiskEvidence <<project contract>> {
+  transactionId
+  ruleIdentity
+  ruleName
+  triggeredAt
+  scoreContribution
 }
 class AnalysisResult <<project contract>> {
   riskLevel : LOW|MEDIUM|HIGH
@@ -45,20 +61,26 @@ class RiskRule <<source relation>> {
   defaultWeight
 }
 
-CustomerSnapshot "1" o-- "0..*" Transaction : projects
-CustomerSnapshot "1" o-- "0..*" RiskAssessment : exposes
+CustomerSnapshot "1" o-- "0..*" ActivityProjection
+CustomerSnapshot "1" o-- "0..*" RiskEvidence
 Transaction <|-- CardActivity : CARD detail
 Transaction <|-- PaymentActivity : PAYMENT detail
 Transaction <|-- CryptoActivity : CRYPTO detail
 Transaction "1" -- "0..*" RiskAssessment
 RiskRule "1" -- "0..*" RiskAssessment
+Transaction ..> ActivityProjection : adapter maps source rows
+CardActivity ..> ActivityProjection : maps family details
+PaymentActivity ..> ActivityProjection : maps family details
+CryptoActivity ..> ActivityProjection : maps family details
+RiskAssessment ..> RiskEvidence : adapter maps evidence
+RiskRule ..> RiskEvidence : adapter resolves rule identity/name
 AnalysisResult ..> CustomerSnapshot : derived from context
 AnalysisResult ..> PolicyEvidence : grounded by when retrieved
 AnalysisResult ..> OperatorId : persisted attribution
 
 note bottom of Transaction
-  Source-schema concepts are shown to explain the contract boundary.
-  They are not Java inheritance requirements and must not leak JPA types
-  into CustomerSnapshot or other durable application contracts.
+  Source-schema concepts stop at the adapter boundary. CustomerSnapshot
+  contains only project-owned projections; JPA/source relation types never
+  become durable application-contract members.
 end note
 @enduml
