@@ -1,0 +1,65 @@
+@startuml
+left to right direction
+skinparam linetype ortho
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor<<MANDATORY>> #FFB3B3
+  BackgroundColor<<MUST_HAVE>> #FFD699
+}
+
+actor "Customer Care Operator" as Operator
+
+rectangle "Customer Activity Analytics" as SystemBoundary {
+  package "Access and selection" {
+    usecase "Authenticate Operator\n[FR-AUTH-001]" as UC_Auth <<MUST_HAVE>>
+    usecase "Search Customer by ID\n[FR-CUST-001]" as UC_Search <<MANDATORY>>
+  }
+
+  package "Customer review" {
+    usecase "Review Customer Dashboard\n[FR-ACT-001]" as UC_Dashboard <<MANDATORY>>
+    usecase "Review Customer Activity\n[FR-ACT-001]" as UC_Activity <<MANDATORY>>
+    usecase "Review CARD Activity\n[FR-ACT-002]" as UC_Card <<MANDATORY>>
+    usecase "Review PAYMENT Activity\n[FR-ACT-002]" as UC_Payment <<MANDATORY>>
+    usecase "Review CRYPTO Activity\n[FR-ACT-002]" as UC_Crypto <<MANDATORY>>
+    usecase "Review Risk Evidence\n[FR-RISK-001]" as UC_Risk <<MANDATORY>>
+  }
+
+  UC_Dashboard .> UC_Activity : <<include>>
+  UC_Dashboard .> UC_Risk : <<include>>
+
+  UC_Card -|> UC_Activity
+  UC_Payment -|> UC_Activity
+  UC_Crypto -|> UC_Activity
+
+  UC_Auth -[hidden]-> UC_Search
+  UC_Activity -[hidden]-> UC_Risk
+  UC_Card -[hidden]-> UC_Payment
+  UC_Payment -[hidden]-> UC_Crypto
+}
+
+Operator -- UC_Auth
+Operator -- UC_Search
+Operator -- UC_Dashboard
+
+note right of UC_Activity
+  Standard UML use-case generalization:
+  CARD, PAYMENT and CRYPTO review specialize
+  the common customer-activity behaviour.
+  The relation is semantic; hidden links above
+  influence layout only.
+end note
+
+note bottom of UC_Dashboard
+  Protected capability.
+  Authentication is a precondition, not a repeated
+  decorative <<include>> from every protected use case.
+end note
+
+legend bottom
+  |= Colour |= Delivery priority |
+  |<#FFB3B3> | MANDATORY |
+  |<#FFD699> | MUST_HAVE |
+endlegend
+@enduml
