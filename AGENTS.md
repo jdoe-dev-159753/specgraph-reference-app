@@ -10,9 +10,9 @@ Specifications, design decisions, tests, code, Git history, GitHub metadata, rev
 
 GitHub owns mechanically representable work state. Use native issue state and close reasons, assignees, milestones, issue types, Projects fields, parent/sub-issues, blocked-by/blocking dependencies, duplicate relations, and Development/closing PR links whenever those semantics exist.
 
-Do not encode lifecycle, hierarchy, dependency, duplicate, implementation ownership, or exclusive workflow state as prose fields, title prefixes, checkboxes, comments, or labels. Labels are non-exclusive semantic tags such as `architecture`, `backend`, `frontend`, `database`, `security`, `ai`, `rag`, `deployment`, `testing`, and `documentation`; they never emulate an enum.
+Do not encode lifecycle, hierarchy, dependency, duplicate, implementation ownership, or exclusive workflow state as prose fields, title prefixes, checkboxes, comments, or labels. Labels are non-exclusive semantic tags such as `architecture`, `backend`, `frontend`, `database`, `security`, `ai`, `rag`, `deployment`, `testing`, `documentation`, and `discovery`; they never emulate an enum.
 
-A custom Project field is justified only for a genuine independent closed dimension that GitHub does not represent natively, such as delivery priority. Use a single-select field rather than prose or mutually-exclusive labels.
+A custom Project field is justified only for a genuine independent closed dimension that GitHub does not represent natively, such as delivery priority or discovery disposition. Use a single-select field rather than prose or mutually-exclusive labels.
 
 Free text explains purpose, scope, evidence, rationale, assumptions, acceptance criteria, non-goals, and reviewability. It does not duplicate the work graph.
 
@@ -20,9 +20,7 @@ Free text explains purpose, scope, evidence, rationale, assumptions, acceptance 
 
 Use issues and pull requests together. An issue owns a reviewable capability, defect, decision, or other durable work node; a pull request owns one concrete reviewable change and links to its owning issue using GitHub Development/closing semantics when targeting the default branch.
 
-When work exposes another independently reviewable concern, reuse an existing owning issue if one exists; otherwise create a new issue and connect it with native hierarchy or dependency relations where applicable. Do not expand a pull request merely to absorb unrelated discoveries.
-
-A material discovery requiring disposition reconciliation carries the non-exclusive `discovery` label. The label only identifies applicability; the authoritative classification remains the Project v2 `Discovery disposition` single-select field. The Project reconciler derives mechanically decidable disposition changes from native close reasons and closing-PR ownership. `Delivery priority` remains an explicit planning decision and must not be inferred from discovery disposition.
+When work exposes another independently reviewable concern, reuse an existing owning issue if one exists; otherwise create a new issue and connect it with native hierarchy or dependency relations where applicable. Material discovery issues carry the non-exclusive `discovery` tag so automation can scope Project-field reconciliation; the typed `Discovery disposition` Project field remains authoritative. Do not expand a pull request merely to absorb unrelated discoveries.
 
 ## Pull-request discipline
 
