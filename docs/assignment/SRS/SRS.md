@@ -1,7 +1,7 @@
 # Customer Activity Analytics — Software Requirements Specification
 
 **Document ID:** CAA-SRS-001  
-**Baseline revision:** 1  
+**Baseline revision:** 2  
 **Language:** English  
 **Normative companion index:** [`requirements.yaml`](requirements.yaml)
 
@@ -136,7 +136,7 @@ Acceptance: `AC-AUTH-001`.
 
 When preparing AI analysis, the application shall retrieve relevant unstructured knowledge or policy content through a RAG capability and make the retrieved evidence available to the analysis context.
 
-Acceptance: `AC-RAG-001`.
+Acceptance: `AC-RAG-001`, `AC-RAG-002`.
 
 ### FR-HIST-001 — Persist completed AI analyses
 
@@ -155,6 +155,18 @@ Acceptance: `AC-HIST-001`.
 For a selected customer, an operator shall be able to review previously persisted AI analyses.
 
 Acceptance: `AC-HIST-002`.
+
+### Functional use-case views
+
+The SRS uses two focused use-case views instead of one graphically overloaded diagram. Standard UML generalization expresses behavioural specialization; `<<include>>` expresses required reused behaviour. Hidden PlantUML links are rendering constraints only and carry no system semantics.
+
+![Customer review use cases](diagrams/srs-customer-review-use-cases.svg)
+
+[Authoritative PlantUML source](diagrams/srs-customer-review-use-cases.puml)
+
+![AI analysis use cases](diagrams/srs-analysis-use-cases.svg)
+
+[Authoritative PlantUML source](diagrams/srs-analysis-use-cases.puml)
 
 ## 5. Domain and data invariants
 
@@ -188,6 +200,12 @@ A persisted analysis shall retain enough identity to determine the customer, gen
 
 **Origin:** derived from multi-operator login plus later-review requirements.
 
+### INV-RAG-001 — Grounding evidence is not fabricated
+
+Policy evidence represented as grounding shall correspond to corpus content actually retrieved for that analysis. Missing or irrelevant evidence shall not be replaced with invented policy provenance.
+
+**Origin:** derived correctness boundary from `FR-RAG-001` and reviewability of AI grounding.
+
 ## 6. Technical and quality constraints
 
 ### NFR-REP-001 — Reviewer-reproducible execution
@@ -217,6 +235,15 @@ Customer activity, risk, analysis and history capabilities shall not be availabl
 
 Acceptance: `AC-SEC-001`.
 
+### NFR-RES-001 — Analysis failures are explicit and non-fabricating
+
+**Priority:** MUST_HAVE  
+**Origin:** derived reliability and correctness constraint for `FR-RAG-001`, `FR-AI-001`, `FR-AI-002`, and `FR-HIST-001`.
+
+Failure or insufficiency in policy grounding, analysis-model execution/result validation, or completed-analysis persistence shall be surfaced explicitly. The application shall not represent a failed, ungrounded, invalid, or unpersisted analysis as successfully completed, grounded, or retained.
+
+Acceptance: `AC-RAG-002`, `AC-RES-001`, `AC-RES-002`.
+
 ### CON-AI-001 — External provider use is optional
 
 No mandatory acceptance criterion shall require a live external LLM provider. A live provider adapter may be demonstrated additionally, but the assignment remains exercisable through the provider-neutral analysis contract.
@@ -234,6 +261,14 @@ The repository shall not require real customer data to demonstrate the assignmen
 The default configuration shall not transmit customer/activity/policy content to an external AI provider. External transmission requires explicit adapter configuration and shall only be exercised with data permitted for that provider.
 
 **Origin:** project confidentiality safeguard resolving `AMB-CNF-001` conservatively.
+
+### Technical/quality behaviour view
+
+This 2TUP-style view shows externally meaningful technical behaviours separately from structural design choices. Pure architecture decisions remain in the SDD/ADRs rather than being disguised as use cases.
+
+![Non-functional and technical behaviours](diagrams/srs-non-functional-use-cases.svg)
+
+[Authoritative PlantUML source](diagrams/srs-non-functional-use-cases.puml)
 
 ## 7. Source-schema contract
 
@@ -370,6 +405,10 @@ Two distinct seeded operator identities can each authenticate successfully, and 
 
 For a seeded policy corpus with a policy relevant to the selected analysis scenario, the analysis context contains at least one retrieved relevant policy fragment with enough source identity to review what was used.
 
+### AC-RAG-002
+
+Given an analysis scenario for which no relevant policy evidence can be retrieved, the application reports insufficient grounding, does not fabricate policy references, and does not present the request as a successfully grounded completed analysis.
+
 ### AC-HIST-001
 
 After an analysis completes, restarting or reloading the request flow does not erase the persisted analysis from the configured persistent store.
@@ -389,6 +428,28 @@ The automated baseline test suite can exercise mandatory requirements without ne
 ### AC-SEC-001
 
 An unauthenticated request to a protected customer/activity/risk/analysis/history capability is rejected or redirected to authentication; successful login enables the capability.
+
+### AC-RES-001
+
+With an analysis adapter configured to fail or return an invalid structured result, the request reports an explicit analysis failure and no completed analysis/history entry is created.
+
+### AC-RES-002
+
+With completed-analysis persistence configured to fail, the request reports an explicit persistence failure and does not claim that the analysis was retained or made available in history.
+
+### Behavioural scenario and failure-mode views
+
+The following activity views make both successful and negative paths explicit. They are requirements-level behaviour views: they deliberately avoid controllers, repositories, framework classes, queues, threads, or deployment nodes.
+
+![Customer review activity and negative paths](diagrams/srs-customer-review-activity.svg)
+
+[Authoritative PlantUML source](diagrams/srs-customer-review-activity.puml)
+
+![AI analysis activity and failure modes](diagrams/srs-analysis-activity.svg)
+
+[Authoritative PlantUML source](diagrams/srs-analysis-activity.puml)
+
+No durable analysis state machine is specified in this baseline because `SRC-001` does not define an asynchronous persisted lifecycle. The activities above describe logical observable phases without inventing implementation states. If a later design introduces durable asynchronous states, their externally observable semantics require an SRS revision and a state-machine view.
 
 ## 11. Delivery requirements
 

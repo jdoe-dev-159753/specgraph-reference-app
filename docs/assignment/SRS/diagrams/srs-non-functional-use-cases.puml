@@ -1,0 +1,53 @@
+@startuml
+left to right direction
+skinparam linetype ortho
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor<<MANDATORY>> #FFB3B3
+  BackgroundColor<<MUST_HAVE>> #FFD699
+}
+
+actor "Developer / Reviewer" as Reviewer
+actor "Customer Care Operator" as Operator
+
+rectangle "Customer Activity Analytics" as SystemBoundary {
+  usecase "Reproduce System Locally\n[NFR-REP-001]" as NF_Reproduce <<MANDATORY>>
+  usecase "Verify Baseline Deterministically\n[NFR-VER-001]" as NF_Verify <<MANDATORY>>
+  usecase "Use Protected Capabilities Only\nWhen Authenticated\n[NFR-SEC-001]" as NF_Secure <<MUST_HAVE>>
+  usecase "Complete Baseline Analysis\nwithout External LLM\n[CON-AI-001]" as NF_Offline <<MANDATORY>>
+
+  NF_Reproduce -[hidden]-> NF_Verify
+  NF_Verify -[hidden]-> NF_Offline
+  NF_Offline -[hidden]-> NF_Secure
+}
+
+Reviewer -- NF_Reproduce
+Reviewer -- NF_Verify
+Reviewer -- NF_Offline
+Operator -- NF_Secure
+Operator -- NF_Offline
+
+note right of SystemBoundary
+  <<constraint>> Default demonstration data is synthetic.
+  [CON-DATA-001]
+end note
+
+note right of SystemBoundary
+  <<constraint>> External AI transmission is opt-in.
+  [CON-AI-002]
+end note
+
+note bottom of NF_Verify
+  Pass/fail is executable evidence.
+  The SRS specifies what must be verifiable;
+  it does not hand-maintain current test status.
+end note
+
+legend bottom
+  |= Colour |= Delivery priority |
+  |<#FFB3B3> | MANDATORY |
+  |<#FFD699> | MUST_HAVE |
+endlegend
+@enduml

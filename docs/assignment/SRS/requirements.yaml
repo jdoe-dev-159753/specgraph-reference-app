@@ -1,6 +1,6 @@
 schema_version: 1
 document_id: CAA-SRS-001
-baseline_revision: 1
+baseline_revision: 2
 normative_document: SRS.md
 
 sources:
@@ -74,7 +74,7 @@ requirements:
     priority: MUST_HAVE
     basis: source
     origins: [SRC-001]
-    acceptance: [AC-RAG-001]
+    acceptance: [AC-RAG-001, AC-RAG-002]
   FR-HIST-001:
     kind: functional
     title: Persist completed AI analyses
@@ -110,6 +110,13 @@ requirements:
     basis: derived
     origins: [SRC-001]
     acceptance: [AC-SEC-001]
+  NFR-RES-001:
+    kind: non_functional
+    title: Analysis failures are explicit and non-fabricating
+    priority: MUST_HAVE
+    basis: derived_reliability_constraint
+    origins: [SRC-001, SRC-003]
+    acceptance: [AC-RAG-002, AC-RES-001, AC-RES-002]
 
 invariants:
   INV-DATA-001:
@@ -132,6 +139,10 @@ invariants:
     title: Persisted analyses remain attributable
     basis: correctness_derivation
     origins: [SRC-001]
+  INV-RAG-001:
+    title: Grounding evidence is not fabricated
+    basis: correctness_derivation
+    origins: [SRC-001, SRC-003]
 
 constraints:
   CON-AI-001:
@@ -178,11 +189,14 @@ acceptance_criteria:
   AC-AI-002: {verifies: [FR-AI-002]}
   AC-AUTH-001: {verifies: [FR-AUTH-001]}
   AC-RAG-001: {verifies: [FR-RAG-001]}
+  AC-RAG-002: {verifies: [FR-RAG-001, INV-RAG-001, NFR-RES-001]}
   AC-HIST-001: {verifies: [FR-HIST-001]}
   AC-HIST-002: {verifies: [FR-HIST-002]}
   AC-REP-001: {verifies: [NFR-REP-001]}
   AC-VER-001: {verifies: [NFR-VER-001]}
   AC-SEC-001: {verifies: [NFR-SEC-001]}
+  AC-RES-001: {verifies: [NFR-RES-001]}
+  AC-RES-002: {verifies: [NFR-RES-001]}
 
 delivery_requirements:
   DEL-001: {title: Git repository and README, basis: source, origins: [SRC-001]}

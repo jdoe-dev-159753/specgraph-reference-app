@@ -1,0 +1,55 @@
+@startuml
+skinparam linetype ortho
+skinparam activity {
+  BackgroundColor #F7F7F7
+  BorderColor #303030
+}
+
+start
+:Authenticated operator requests analysis
+for selected customer;
+:Build analysis context from persisted
+customer activity and risk evidence;
+:Retrieve relevant policy knowledge;
+if (Relevant evidence available?) then (yes)
+  :Attach retrieved evidence with provenance;
+else (no)
+  :Record that no relevant policy evidence
+was retrieved;
+  :Do not fabricate policy evidence;
+  note right
+    AC-RAG-002 / INV-RAG-001
+    Whether an ungrounded analysis may complete remains
+    unresolved by AMB-RAG-001; this view does not decide it.
+  end note
+endif
+
+:Execute provider-neutral AI analysis;
+:Validate risk level, findings summary
+and recommendations;
+if (Structured result valid?) then (yes)
+else (no / execution or validation failure)
+  :Report analysis failure explicitly;
+  :Do not expose a fabricated completed analysis;
+  note right
+    AC-RES-001 / NFR-RES-001
+  end note
+  stop
+endif
+
+:Persist completed analysis with
+customer/operator/time/result provenance;
+if (Persistence succeeds?) then (yes)
+  :Return completed structured analysis;
+  :Make analysis available in history;
+  stop
+else (no)
+  :Report persistence failure explicitly;
+  :Do not claim the analysis is retained
+or available in history;
+  note right
+    AC-RES-002 / NFR-RES-001
+  end note
+  stop
+endif
+@enduml
