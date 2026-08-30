@@ -2,3 +2,197 @@ schema_version: 1
 document_id: CAA-SRS-001
 baseline_revision: 1
 normative_document: SRS.md
+
+sources:
+  SRC-001:
+    kind: primary_problem_source
+    title: Customer Activity Analytics take-home statement and attached database schema
+    repository_location: null
+    note: Supplied externally and intentionally not committed to the durable generic repository.
+  SRC-002:
+    kind: derived_analysis
+    title: Inception baseline
+    repository_location: ../Inception/Inception.md
+  SRC-003:
+    kind: project_constraint
+    title: Repository engineering authority
+    repository_location: ../../../AGENTS.md
+
+requirements:
+  FR-CUST-001:
+    kind: functional
+    title: Search customer by Customer ID
+    priority: MANDATORY
+    basis: source
+    origins: [SRC-001]
+    acceptance: [AC-CUST-001, AC-CUST-002]
+  FR-ACT-001:
+    kind: functional
+    title: Review customer activity
+    priority: MANDATORY
+    basis: source
+    origins: [SRC-001]
+    acceptance: [AC-ACT-001]
+  FR-ACT-002:
+    kind: functional
+    title: Distinguish the three supplied activity families
+    priority: MANDATORY
+    basis: source
+    origins: [SRC-001]
+    acceptance: [AC-ACT-002]
+  FR-RISK-001:
+    kind: functional
+    title: Review customer risk evidence
+    priority: MANDATORY
+    basis: source_plus_schema_derivation
+    origins: [SRC-001]
+    acceptance: [AC-RISK-001]
+  FR-AI-001:
+    kind: functional
+    title: Request AI analysis
+    priority: MANDATORY
+    basis: source
+    origins: [SRC-001]
+    acceptance: [AC-AI-001]
+  FR-AI-002:
+    kind: functional
+    title: Produce structured analysis output
+    priority: MANDATORY
+    basis: source
+    origins: [SRC-001]
+    acceptance: [AC-AI-002]
+  FR-AUTH-001:
+    kind: functional
+    title: Authenticate distinct operators
+    priority: MUST_HAVE
+    basis: source
+    origins: [SRC-001]
+    acceptance: [AC-AUTH-001]
+  FR-RAG-001:
+    kind: functional
+    title: Retrieve relevant policy knowledge
+    priority: MUST_HAVE
+    basis: source
+    origins: [SRC-001]
+    acceptance: [AC-RAG-001]
+  FR-HIST-001:
+    kind: functional
+    title: Persist completed AI analyses
+    priority: MUST_HAVE
+    basis: source
+    origins: [SRC-001]
+    acceptance: [AC-HIST-001]
+  FR-HIST-002:
+    kind: functional
+    title: Review previous AI analyses
+    priority: MUST_HAVE
+    basis: source
+    origins: [SRC-001]
+    acceptance: [AC-HIST-002]
+  NFR-REP-001:
+    kind: non_functional
+    title: Reviewer-reproducible execution
+    priority: MANDATORY
+    basis: derived_delivery_constraint
+    origins: [SRC-001, SRC-003]
+    acceptance: [AC-REP-001]
+  NFR-VER-001:
+    kind: non_functional
+    title: Deterministic baseline verification
+    priority: MANDATORY
+    basis: project_constraint_compatible_with_source
+    origins: [SRC-001, SRC-003]
+    acceptance: [AC-VER-001]
+  NFR-SEC-001:
+    kind: non_functional
+    title: Protected operator capabilities require authentication
+    priority: MUST_HAVE
+    basis: derived
+    origins: [SRC-001]
+    acceptance: [AC-SEC-001]
+
+invariants:
+  INV-DATA-001:
+    title: Activity belongs to a customer through its transaction
+    basis: schema_derivation
+    origins: [SRC-001]
+  INV-DATA-002:
+    title: Activity specialization matches activity type
+    basis: schema_derivation
+    origins: [SRC-001]
+  INV-RISK-001:
+    title: Risk evidence remains source-derived
+    basis: correctness_derivation
+    origins: [SRC-001]
+  INV-AI-001:
+    title: Analysis output contract is provider-neutral
+    basis: source_plus_interoperability_derivation
+    origins: [SRC-001, SRC-003]
+  INV-HIST-001:
+    title: Persisted analyses remain attributable
+    basis: correctness_derivation
+    origins: [SRC-001]
+
+constraints:
+  CON-AI-001:
+    title: External provider use is optional
+    basis: source
+    origins: [SRC-001]
+  CON-DATA-001:
+    title: Default demo data is synthetic
+    basis: confidentiality_safeguard
+    origins: [SRC-003]
+  CON-AI-002:
+    title: External transmission is opt-in
+    basis: confidentiality_safeguard
+    origins: [SRC-003]
+    resolves: [AMB-CNF-001]
+
+ambiguities:
+  AMB-DATA-001: {title: Customer representation, origins: [SRC-001]}
+  AMB-AUTH-001: {title: Authentication and authorization model, origins: [SRC-001]}
+  AMB-HIST-001: {title: AI-analysis persistence model, origins: [SRC-001]}
+  AMB-RISK-001: {title: Risk-level scale and aggregation, origins: [SRC-001]}
+  AMB-RAG-001: {title: Knowledge corpus and retrieval relevance, origins: [SRC-001]}
+  AMB-MON-001: {title: Meaning of monitor, origins: [SRC-001]}
+  AMB-LLM-001: {title: LLM provider and model, origins: [SRC-001]}
+  AMB-DEP-001: {title: Deployment target, origins: [SRC-001]}
+  AMB-CNF-001: {title: External-model data policy, origins: [SRC-001]}
+
+assumptions:
+  ASM-DATA-001: {title: Minimal customer records, resolves: [AMB-DATA-001]}
+  ASM-AUTH-001: {title: Multiple local demo operators, resolves: [AMB-AUTH-001]}
+  ASM-HIST-001: {title: Minimal analysis provenance, resolves: [AMB-HIST-001]}
+  ASM-RISK-001: {title: Demonstration risk-level vocabulary, resolves: [AMB-RISK-001]}
+  ASM-RAG-001: {title: Synthetic demonstration policy corpus, resolves: [AMB-RAG-001]}
+  ASM-MON-001: {title: Monitoring means inspect plus refresh, resolves: [AMB-MON-001]}
+  ASM-DEP-001: {title: Local execution is the mandatory deployment baseline, resolves: [AMB-DEP-001]}
+
+acceptance_criteria:
+  AC-CUST-001: {verifies: [FR-CUST-001]}
+  AC-CUST-002: {verifies: [FR-CUST-001]}
+  AC-ACT-001: {verifies: [FR-ACT-001]}
+  AC-ACT-002: {verifies: [FR-ACT-002]}
+  AC-RISK-001: {verifies: [FR-RISK-001]}
+  AC-AI-001: {verifies: [FR-AI-001]}
+  AC-AI-002: {verifies: [FR-AI-002]}
+  AC-AUTH-001: {verifies: [FR-AUTH-001]}
+  AC-RAG-001: {verifies: [FR-RAG-001]}
+  AC-HIST-001: {verifies: [FR-HIST-001]}
+  AC-HIST-002: {verifies: [FR-HIST-002]}
+  AC-REP-001: {verifies: [NFR-REP-001]}
+  AC-VER-001: {verifies: [NFR-VER-001]}
+  AC-SEC-001: {verifies: [NFR-SEC-001]}
+
+delivery_requirements:
+  DEL-001: {title: Git repository and README, basis: source, origins: [SRC-001]}
+  DEL-002: {title: Short demo, basis: source, origins: [SRC-001]}
+  DEL-003: {title: LLM-choice summary, basis: source, origins: [SRC-001]}
+  DEL-004: {title: Agent-instruction summary, basis: source, origins: [SRC-001]}
+
+revision_semantics:
+  ids_are_stable: true
+  recycle_ids: false
+  semantic_replacement_uses_new_id: true
+  supersession_relation: supersedes
+  github_lifecycle_is_separate: true
