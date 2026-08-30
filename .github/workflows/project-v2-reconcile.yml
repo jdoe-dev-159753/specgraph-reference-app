@@ -1,6 +1,8 @@
 name: project-v2-reconcile
 
 on:
+  push:
+    branches: [ci/project-v2-reconcile]
   issues:
     types: [opened, labeled, unlabeled, reopened, closed]
   pull_request_target:
@@ -30,8 +32,6 @@ jobs:
             const dispositionFieldName = 'Discovery disposition';
             const discoveryLabel = 'discovery';
 
-            // The label only scopes the reconciler. The Project field remains the
-            // authoritative disposition enum.
             try {
               await github.rest.issues.getLabel({ owner, repo, name: discoveryLabel });
             } catch (error) {
@@ -72,7 +72,6 @@ jobs:
                   }
                 }
               `, { login: owner, after: projectsCursor });
-
               const connection = projectPage.user.projectsV2;
               project = connection.nodes.find(candidate => candidate.title === projectTitle) ?? null;
               if (project || !connection.pageInfo.hasNextPage) break;
@@ -157,7 +156,6 @@ jobs:
                   }
                 }
               `, { projectId: project.id, after: itemsCursor });
-
               const connection = itemPage.node.items;
               allItems.push(...connection.nodes);
               if (!connection.pageInfo.hasNextPage) break;
@@ -169,20 +167,12 @@ jobs:
                       item.content.repository.nameWithOwner === repoFull
             );
 
-            // Backfill the non-exclusive discovery tag from already-authoritative
-            // Project values. Future material discoveries should carry the tag at
-            // creation time.
             for (const item of repoItems) {
               const issue = item.content;
               const current = getDisposition(item);
               const labels = new Set(issue.labels.nodes.map(label => label.name));
               if (current && !labels.has(discoveryLabel)) {
-                await github.rest.issues.addLabels({
-                  owner,
-                  repo,
-                  issue_number: issue.number,
-                  labels: [discoveryLabel],
-                });
+                await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels: [discoveryLabel] });
                 labels.add(discoveryLabel);
               }
               issue._labels = labels;
@@ -195,10 +185,7 @@ jobs:
                     nodes {
                       number
                       closingIssuesReferences(first: 50) {
-                        nodes {
-                          number
-                          repository { nameWithOwner }
-                        }
+                        nodes { number repository { nameWithOwner } }
                       }
                     }
                   }
@@ -209,9 +196,7 @@ jobs:
             const ownedByOpenPr = new Set();
             for (const pr of openPrData.repository.pullRequests.nodes) {
               for (const issue of pr.closingIssuesReferences.nodes) {
-                if (issue.repository.nameWithOwner === repoFull) {
-                  ownedByOpenPr.add(issue.number);
-                }
+                if (issue.repository.nameWithOwner === repoFull) ownedByOpenPr.add(issue.number);
               }
             }
 
@@ -222,9 +207,7 @@ jobs:
                   itemId: $item,
                   fieldId: $field,
                   value: { singleSelectOptionId: $option }
-                }) {
-                  projectV2Item { id }
-                }
+                }) { projectV2Item { id } }
               }
             `;
 
@@ -232,13 +215,8 @@ jobs:
             for (const item of repoItems) {
               const issue = item.content;
               if (!issue._labels.has(discoveryLabel)) continue;
-
               const current = getDisposition(item);
-              const { data: liveIssue } = await github.rest.issues.get({
-                owner,
-                repo,
-                issue_number: issue.number,
-              });
+              const { data: liveIssue } = await github.rest.issues.get({ owner, repo, issue_number: issue.number });
 
               let desired = null;
               if (liveIssue.state_reason === 'duplicate') {
@@ -250,31 +228,25 @@ jobs:
                 const closedByPr = issue.closedByPullRequestsReferences.nodes.some(
                   pr => pr.repository.nameWithOwner === repoFull
                 );
-
                 if (hasOpenOwningPr || closedByPr) {
                   desired = 'IN_SCOPE';
                 } else if (liveIssue.state === 'open' && !current) {
                   desired = 'FOLLOW_UP';
                 } else if (liveIssue.state === 'open' && current === 'IN_SCOPE') {
-                  core.warning(
-                    `Discovery #${issue.number} is explicitly IN_SCOPE but has no native owning PR yet; preserving the explicit decision while ownership settles.`
-                  );
+                  core.warning(`Discovery #${issue.number} has an explicit active disposition but no native owning PR yet; preserving it while ownership settles.`);
                 } else if (liveIssue.state !== 'open' && !current) {
-                  core.warning(
-                    `Discovery #${issue.number} is closed without a native PR owner or close reason that mechanically determines disposition.`
-                  );
+                  core.warning(`Discovery #${issue.number} is closed without native facts that mechanically determine disposition.`);
                 }
               }
 
               if (!desired || desired === current) continue;
-
               await github.graphql(updateMutation, {
                 project: project.id,
                 item: item.id,
                 field: dispositionField.id,
                 option: optionIds[desired],
               });
-              core.info(`#${issue.number}: ${dispositionFieldName} ${current ?? '<unset>'} -> ${desired}`);
+              core.info(`#${issue.number}: discovery disposition reconciled.`);
               updates += 1;
             }
 
