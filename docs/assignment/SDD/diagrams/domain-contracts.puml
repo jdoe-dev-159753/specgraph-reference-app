@@ -37,6 +37,14 @@ class PolicyEvidence <<project contract>> {
 class OperatorId <<project value>> {
   operatorIdentity
 }
+class AnalysisHistoryEntry <<project contract>> {
+  analysisIdentity
+  customerIdentity
+  operatorIdentity : OperatorId
+  generatedAt
+  result : AnalysisResult
+  evidenceProvenance : PolicyEvidence[*]
+}
 
 class Transaction <<source relation>> {
   transaction_id : UUID
@@ -63,6 +71,9 @@ class RiskRule <<source relation>> {
 
 CustomerSnapshot "1" o-- "0..*" ActivityProjection
 CustomerSnapshot "1" o-- "0..*" RiskEvidence
+AnalysisHistoryEntry "1" *-- "1" AnalysisResult
+AnalysisHistoryEntry "1" --> "1" OperatorId
+AnalysisHistoryEntry "1" o-- "0..*" PolicyEvidence
 Transaction <|-- CardActivity : CARD detail
 Transaction <|-- PaymentActivity : PAYMENT detail
 Transaction <|-- CryptoActivity : CRYPTO detail
@@ -76,11 +87,10 @@ RiskAssessment ..> RiskEvidence : adapter maps evidence
 RiskRule ..> RiskEvidence : adapter resolves rule identity/name
 AnalysisResult ..> CustomerSnapshot : derived from context
 AnalysisResult ..> PolicyEvidence : grounded by when retrieved
-AnalysisResult ..> OperatorId : persisted attribution
 
 note bottom of Transaction
-  Source-schema concepts stop at the adapter boundary. CustomerSnapshot
-  contains only project-owned projections; JPA/source relation types never
-  become durable application-contract members.
+  Source-schema concepts stop at the adapter boundary. CustomerSnapshot and
+  AnalysisHistoryEntry contain only project-owned projections; JPA/source
+  relation types never become durable application-contract members.
 end note
 @enduml
