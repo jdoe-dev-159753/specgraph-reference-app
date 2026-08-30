@@ -213,7 +213,7 @@ Acceptance: `AC-VER-001`.
 **Priority:** MUST_HAVE  
 **Origin:** derived from `FR-AUTH-001`.
 
-Once authentication is present in the delivered ring, customer activity, risk, analysis and history capabilities shall not be available to an unauthenticated operator session.
+Customer activity, risk, analysis and history capabilities shall not be available to an unauthenticated operator session.
 
 Acceptance: `AC-SEC-001`.
 
