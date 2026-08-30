@@ -26,7 +26,7 @@ else authenticated
   UI --> Operator : list and inspect previous result
 end
 
-note bottom of History
+note right of History
   FR-HIST-002 / AC-HIST-002 read path is distinct from persistence.
   Persistence infrastructure does not leak JPA rows through the port.
 end note
