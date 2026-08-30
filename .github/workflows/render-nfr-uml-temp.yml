@@ -1,0 +1,30 @@
+name: render-nfr-uml-temp
+
+on:
+  push:
+    branches: [docs/uml-2-5-use-cases]
+    paths:
+      - '.github/workflows/render-nfr-uml-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Render corrected non-functional UML
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            plantuml/plantuml:1.2026.6 \
+            -tsvg docs/assignment/Inception/diagrams/inception-non-functional-use-cases.puml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/render-nfr-uml-temp.yml
+          git add docs/assignment/Inception/diagrams/inception-non-functional-use-cases.svg
+          git commit -m "docs: regenerate corrected non-functional UML"
+          git push
