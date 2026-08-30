@@ -7,9 +7,11 @@ participant "analysis application" as Analysis
 participant "CustomerActivityPort" as Activity
 participant "PolicyKnowledgePort" as Policy
 participant "AnalysisModelPort" as Model
+participant "DeterministicAnalysisStub" as Deterministic
+participant "SpringAiAnalysisAdapter" as LiveAdapter
+participant "External AI provider" as Provider
 participant "AnalysisHistoryPort" as History
 database "PostgreSQL / pgvector" as DB
-participant "DeterministicAnalysisStub\nor configured live adapter" as ModelAdapter
 
 Operator -> UI : Analyze Customer Activity
 UI -> Http : POST analysis request [HTTP/JSON]
@@ -21,11 +23,18 @@ Activity --> Analysis : CustomerSnapshot
 Analysis -> Policy : retrieveRelevant(context) [in-process]
 Policy -> DB : pgvector query when R4 adapter active
 DB --> Policy : retrieved corpus evidence
-Policy --> Analysis : PolicyEvidence[] / explicit no-evidence
+Policy --> Analysis : PolicyEvidence[]
 Analysis -> Model : analyze(context, evidence) [in-process port]
-Model -> ModelAdapter : deterministic call or HTTPS provider adapter
-ModelAdapter --> Model : structured candidate / failure
-Model --> Analysis : candidate AnalysisResult
+alt deterministic baseline adapter
+  Model -> Deterministic : dispatch [in-process]
+  Deterministic --> Model : structured candidate / failure
+else explicitly configured live adapter
+  Model -> LiveAdapter : dispatch [in-process]
+  LiveAdapter -> Provider : HTTPS provider API
+  Provider --> LiveAdapter : response / network-provider failure
+  LiveAdapter --> Model : structured candidate / failure
+end
+Model --> Analysis : candidate AnalysisResult / failure
 Analysis -> Analysis : validate structured result
 Analysis -> History : persist(result, customer, operator, time, provenance)
 History -> DB : JDBC INSERT analysis history
@@ -36,8 +45,9 @@ Http --> UI : 200 JSON
 UI --> Operator : risk level + findings + recommendations + provenance
 
 note over Policy,Model
-  The port interaction is stable. R0/R3 uses static/deterministic adapters;
-  R4 may substitute pgvector/live provider adapters without changing the
-  application contract.
+  The application-facing port interaction is stable. R3 uses deterministic
+  adapters; R4 may substitute pgvector/live-provider adapters without changing
+  project-owned application contracts. Network transport exists only beyond
+  the live adapter boundary.
 end note
 @enduml
