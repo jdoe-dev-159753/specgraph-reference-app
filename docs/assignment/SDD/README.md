@@ -29,7 +29,7 @@ The component view makes provided/required seams explicit. The web client requir
 
 [PlantUML source](diagrams/component-topology.puml)
 
-The stable application contracts are `CustomerSnapshot`, `AnalysisResult`, `PolicyEvidence`, and `OperatorId`. The class/domain view deliberately distinguishes these project-owned contracts from source-schema concepts; relational/JPA inheritance is not imposed on the Java/domain model.
+The stable application contracts are `CustomerSnapshot`, project-owned activity/risk projections, `AnalysisResult`, `PolicyEvidence`, and `OperatorId`. The class/domain view deliberately distinguishes those contracts from source-schema concepts; source/JPA relation classes are mapped by adapters rather than becoming members of `CustomerSnapshot`.
 
 ![Domain and contract view](diagrams/domain-contracts.svg)
 
@@ -61,7 +61,15 @@ The sequence shows the same application port with two adapter states: R1 synthet
 
 [PlantUML source](diagrams/sequence-analysis.puml)
 
-The stable orchestration is `CustomerActivityPort -> PolicyKnowledgePort -> AnalysisModelPort -> validation -> AnalysisHistoryPort`. Static/deterministic and pgvector/live implementations are substitutions behind those seams, not parallel application architectures.
+The stable orchestration is `CustomerActivityPort -> PolicyKnowledgePort -> AnalysisModelPort -> validation -> AnalysisHistoryPort`. Static/deterministic and pgvector/live implementations are substitutions behind those seams, not parallel application architectures. For the optional live model, port dispatch remains in-process and HTTPS begins only at the live adapter -> external-provider boundary.
+
+### Analysis-history review
+
+![Analysis history read sequence](diagrams/sequence-analysis-history.svg)
+
+[PlantUML source](diagrams/sequence-analysis-history.puml)
+
+`FR-HIST-002` has its own authenticated read path: prior results are loaded through `AnalysisHistoryPort` and projected with generation time, generating operator, risk level, findings and recommendations. Persisting a result and reviewing history are therefore distinct runtime interactions even though they share the same persistence adapter.
 
 ### Failure and degraded paths
 
@@ -69,7 +77,7 @@ The stable orchestration is `CustomerActivityPort -> PolicyKnowledgePort -> Anal
 
 [PlantUML source](diagrams/sequence-failure-modes.puml)
 
-The failure view covers authentication rejection, explicit missing grounding, model/provider failure, invalid structured result, and persistence failure. It preserves `AMB-RAG-001`: missing evidence is never fabricated, but the SDD does not silently decide an unspecified minimum-grounding policy.
+The failure view covers authentication rejection, explicit insufficient grounding, model/provider failure, invalid structured result, and persistence failure. Unauthenticated execution does not reconverge into analysis. For `AC-RAG-002`, a request with no relevant evidence ends with an explicit insufficient-grounding outcome and is never presented as successfully grounded. This does not resolve `AMB-RAG-001` into a universal minimum-evidence rule: any future explicitly ungrounded mode would require separately reviewed semantics rather than an accidental fall-through.
 
 ## Deployment and communication topology
 
@@ -82,8 +90,8 @@ Baseline runtime communication is deliberately simple and explicit:
 - browser to web edge: HTTP locally or HTTPS for the remote demo;
 - web edge to Spring Boot API: HTTP/JSON over the Compose/private network;
 - backend to PostgreSQL/pgvector: JDBC over the PostgreSQL protocol/TCP on the private network;
-- backend to an external model provider: HTTPS only when the optional adapter is explicitly configured;
-- application-module and port interactions inside the Spring Boot monolith: in-process calls.
+- backend to an external model provider: HTTPS only when the optional live adapter is explicitly configured;
+- application-module, port and adapter dispatch inside the Spring Boot monolith: in-process calls.
 
 No WebSocket, broker, FIFO, Redis, separate identity service, or streaming transport is claimed unless implementation evidence later creates that need. Simplicity is a design choice; pretending simple execution has no dynamics would just be refusal to draw the arrows.
 
