@@ -1,0 +1,83 @@
+@startuml
+left to right direction
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+actor "Customer Care Operator" as Operator
+
+package "Web client" {
+  component "Operator Dashboard\nCMP-UI-001\nReact / TypeScript" as UI
+}
+
+package "Spring Boot modular monolith" as Backend {
+  component "HTTP Adapter\nADP-HTTP-001" as Http
+  component "Spring Security Boundary\nADP-AUTH-SPRING-001" as Auth
+
+  package "customer" {
+    component "Customer Module\nMOD-CUSTOMER-001" as Customer
+  }
+  package "risk" {
+    component "Risk Module\nMOD-RISK-001" as Risk
+  }
+  package "analysis" {
+    component "Analysis Module\nMOD-ANALYSIS-001" as Analysis
+  }
+  package "identity" {
+    component "Identity Module\nMOD-IDENTITY-001" as Identity
+  }
+
+  interface "CustomerActivityPort\nPRT-ACTIVITY-001" as ActivityPort
+  interface "AnalysisModelPort\nPRT-MODEL-001" as ModelPort
+  interface "PolicyKnowledgePort\nPRT-POLICY-001" as PolicyPort
+  interface "AnalysisHistoryPort\nPRT-HISTORY-001" as HistoryPort
+}
+
+package "Replaceable adapters" {
+  component "SyntheticActivityAdapter\nADP-ACT-SYN-001\nR0/R1" as ActivitySynthetic
+  component "JpaCustomerActivityAdapter\nADP-ACT-JPA-001\nR2" as ActivityJpa
+  component "DeterministicAnalysisStub\nADP-MODEL-DET-001\nR0 boundary / R3 use" as ModelDet
+  component "SpringAiAnalysisAdapter\nADP-MODEL-AI-001\nR4 optional" as ModelAi
+  component "StaticPolicyAdapter\nADP-POL-STATIC-001\nR0 boundary" as PolicyStatic
+  component "PgVectorPolicyAdapter\nADP-POL-PGV-001\nR4" as PolicyPg
+  component "JpaAnalysisHistoryAdapter\nADP-HIST-JPA-001\nR3" as HistoryJpa
+}
+
+database "PostgreSQL + pgvector\nINF-DB-001\nR2+" as Db
+
+Operator --> UI
+UI --> Auth : login / protected flow (R1+)
+Auth --> Http : authenticated context (R1+)
+Auth --> Identity
+Http --> Customer
+Http --> Risk
+Http --> Analysis
+Customer --> ActivityPort
+Risk --> ActivityPort
+Analysis --> ModelPort
+Analysis --> PolicyPort
+Analysis --> HistoryPort
+
+ActivityPort --> ActivitySynthetic
+ActivityPort ..> ActivityJpa
+ModelPort --> ModelDet
+ModelPort ..> ModelAi
+PolicyPort --> PolicyStatic
+PolicyPort ..> PolicyPg
+HistoryPort ..> HistoryJpa
+
+ActivityJpa --> Db
+PolicyPg --> Db
+HistoryJpa --> Db
+
+note bottom of ActivitySynthetic
+  First acceptance-bearing slice R0/R1:
+  authenticated operator -> Customer ID -> snapshot ->
+  CARD/PAYMENT/CRYPTO + risk evidence.
+end note
+
+note bottom of Backend
+  Hexagonal rule:
+  modules own contracts and ports;
+  adapters/frameworks remain outside them.
+end note
+@enduml

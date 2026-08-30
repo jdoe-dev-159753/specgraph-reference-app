@@ -1,0 +1,247 @@
+schema_version: 1
+design_id: CAA-DESIGN-001
+normative_requirements: ../SRS/requirements.yaml
+current_design_readme: README.md
+
+adrs:
+  ADR-001: ../ADR/ADR-001-modular-monolith-hexagonal.md
+  ADR-002: ../ADR/ADR-002-provider-neutral-analysis.md
+  ADR-003: ../ADR/ADR-003-postgresql-pgvector-persistence.md
+  ADR-004: ../ADR/ADR-004-baseline-web-stack.md
+
+modules:
+  MOD-IDENTITY-001:
+    name: identity
+    responsibility: authenticated operator context and access boundary
+    activation_ring: R1
+    adrs: [ADR-001, ADR-004]
+  MOD-CUSTOMER-001:
+    name: customer
+    responsibility: customer lookup and activity read use cases
+    activation_ring: R1
+    adrs: [ADR-001]
+  MOD-RISK-001:
+    name: risk
+    responsibility: source-derived risk evidence interpretation/presentation
+    activation_ring: R1
+    adrs: [ADR-001]
+  MOD-ANALYSIS-001:
+    name: analysis
+    responsibility: analysis orchestration, policy grounding and analysis history
+    activation_ring: R3
+    adrs: [ADR-001, ADR-002]
+
+contracts:
+  CTR-CUSTOMER-SNAPSHOT-001:
+    name: CustomerSnapshot
+    owner: MOD-CUSTOMER-001
+    contains: [customer_identity, activities, risk_evidence]
+    invariants: [INV-DATA-001, INV-DATA-002, INV-RISK-001]
+  CTR-ANALYSIS-RESULT-001:
+    name: AnalysisResult
+    owner: MOD-ANALYSIS-001
+    contains: [risk_level, findings_summary, recommendations]
+    invariants: [INV-AI-001]
+  CTR-POLICY-EVIDENCE-001:
+    name: PolicyEvidence
+    owner: MOD-ANALYSIS-001
+    contains: [source_identity, content, retrieval_metadata]
+  CTR-OPERATOR-ID-001:
+    name: OperatorId
+    owner: MOD-IDENTITY-001
+    contains: [operator_identity]
+    invariants: [INV-HIST-001]
+
+ports:
+  PRT-ACTIVITY-001:
+    name: CustomerActivityPort
+    owner: MOD-CUSTOMER-001
+    direction: outbound
+    returns: CTR-CUSTOMER-SNAPSHOT-001
+    activation_ring: R0
+    adrs: [ADR-001, ADR-003]
+  PRT-MODEL-001:
+    name: AnalysisModelPort
+    owner: MOD-ANALYSIS-001
+    direction: outbound
+    returns: CTR-ANALYSIS-RESULT-001
+    activation_ring: R0
+    adrs: [ADR-002]
+  PRT-POLICY-001:
+    name: PolicyKnowledgePort
+    owner: MOD-ANALYSIS-001
+    direction: outbound
+    returns: CTR-POLICY-EVIDENCE-001
+    activation_ring: R0
+    adrs: [ADR-002, ADR-003]
+  PRT-HISTORY-001:
+    name: AnalysisHistoryPort
+    owner: MOD-ANALYSIS-001
+    direction: outbound
+    stores: CTR-ANALYSIS-RESULT-001
+    activation_ring: R0
+    adrs: [ADR-001, ADR-003]
+
+adapters:
+  ADP-HTTP-001:
+    name: CustomerAnalysisHttpAdapter
+    kind: inbound
+    technology: Spring MVC
+    activation_ring: R0
+    connects_to: [MOD-CUSTOMER-001, MOD-RISK-001, MOD-ANALYSIS-001]
+    adrs: [ADR-004]
+  ADP-AUTH-SPRING-001:
+    name: SpringSecurityOperatorAdapter
+    kind: inbound_boundary
+    technology: Spring Security
+    activation_ring: R1
+    connects_to: [MOD-IDENTITY-001, ADP-HTTP-001]
+    adrs: [ADR-004]
+  ADP-ACT-SYN-001:
+    name: SyntheticActivityAdapter
+    kind: outbound
+    implements: PRT-ACTIVITY-001
+    activation_ring: R0
+    adrs: [ADR-001]
+  ADP-ACT-JPA-001:
+    name: JpaCustomerActivityAdapter
+    kind: outbound
+    implements: PRT-ACTIVITY-001
+    activation_ring: R2
+    adrs: [ADR-003, ADR-004]
+  ADP-MODEL-DET-001:
+    name: DeterministicAnalysisStub
+    kind: outbound
+    implements: PRT-MODEL-001
+    activation_ring: R0
+    adrs: [ADR-002]
+  ADP-MODEL-AI-001:
+    name: SpringAiAnalysisAdapter
+    kind: outbound
+    implements: PRT-MODEL-001
+    activation_ring: R4
+    adrs: [ADR-002, ADR-004]
+  ADP-POL-STATIC-001:
+    name: StaticPolicyAdapter
+    kind: outbound
+    implements: PRT-POLICY-001
+    activation_ring: R0
+    adrs: [ADR-002]
+  ADP-POL-PGV-001:
+    name: PgVectorPolicyAdapter
+    kind: outbound
+    implements: PRT-POLICY-001
+    activation_ring: R4
+    adrs: [ADR-002, ADR-003]
+  ADP-HIST-JPA-001:
+    name: JpaAnalysisHistoryAdapter
+    kind: outbound
+    implements: PRT-HISTORY-001
+    activation_ring: R3
+    adrs: [ADR-003, ADR-004]
+
+infrastructure:
+  INF-DB-001:
+    name: PostgreSqlPgVector
+    activation_ring: R2
+    used_by: [ADP-ACT-JPA-001, ADP-HIST-JPA-001, ADP-POL-PGV-001]
+    adrs: [ADR-003]
+  INF-COMPOSE-001:
+    name: ComposeTopology
+    activation_ring: R0
+    responsibility: reproducible application/dependency topology
+    adrs: [ADR-004]
+  INF-EDGE-001:
+    name: CaddyEdge
+    activation_ring: R5
+    responsibility: optional remote-demo edge and reverse proxy
+    adrs: [ADR-004]
+  CMP-UI-001:
+    name: OperatorDashboard
+    technology: React TypeScript MUI TanStack Query
+    activation_ring: R0
+    connects_to: [ADP-HTTP-001]
+    adrs: [ADR-004]
+
+requirement_design:
+  FR-CUST-001:
+    elements: [CMP-UI-001, ADP-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JPA-001]
+    adrs: [ADR-001, ADR-003, ADR-004]
+    first_acceptance_ring: R1
+  FR-ACT-001:
+    elements: [CMP-UI-001, ADP-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JPA-001]
+    adrs: [ADR-001, ADR-003, ADR-004]
+    first_acceptance_ring: R1
+  FR-ACT-002:
+    elements: [CMP-UI-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JPA-001, CTR-CUSTOMER-SNAPSHOT-001]
+    adrs: [ADR-001, ADR-003]
+    first_acceptance_ring: R1
+  FR-RISK-001:
+    elements: [CMP-UI-001, MOD-RISK-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JPA-001, CTR-CUSTOMER-SNAPSHOT-001]
+    adrs: [ADR-001, ADR-003]
+    first_acceptance_ring: R1
+  FR-AI-001:
+    elements: [CMP-UI-001, ADP-HTTP-001, MOD-ANALYSIS-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
+    adrs: [ADR-001, ADR-002, ADR-004]
+    first_acceptance_ring: R3
+  FR-AI-002:
+    elements: [MOD-ANALYSIS-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
+    adrs: [ADR-002]
+    first_acceptance_ring: R3
+  FR-AUTH-001:
+    elements: [CMP-UI-001, ADP-AUTH-SPRING-001, MOD-IDENTITY-001, CTR-OPERATOR-ID-001]
+    adrs: [ADR-001, ADR-004]
+    first_acceptance_ring: R1
+  FR-RAG-001:
+    elements: [MOD-ANALYSIS-001, PRT-POLICY-001, CTR-POLICY-EVIDENCE-001, ADP-POL-STATIC-001, ADP-POL-PGV-001]
+    adrs: [ADR-002, ADR-003]
+    first_acceptance_ring: R4
+  FR-HIST-001:
+    elements: [MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001, INF-DB-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
+    adrs: [ADR-001, ADR-003, ADR-004]
+    first_acceptance_ring: R3
+  FR-HIST-002:
+    elements: [CMP-UI-001, ADP-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001]
+    adrs: [ADR-001, ADR-003, ADR-004]
+    first_acceptance_ring: R3
+  NFR-REP-001:
+    elements: [INF-COMPOSE-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
+    adrs: [ADR-002, ADR-004]
+    first_acceptance_ring: R3
+  NFR-VER-001:
+    elements: [PRT-ACTIVITY-001, PRT-MODEL-001, PRT-POLICY-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
+    adrs: [ADR-001, ADR-002, ADR-004]
+    first_acceptance_ring: R3
+  NFR-SEC-001:
+    elements: [ADP-AUTH-SPRING-001, MOD-IDENTITY-001, ADP-HTTP-001]
+    adrs: [ADR-001, ADR-004]
+    first_acceptance_ring: R1
+
+first_vertical_slice:
+  rings: [R0, R1]
+  requirements: [FR-CUST-001, FR-ACT-001, FR-ACT-002, FR-RISK-001, FR-AUTH-001, NFR-SEC-001]
+  acceptance: [AC-CUST-001, AC-CUST-002, AC-ACT-001, AC-ACT-002, AC-RISK-001, AC-AUTH-001, AC-SEC-001]
+  path: [CMP-UI-001, ADP-AUTH-SPRING-001, MOD-IDENTITY-001, ADP-HTTP-001, MOD-CUSTOMER-001, MOD-RISK-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001]
+  prohibited_shortcuts:
+    - bypassing CustomerActivityPort from the HTTP adapter
+    - leaking Spring or persistence types into CustomerSnapshot
+    - inventing a runtime risk-rule evaluator
+    - requiring PostgreSQL or an external LLM for R1 acceptance
+
+design_gaps:
+  GAP-HIST-001:
+    source_ambiguity: AMB-HIST-001
+    needed_by_ring: R3
+    question: exact relational fields and evidence provenance for persisted analyses
+  GAP-AUTH-001:
+    source_ambiguity: AMB-AUTH-001
+    needed_by_ring: R1
+    question: local demo credential storage and seeding mechanism
+  GAP-RAG-001:
+    source_ambiguity: AMB-RAG-001
+    needed_by_ring: R4
+    question: chunking embedding and ranking parameters for the synthetic policy corpus
+  GAP-LLM-001:
+    source_ambiguity: AMB-LLM-001
+    needed_by_ring: R4
+    question: optional live provider and model selection
