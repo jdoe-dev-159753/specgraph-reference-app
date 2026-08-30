@@ -24,7 +24,7 @@ jobs:
   guard:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
