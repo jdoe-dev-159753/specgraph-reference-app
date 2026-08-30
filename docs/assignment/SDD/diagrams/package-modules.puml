@@ -1,0 +1,56 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+package "identity" as Identity {
+  package "domain" as IDomain
+  package "application" as IApp
+  package "in/web" as IIn
+  package "out/persistence" as IOut
+}
+package "customer" as Customer {
+  package "domain" as CDomain
+  package "application" as CApp
+  package "in/web" as CIn
+  package "out/persistence" as COut
+}
+package "risk" as Risk {
+  package "domain" as RDomain
+  package "application" as RApp
+  package "in/web" as RIn
+  package "out/persistence" as ROut
+}
+package "analysis" as Analysis {
+  package "domain" as ADomain
+  package "application" as AApp
+  package "in/web" as AIn
+  package "out/ai" as AAI
+  package "out/knowledge" as AKnow
+  package "out/persistence" as AOut
+}
+
+IIn --> IApp
+IApp --> IDomain
+IOut ..> IApp : implements outbound port
+
+CIn --> CApp
+CApp --> CDomain
+COut ..> CApp : implements CustomerActivityPort
+
+RIn --> RApp
+RApp --> RDomain
+ROut ..> RApp : reads source risk evidence
+
+AIn --> AApp
+AApp --> ADomain
+AAI ..> AApp : implements AnalysisModelPort
+AKnow ..> AApp : implements PolicyKnowledgePort
+AOut ..> AApp : implements AnalysisHistoryPort
+
+note bottom
+  Dependency rule: framework and infrastructure packages depend inward on
+  project-owned application/domain contracts. Cross-module behaviour is
+  coordinated through explicit application contracts, not framework types.
+end note
+@enduml

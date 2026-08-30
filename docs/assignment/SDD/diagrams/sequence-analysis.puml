@@ -1,0 +1,43 @@
+@startuml
+hide footbox
+actor Operator
+participant "React UI" as UI
+participant "Authenticated HTTP adapter" as Http
+participant "analysis application" as Analysis
+participant "CustomerActivityPort" as Activity
+participant "PolicyKnowledgePort" as Policy
+participant "AnalysisModelPort" as Model
+participant "AnalysisHistoryPort" as History
+database "PostgreSQL / pgvector" as DB
+participant "DeterministicAnalysisStub\nor configured live adapter" as ModelAdapter
+
+Operator -> UI : Analyze Customer Activity
+UI -> Http : POST analysis request [HTTP/JSON]
+Http -> Analysis : analyze(customerId, operatorId) [in-process]
+Analysis -> Activity : loadSnapshot(customerId) [in-process]
+Activity -> DB : JDBC queries when R2+ adapter active
+DB --> Activity : activity + risk evidence
+Activity --> Analysis : CustomerSnapshot
+Analysis -> Policy : retrieveRelevant(context) [in-process]
+Policy -> DB : pgvector query when R4 adapter active
+DB --> Policy : retrieved corpus evidence
+Policy --> Analysis : PolicyEvidence[] / explicit no-evidence
+Analysis -> Model : analyze(context, evidence) [in-process port]
+Model -> ModelAdapter : deterministic call or HTTPS provider adapter
+ModelAdapter --> Model : structured candidate / failure
+Model --> Analysis : candidate AnalysisResult
+Analysis -> Analysis : validate structured result
+Analysis -> History : persist(result, customer, operator, time, provenance)
+History -> DB : JDBC INSERT analysis history
+DB --> History : persisted
+History --> Analysis : analysis identity
+Analysis --> Http : completed structured analysis
+Http --> UI : 200 JSON
+UI --> Operator : risk level + findings + recommendations + provenance
+
+note over Policy,Model
+  The port interaction is stable. R0/R3 uses static/deterministic adapters;
+  R4 may substitute pgvector/live provider adapters without changing the
+  application contract.
+end note
+@enduml

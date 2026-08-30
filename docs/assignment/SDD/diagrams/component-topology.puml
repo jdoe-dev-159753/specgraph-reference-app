@@ -2,8 +2,10 @@
 left to right direction
 skinparam componentStyle rectangle
 skinparam packageStyle rectangle
+skinparam linetype ortho
 
 actor "Customer Care Operator" as Operator
+interface "Protected HTTP/JSON API" as WebApi
 
 package "Web client" {
   component "Operator Dashboard\nCMP-UI-001\nReact / TypeScript" as UI
@@ -45,17 +47,18 @@ package "Replaceable adapters" {
 database "PostgreSQL + pgvector\nINF-DB-001\nR2+" as Db
 
 Operator --> UI
-UI --> Auth : login / protected flow (R1+)
+UI --> WebApi : requires HTTP/JSON
+Http -- WebApi : provides
 Auth --> Http : authenticated context (R1+)
 Auth --> Identity
-Http --> Customer
-Http --> Risk
-Http --> Analysis
-Customer --> ActivityPort
-Risk --> ActivityPort
-Analysis --> ModelPort
-Analysis --> PolicyPort
-Analysis --> HistoryPort
+Http --> Customer : in-process
+Http --> Risk : in-process
+Http --> Analysis : in-process
+Customer --> ActivityPort : requires
+Risk --> ActivityPort : requires
+Analysis --> ModelPort : requires
+Analysis --> PolicyPort : requires
+Analysis --> HistoryPort : requires
 
 ActivityPort --> ActivitySynthetic
 ActivityPort ..> ActivityJpa
@@ -65,19 +68,12 @@ PolicyPort --> PolicyStatic
 PolicyPort ..> PolicyPg
 HistoryPort ..> HistoryJpa
 
-ActivityJpa --> Db
-PolicyPg --> Db
-HistoryJpa --> Db
-
-note bottom of ActivitySynthetic
-  First acceptance-bearing slice R0/R1:
-  authenticated operator -> Customer ID -> snapshot ->
-  CARD/PAYMENT/CRYPTO + risk evidence.
-end note
+ActivityJpa --> Db : JDBC
+PolicyPg --> Db : JDBC / pgvector
+HistoryJpa --> Db : JDBC
 
 note bottom of Backend
-  Hexagonal rule:
-  modules own contracts and ports;
-  adapters/frameworks remain outside them.
+  Project-owned ports make required/provided seams explicit.
+  Spring/JPA/provider types remain adapter-side implementation details.
 end note
 @enduml

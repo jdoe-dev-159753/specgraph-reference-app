@@ -1,0 +1,64 @@
+@startuml
+left to right direction
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+class CustomerSnapshot <<project contract>> {
+  customerIdentity
+  activities
+  riskEvidence
+}
+class AnalysisResult <<project contract>> {
+  riskLevel : LOW|MEDIUM|HIGH
+  findingsSummary
+  recommendations
+}
+class PolicyEvidence <<project contract>> {
+  sourceIdentity
+  content
+  retrievalMetadata
+}
+class OperatorId <<project value>> {
+  operatorIdentity
+}
+
+class Transaction <<source relation>> {
+  transaction_id : UUID
+  customer_id : UUID
+  activity_type : CARD|PAYMENT|CRYPTO
+  amount
+  currency
+  status
+  created_at
+}
+class CardActivity <<source specialization>>
+class PaymentActivity <<source specialization>>
+class CryptoActivity <<source specialization>>
+class RiskAssessment <<source relation>> {
+  triggeredAt
+  scoreContribution
+}
+class RiskRule <<source relation>> {
+  name
+  applicableActivityFamily
+  thresholdLogic
+  defaultWeight
+}
+
+CustomerSnapshot "1" o-- "0..*" Transaction : projects
+CustomerSnapshot "1" o-- "0..*" RiskAssessment : exposes
+Transaction <|-- CardActivity : CARD detail
+Transaction <|-- PaymentActivity : PAYMENT detail
+Transaction <|-- CryptoActivity : CRYPTO detail
+Transaction "1" -- "0..*" RiskAssessment
+RiskRule "1" -- "0..*" RiskAssessment
+AnalysisResult ..> CustomerSnapshot : derived from context
+AnalysisResult ..> PolicyEvidence : grounded by when retrieved
+AnalysisResult ..> OperatorId : persisted attribution
+
+note bottom of Transaction
+  Source-schema concepts are shown to explain the contract boundary.
+  They are not Java inheritance requirements and must not leak JPA types
+  into CustomerSnapshot or other durable application contracts.
+end note
+@enduml
