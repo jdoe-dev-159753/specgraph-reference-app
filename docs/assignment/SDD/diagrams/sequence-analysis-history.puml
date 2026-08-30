@@ -21,8 +21,7 @@ else authenticated
   DB --> Jpa : persisted prior analyses
   Jpa --> History : project-owned history projections
   History --> Analysis : prior analysis summaries/details
-  Analysis --> Boundary : generation time + generating operator +
-risk level + findings + recommendations
+  Analysis --> Boundary : generation time + generating operator +\nrisk level + findings + recommendations
   Boundary --> UI : 200 JSON
   UI --> Operator : list and inspect previous result
 end
