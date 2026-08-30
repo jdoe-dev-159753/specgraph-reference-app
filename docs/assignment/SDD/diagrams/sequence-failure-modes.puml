@@ -13,42 +13,52 @@ Operator -> UI : protected action
 UI -> Boundary : request
 alt unauthenticated
   Boundary --> UI : reject / redirect
+  UI --> Operator : authentication required
 else authenticated
   Boundary -> Analysis : continue with OperatorId
-end
 
-== Grounding insufficiency ==
-Analysis -> Policy : retrieveRelevant(context)
-Policy --> Analysis : no relevant evidence
-Analysis -> Analysis : record no-evidence; never fabricate provenance
-note right of Analysis
-  AMB-RAG-001 still controls whether an explicitly
-  ungrounded analysis may complete. The SDD does not
-  silently turn insufficiency into fake grounding.
-end note
+  == Grounding ==
+  Analysis -> Policy : retrieveRelevant(context)
+  alt no relevant evidence
+    Policy --> Analysis : explicit no-evidence
+    Analysis -> Analysis : record insufficient grounding; never fabricate provenance
+    Analysis --> Boundary : insufficient-grounding outcome
+    Boundary --> UI : explicit outcome, not successfully grounded
+    UI --> Operator : insufficient grounding
+    note right of Analysis
+      AC-RAG-002 ends this grounded-request flow without a
+      successfully grounded completed analysis. AMB-RAG-001
+      still leaves minimum evidence unspecified; a future,
+      explicitly defined ungrounded mode would require its own
+      reviewed semantics rather than falling through here.
+    end note
+  else relevant evidence retrieved
+    Policy --> Analysis : PolicyEvidence[] with provenance
 
-== Model execution / validation ==
-Analysis -> Model : analyze(context, evidence state)
-alt provider/execution failure
-  Model --> Analysis : failure
-  Analysis --> Boundary : explicit analysis failure
-else candidate result
-  Model --> Analysis : structured candidate
-  Analysis -> Analysis : validate contract
-  alt invalid result
-    Analysis --> Boundary : explicit validation failure; do not persist
-  else valid result
-    Analysis -> History : persist completed result
-    alt persistence failure
-      History --> Analysis : failure
-      Analysis --> Boundary : explicit persistence failure;
-      note right: do not claim retained history
-    else persistence succeeds
-      History --> Analysis : persisted
-      Analysis --> Boundary : completed result
+    == Model execution / validation ==
+    Analysis -> Model : analyze(context, evidence)
+    alt provider/execution failure
+      Model --> Analysis : failure
+      Analysis --> Boundary : explicit analysis failure
+    else candidate result
+      Model --> Analysis : structured candidate
+      Analysis -> Analysis : validate contract
+      alt invalid result
+        Analysis --> Boundary : explicit validation failure; do not persist
+      else valid result
+        Analysis -> History : persist completed result
+        alt persistence failure
+          History --> Analysis : failure
+          Analysis --> Boundary : explicit persistence failure
+          note right: do not claim retained history
+        else persistence succeeds
+          History --> Analysis : persisted
+          Analysis --> Boundary : completed result
+        end
+      end
     end
+    Boundary --> UI : explicit success/failure outcome
+    UI --> Operator : completed result or named failure state
   end
 end
-Boundary --> UI : explicit outcome
-UI --> Operator : success or named failure state
 @enduml
