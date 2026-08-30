@@ -22,6 +22,8 @@ Use issues and pull requests together. An issue owns a reviewable capability, de
 
 When work exposes another independently reviewable concern, reuse an existing owning issue if one exists; otherwise create a new issue and connect it with native hierarchy or dependency relations where applicable. Do not expand a pull request merely to absorb unrelated discoveries.
 
+A material discovery requiring disposition reconciliation carries the non-exclusive `discovery` label. The label only identifies applicability; the authoritative classification remains the Project v2 `Discovery disposition` single-select field. The Project reconciler derives mechanically decidable disposition changes from native close reasons and closing-PR ownership. `Delivery priority` remains an explicit planning decision and must not be inferred from discovery disposition.
+
 ## Pull-request discipline
 
 - One primary conceptual purpose per pull request.
