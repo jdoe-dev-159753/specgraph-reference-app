@@ -1,0 +1,37 @@
+name: temp-render-sdd
+
+on:
+  pull_request:
+    paths:
+      - 'docs/assignment/SDD/diagrams/component-topology.puml'
+      - '.github/workflows/temp-render-sdd.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Render authoritative PlantUML source
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            plantuml/plantuml:1.2026.6 \
+            -tsvg docs/assignment/SDD/diagrams/component-topology.puml
+      - name: Commit rendered SVG
+        run: |
+          git add docs/assignment/SDD/diagrams/component-topology.svg
+          if git diff --cached --quiet; then
+            echo 'Rendered SVG is already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: render current component topology'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
