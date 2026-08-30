@@ -45,67 +45,40 @@ jobs:
               });
             }
 
-            const projectData = await github.graphql(`
-              query($login: String!) {
-                user(login: $login) {
-                  projectsV2(first: 20) {
-                    nodes {
-                      id
-                      number
-                      title
-                      fields(first: 50) {
-                        nodes {
-                          __typename
-                          ... on ProjectV2SingleSelectField {
-                            id
-                            name
-                            options { id name }
-                          }
-                        }
-                      }
-                      items(first: 100) {
-                        nodes {
-                          id
-                          fieldValues(first: 50) {
-                            nodes {
-                              __typename
-                              ... on ProjectV2ItemFieldSingleSelectValue {
-                                name
-                                field {
-                                  ... on ProjectV2SingleSelectField { id name }
-                                }
-                              }
-                            }
-                          }
-                          content {
+            let project = null;
+            let projectsCursor = null;
+            do {
+              const projectPage = await github.graphql(`
+                query($login: String!, $after: String) {
+                  user(login: $login) {
+                    projectsV2(first: 20, after: $after) {
+                      nodes {
+                        id
+                        number
+                        title
+                        fields(first: 50) {
+                          nodes {
                             __typename
-                            ... on Issue {
+                            ... on ProjectV2SingleSelectField {
                               id
-                              number
-                              state
-                              labels(first: 20) { nodes { name } }
-                              repository { nameWithOwner }
-                              closedByPullRequestsReferences(first: 10) {
-                                nodes {
-                                  number
-                                  state
-                                  mergedAt
-                                  repository { nameWithOwner }
-                                }
-                              }
+                              name
+                              options { id name }
                             }
                           }
                         }
                       }
+                      pageInfo { hasNextPage endCursor }
                     }
                   }
                 }
-              }
-            `, { login: owner });
+              `, { login: owner, after: projectsCursor });
 
-            const project = projectData.user.projectsV2.nodes.find(
-              candidate => candidate.title === projectTitle
-            );
+              const connection = projectPage.user.projectsV2;
+              project = connection.nodes.find(candidate => candidate.title === projectTitle) ?? null;
+              if (project || !connection.pageInfo.hasNextPage) break;
+              projectsCursor = connection.pageInfo.endCursor;
+            } while (true);
+
             if (!project) {
               core.setFailed(`User-owned Project v2 not visible: ${projectTitle}`);
               return;
@@ -138,7 +111,60 @@ jobs:
               return value?.name ?? null;
             };
 
-            const repoItems = project.items.nodes.filter(
+            const allItems = [];
+            let itemsCursor = null;
+            do {
+              const itemPage = await github.graphql(`
+                query($projectId: ID!, $after: String) {
+                  node(id: $projectId) {
+                    ... on ProjectV2 {
+                      items(first: 100, after: $after) {
+                        nodes {
+                          id
+                          fieldValues(first: 50) {
+                            nodes {
+                              __typename
+                              ... on ProjectV2ItemFieldSingleSelectValue {
+                                name
+                                field {
+                                  ... on ProjectV2SingleSelectField { id name }
+                                }
+                              }
+                            }
+                          }
+                          content {
+                            __typename
+                            ... on Issue {
+                              id
+                              number
+                              state
+                              labels(first: 20) { nodes { name } }
+                              repository { nameWithOwner }
+                              closedByPullRequestsReferences(first: 10) {
+                                nodes {
+                                  number
+                                  state
+                                  mergedAt
+                                  repository { nameWithOwner }
+                                }
+                              }
+                            }
+                          }
+                        }
+                        pageInfo { hasNextPage endCursor }
+                      }
+                    }
+                  }
+                }
+              `, { projectId: project.id, after: itemsCursor });
+
+              const connection = itemPage.node.items;
+              allItems.push(...connection.nodes);
+              if (!connection.pageInfo.hasNextPage) break;
+              itemsCursor = connection.pageInfo.endCursor;
+            } while (true);
+
+            const repoItems = allItems.filter(
               item => item.content?.__typename === 'Issue' &&
                       item.content.repository.nameWithOwner === repoFull
             );
