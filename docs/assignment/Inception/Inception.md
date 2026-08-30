@@ -142,7 +142,7 @@ Use-case bubbles carry delivery priority visually and textually so the view rema
 
 Use UML `<<include>>` and `<<extend>>` only where their semantics are real. Authentication should normally be a protected-use-case precondition rather than a decorative `include` repeated from every bubble.
 
-Because these colours express **delivery priority**, a deferred MUST_HAVE capability should not appear as an unconditional `include` of a MANDATORY centre capability. Layered variants can be represented as extensions in this inception view even when the final accepted product requires those extensions to be enabled.
+Delivery priority is orthogonal to UML relationship semantics. `<<include>>` means the included behavior is unconditionally part of the base use case in the modeled target system, while `<<extend>>` means conditional extension behavior; neither relation is used to encode concentric delivery order. A MUST_HAVE may therefore be an `<<include>>` of a MANDATORY use case when that relationship is true of the completed target.
 
 ### 8.1 Functional use-case view
 
@@ -152,11 +152,11 @@ The functional view covers customer search, activity review, risk review, the st
 
 [Authoritative PlantUML source](diagrams/inception-functional-use-cases.puml)
 
-The RAG and persistence extensions model concentric delivery, not optional final acceptance criteria: both remain MUST_HAVE capabilities of the completed submission.
+RAG grounding and persistence are MUST_HAVE capabilities of the completed target. Their UML relations describe completed-system behavior only; concentric implementation order remains delivery metadata.
 
 ### 8.2 Non-functional 2TUP view
 
-The second view exposes system qualities as explicit engineering obligations. It is a pragmatic 2TUP-oriented requirements view, not a claim that every NFR is a classical end-user use case.
+The second view distinguishes externally meaningful technical behaviors from pure engineering constraints. Behaviors remain use cases; structural requirements such as hexagonal-boundary preservation and local/remote topology equivalence are shown as `<<constraint>>` notes rather than use-case ellipses.
 
 ![Non-functional 2TUP use-case view](diagrams/inception-non-functional-use-cases.svg)
 
