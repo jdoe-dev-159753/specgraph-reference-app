@@ -2,7 +2,7 @@
 left to right direction
 actor "Developer / Reviewer" as Dev
 actor "Customer Care Operator" as Operator
-actor "Architecture Verification" as Arch
+actor "Architecture Verifier" as Arch
 actor "Operations / Deployment" as Ops
 
 skinparam usecase {
@@ -11,33 +11,36 @@ skinparam usecase {
   BackgroundColor<<NICE_TO_HAVE>> #CDECCF
 }
 
-usecase "Reproduce System Locally" as NF_Reproduce <<MANDATORY>>
-usecase "Verify Change Deterministically" as NF_Verify <<MANDATORY>>
-usecase "Operate without External LLM" as NF_OfflineAI <<MANDATORY>>
-usecase "Protect Operator Access" as NF_Access <<MUST_HAVE>>
-usecase "Preserve Module / Hexagonal Boundaries" as NF_Architecture <<MUST_HAVE>>
-usecase "Persist and Reset Demo Data" as NF_Data <<MUST_HAVE>>
-usecase "Use Equivalent Local / Remote Topology" as NF_Topology <<MUST_HAVE>>
-usecase "Degrade Gracefully on AI Failure" as NF_Degrade <<MUST_HAVE>>
-usecase "Expose Health / Readiness" as NF_Health <<MUST_HAVE>>
-usecase "Generate Technical / API Documentation" as NF_Docs <<NICE_TO_HAVE>>
-usecase "Inspect Advanced Telemetry" as NF_Telemetry <<NICE_TO_HAVE>>
+rectangle "Customer Risk Analysis Reference Application" as SystemBoundary {
+  usecase "Reproduce System Locally" as NF_Reproduce <<MANDATORY>>
+  usecase "Verify Change Deterministically" as NF_Verify <<MANDATORY>>
+  usecase "Execute Analysis without External LLM" as NF_OfflineAI <<MANDATORY>>
+  usecase "Enforce Operator Access Control" as NF_Access <<MUST_HAVE>>
+  usecase "Persist and Reset Demo Data" as NF_Data <<MUST_HAVE>>
+  usecase "Continue Safely on AI Failure" as NF_Degrade <<MUST_HAVE>>
+  usecase "Expose Health / Readiness" as NF_Health <<MUST_HAVE>>
+  usecase "Generate Technical / API Documentation" as NF_Docs <<NICE_TO_HAVE>>
+  usecase "Inspect Advanced Telemetry" as NF_Telemetry <<NICE_TO_HAVE>>
 
-Dev --> NF_Reproduce
-Dev --> NF_Verify
-Dev --> NF_OfflineAI
-Operator --> NF_Access
-Operator --> NF_Degrade
-Operator --> NF_Topology
-Arch --> NF_Architecture
-Ops --> NF_Data
-Ops --> NF_Topology
-Ops --> NF_Health
-Dev --> NF_Docs
-Ops --> NF_Telemetry
+  note "<<constraint>>\nModule and hexagonal boundaries\nare preserved and mechanically verified\nwhere practical." as C_Architecture
+  note "<<constraint>>\nLocal and remote deployments expose\nequivalent application topology." as C_Topology
+}
 
-note bottom of NF_Architecture
-  Architecture constraints are mechanically verified
-  where possible rather than reviewed only by prose.
+Dev -- NF_Reproduce
+Dev -- NF_Verify
+Dev -- NF_OfflineAI
+Dev -- NF_Docs
+Operator -- NF_Access
+Operator -- NF_OfflineAI
+Operator -- NF_Degrade
+Ops -- NF_Data
+Ops -- NF_Health
+Ops -- NF_Telemetry
+Arch -- C_Architecture
+Ops -- C_Topology
+
+note bottom of NF_Verify
+  Deterministic verification is executable evidence,
+  not a manually maintained status claim.
 end note
 @enduml
