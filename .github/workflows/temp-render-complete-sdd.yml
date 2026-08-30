@@ -1,0 +1,31 @@
+name: temp-render-complete-sdd
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/temp-render-complete-sdd.yml'
+      - 'docs/assignment/SDD/diagrams/*.puml'
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Render SDD PlantUML views
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace plantuml/plantuml:1.2026.6 \
+            -tsvg docs/assignment/SDD/diagrams/*.puml
+      - name: Commit rendered SVGs
+        run: |
+          git add docs/assignment/SDD/diagrams/*.svg
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: render complete SDD views'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
