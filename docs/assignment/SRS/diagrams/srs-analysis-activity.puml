@@ -14,20 +14,21 @@ customer activity and risk evidence;
 if (Relevant evidence available?) then (yes)
   :Attach retrieved evidence with provenance;
 else (no)
-  :Report insufficient policy grounding;
+  :Record that no relevant policy evidence
+was retrieved;
   :Do not fabricate policy evidence;
   note right
-    Failure behaviour derived for reviewable grounding.
     AC-RAG-002 / INV-RAG-001
+    Whether an ungrounded analysis may complete remains
+    unresolved by AMB-RAG-001; this view does not decide it.
   end note
-  stop
 endif
 
 :Execute provider-neutral AI analysis;
-if (Analysis returns valid structured result?) then (yes)
-  :Validate risk level, findings summary
+:Validate risk level, findings summary
 and recommendations;
-else (no / execution failure)
+if (Structured result valid?) then (yes)
+else (no / execution or validation failure)
   :Report analysis failure explicitly;
   :Do not expose a fabricated completed analysis;
   note right
