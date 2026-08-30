@@ -1,8 +1,6 @@
 name: project-v2-reconcile
 
 on:
-  push:
-    branches: [ci/project-v2-reconcile]
   issues:
     types: [opened, labeled, unlabeled, reopened, closed]
   pull_request_target:
