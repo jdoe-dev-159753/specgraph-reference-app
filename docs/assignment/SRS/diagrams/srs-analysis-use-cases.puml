@@ -26,8 +26,7 @@ rectangle "Customer Activity Analytics" as SystemBoundary {
 
   UC_Request .> UC_Context : <<include>>
   UC_Request .> UC_RAG : <<include>>
-  UC_Result .> UC_Request : <<extend>>\n[grounding sufficient]
-  UC_Persist .> UC_Result : <<extend>>\n[valid result produced]
+  UC_Persist .> UC_Result : <<extend>>\n[valid completed result]
 
   UC_Context -[hidden]-> UC_RAG
   UC_RAG -[hidden]-> UC_Result
@@ -38,17 +37,17 @@ Operator -- UC_Request
 Operator -- UC_History
 
 note right of UC_Result
-  Structured result contract:
+  Successful completion contract:
   * risk level
   * non-empty findings summary
   * one or more recommendations
+  Negative execution paths are shown in the activity view.
 end note
 
 note bottom of UC_Request
   Protected capability.
   Context construction and grounding retrieval are always attempted.
-  Structured production and persistence are conditionally reached
-  only after their stated success conditions are satisfied.
+  This use-case view does not resolve AMB-RAG-001 minimum-grounding policy.
 end note
 
 note right of UC_RAG
