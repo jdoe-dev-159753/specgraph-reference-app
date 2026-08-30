@@ -229,9 +229,13 @@ jobs:
 
                 if (hasOpenOwningPr || closedByPr) {
                   desired = 'IN_SCOPE';
-                } else if (liveIssue.state === 'open') {
+                } else if (liveIssue.state === 'open' && !current) {
                   desired = 'FOLLOW_UP';
-                } else if (!current) {
+                } else if (liveIssue.state === 'open' && current === 'IN_SCOPE') {
+                  core.warning(
+                    `Discovery #${issue.number} is explicitly IN_SCOPE but has no native owning PR yet; preserving the explicit decision while ownership settles.`
+                  );
+                } else if (liveIssue.state !== 'open' && !current) {
                   core.warning(
                     `Discovery #${issue.number} is closed without a native PR owner or close reason that mechanically determines disposition.`
                   );
