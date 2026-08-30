@@ -1,0 +1,112 @@
+name: temp-build-srs-views
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/temp-build-srs-views.yml'
+      - 'docs/assignment/SRS/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Reconcile normative SRS text and catalogue
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          srs_path = Path('docs/assignment/SRS/SRS.md')
+          text = srs_path.read_text()
+          text = text.replace('**Baseline revision:** 1', '**Baseline revision:** 2', 1)
+
+          text = text.replace(
+              'Acceptance: `AC-RAG-001`.\n\n### FR-HIST-001',
+              'Acceptance: `AC-RAG-001`, `AC-RAG-002`.\n\n### FR-HIST-001',
+              1,
+          )
+
+          invariant_anchor = '''### INV-HIST-001 — Persisted analyses remain attributable\n\nA persisted analysis shall retain enough identity to determine the customer, generating operator, generation time and structured analysis result.\n\n**Origin:** derived from multi-operator login plus later-review requirements.\n'''
+          invariant_add = invariant_anchor + '''\n### INV-RAG-001 — Grounding evidence is not fabricated\n\nPolicy evidence represented as grounding shall correspond to corpus content actually retrieved for that analysis. Missing or irrelevant evidence shall not be replaced with invented policy provenance.\n\n**Origin:** derived correctness boundary from `FR-RAG-001` and reviewability of AI grounding.\n'''
+          if '### INV-RAG-001' not in text:
+              text = text.replace(invariant_anchor, invariant_add, 1)
+
+          nfr_anchor = '''### NFR-SEC-001 — Protected operator capabilities require authentication\n\n**Priority:** MUST_HAVE  \n**Origin:** derived from `FR-AUTH-001`.\n\nCustomer activity, risk, analysis and history capabilities shall not be available to an unauthenticated operator session.\n\nAcceptance: `AC-SEC-001`.\n'''
+          nfr_add = nfr_anchor + '''\n### NFR-RES-001 — Analysis failures are explicit and non-fabricating\n\n**Priority:** MUST_HAVE  \n**Origin:** derived reliability and correctness constraint for `FR-RAG-001`, `FR-AI-001`, `FR-AI-002`, and `FR-HIST-001`.\n\nFailure or insufficiency in policy grounding, analysis-model execution/result validation, or completed-analysis persistence shall be surfaced explicitly. The application shall not represent a failed, ungrounded, invalid, or unpersisted analysis as successfully completed, grounded, or retained.\n\nAcceptance: `AC-RAG-002`, `AC-RES-001`, `AC-RES-002`.\n'''
+          if '### NFR-RES-001' not in text:
+              text = text.replace(nfr_anchor, nfr_add, 1)
+
+          functional_anchor = 'Acceptance: `AC-HIST-002`.\n\n## 5. Domain and data invariants'
+          functional_views = '''Acceptance: `AC-HIST-002`.\n\n### Functional use-case views\n\nThe SRS uses two focused use-case views instead of one graphically overloaded diagram. Standard UML generalization expresses behavioural specialization; `<<include>>` expresses required reused behaviour. Hidden PlantUML links are rendering constraints only and carry no system semantics.\n\n![Customer review use cases](diagrams/srs-customer-review-use-cases.svg)\n\n[Authoritative PlantUML source](diagrams/srs-customer-review-use-cases.puml)\n\n![AI analysis use cases](diagrams/srs-analysis-use-cases.svg)\n\n[Authoritative PlantUML source](diagrams/srs-analysis-use-cases.puml)\n\n## 5. Domain and data invariants'''
+          if '### Functional use-case views' not in text:
+              text = text.replace(functional_anchor, functional_views, 1)
+
+          technical_anchor = '''### CON-AI-002 — External transmission is opt-in\n\nThe default configuration shall not transmit customer/activity/policy content to an external AI provider. External transmission requires explicit adapter configuration and shall only be exercised with data permitted for that provider.\n\n**Origin:** project confidentiality safeguard resolving `AMB-CNF-001` conservatively.\n'''
+          technical_add = technical_anchor + '''\n### Technical/quality behaviour view\n\nThis 2TUP-style view shows externally meaningful technical behaviours separately from structural design choices. Pure architecture decisions remain in the SDD/ADRs rather than being disguised as use cases.\n\n![Non-functional and technical behaviours](diagrams/srs-non-functional-use-cases.svg)\n\n[Authoritative PlantUML source](diagrams/srs-non-functional-use-cases.puml)\n'''
+          if '### Technical/quality behaviour view' not in text:
+              text = text.replace(technical_anchor, technical_add, 1)
+
+          rag_ac_anchor = '''### AC-RAG-001\n\nFor a seeded policy corpus with a policy relevant to the selected analysis scenario, the analysis context contains at least one retrieved relevant policy fragment with enough source identity to review what was used.\n'''
+          rag_ac_add = rag_ac_anchor + '''\n### AC-RAG-002\n\nGiven an analysis scenario for which no relevant policy evidence can be retrieved, the application reports insufficient grounding, does not fabricate policy references, and does not present the request as a successfully grounded completed analysis.\n'''
+          if '### AC-RAG-002' not in text:
+              text = text.replace(rag_ac_anchor, rag_ac_add, 1)
+
+          sec_ac_anchor = '''### AC-SEC-001\n\nAn unauthenticated request to a protected customer/activity/risk/analysis/history capability is rejected or redirected to authentication; successful login enables the capability.\n'''
+          scenario_add = sec_ac_anchor + '''\n### AC-RES-001\n\nWith an analysis adapter configured to fail or return an invalid structured result, the request reports an explicit analysis failure and no completed analysis/history entry is created.\n\n### AC-RES-002\n\nWith completed-analysis persistence configured to fail, the request reports an explicit persistence failure and does not claim that the analysis was retained or made available in history.\n\n### Behavioural scenario and failure-mode views\n\nThe following activity views make both successful and negative paths explicit. They are requirements-level behaviour views: they deliberately avoid controllers, repositories, framework classes, queues, threads, or deployment nodes.\n\n![Customer review activity and negative paths](diagrams/srs-customer-review-activity.svg)\n\n[Authoritative PlantUML source](diagrams/srs-customer-review-activity.puml)\n\n![AI analysis activity and failure modes](diagrams/srs-analysis-activity.svg)\n\n[Authoritative PlantUML source](diagrams/srs-analysis-activity.puml)\n\nNo durable analysis state machine is specified in this baseline because `SRC-001` does not define an asynchronous persisted lifecycle. The activities above describe logical observable phases without inventing implementation states. If a later design introduces durable asynchronous states, their externally observable semantics require an SRS revision and a state-machine view.\n'''
+          if '### Behavioural scenario and failure-mode views' not in text:
+              text = text.replace(sec_ac_anchor, scenario_add, 1)
+
+          srs_path.write_text(text)
+
+          cat_path = Path('docs/assignment/SRS/requirements.yaml')
+          cat = cat_path.read_text()
+          cat = cat.replace('baseline_revision: 1', 'baseline_revision: 2', 1)
+          cat = cat.replace(
+              '    acceptance: [AC-RAG-001]\n  FR-HIST-001:',
+              '    acceptance: [AC-RAG-001, AC-RAG-002]\n  FR-HIST-001:',
+              1,
+          )
+
+          nfr_catalogue_anchor = '''  NFR-SEC-001:\n    kind: non_functional\n    title: Protected operator capabilities require authentication\n    priority: MUST_HAVE\n    basis: derived\n    origins: [SRC-001]\n    acceptance: [AC-SEC-001]\n'''
+          nfr_catalogue_add = nfr_catalogue_anchor + '''  NFR-RES-001:\n    kind: non_functional\n    title: Analysis failures are explicit and non-fabricating\n    priority: MUST_HAVE\n    basis: derived_reliability_constraint\n    origins: [SRC-001, SRC-003]\n    acceptance: [AC-RAG-002, AC-RES-001, AC-RES-002]\n'''
+          if '  NFR-RES-001:' not in cat:
+              cat = cat.replace(nfr_catalogue_anchor, nfr_catalogue_add, 1)
+
+          inv_catalogue_anchor = '''  INV-HIST-001:\n    title: Persisted analyses remain attributable\n    basis: correctness_derivation\n    origins: [SRC-001]\n'''
+          inv_catalogue_add = inv_catalogue_anchor + '''  INV-RAG-001:\n    title: Grounding evidence is not fabricated\n    basis: correctness_derivation\n    origins: [SRC-001, SRC-003]\n'''
+          if '  INV-RAG-001:' not in cat:
+              cat = cat.replace(inv_catalogue_anchor, inv_catalogue_add, 1)
+
+          ac_anchor = '  AC-RAG-001: {verifies: [FR-RAG-001]}\n'
+          if '  AC-RAG-002:' not in cat:
+              cat = cat.replace(ac_anchor, ac_anchor + '  AC-RAG-002: {verifies: [FR-RAG-001, INV-RAG-001, NFR-RES-001]}\n', 1)
+          sec_anchor = '  AC-SEC-001: {verifies: [NFR-SEC-001]}\n'
+          if '  AC-RES-001:' not in cat:
+              cat = cat.replace(sec_anchor, sec_anchor + '  AC-RES-001: {verifies: [NFR-RES-001]}\n  AC-RES-002: {verifies: [NFR-RES-001]}\n', 1)
+
+          cat_path.write_text(cat)
+          PY
+      - name: Render SRS PlantUML views
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            plantuml/plantuml:1.2026.6 \
+            -tsvg docs/assignment/SRS/diagrams/*.puml
+      - name: Commit generated SRS views
+        run: |
+          git add docs/assignment/SRS
+          if git diff --cached --quiet; then
+            echo 'SRS views already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: integrate SRS behavioural and failure views'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
