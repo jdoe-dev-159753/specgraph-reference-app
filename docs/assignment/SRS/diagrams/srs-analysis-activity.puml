@@ -23,11 +23,11 @@ else (no)
   stop
 endif
 
-:Invoke configured AnalysisModelPort adapter;
-if (Model returns valid structured result?) then (yes)
+:Execute provider-neutral AI analysis;
+if (Analysis returns valid structured result?) then (yes)
   :Validate risk level, findings summary
 and recommendations;
-else (no / provider failure)
+else (no / execution failure)
   :Report analysis failure explicitly;
   :Do not expose a fabricated completed analysis;
   note right
