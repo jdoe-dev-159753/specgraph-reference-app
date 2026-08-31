@@ -30,9 +30,10 @@ Reviewer -- NF_Offline
 Operator -- NF_Secure
 Operator -- NF_Offline
 
-note right of NF_Offline
-  Default demonstration data is synthetic [CON-DATA-001].
-  External AI transmission is opt-in [CON-AI-002].
+note bottom of SystemBoundary
+  <<constraint>> System-wide defaults
+  Demonstration data is synthetic by default [CON-DATA-001].
+  Transmission to an external AI provider is opt-in [CON-AI-002].
 end note
 
 note bottom of NF_Verify
@@ -44,6 +45,7 @@ legend bottom
   |= Notation |= Meaning |
   | Solid actor association | Direct concern/use interaction |
   | Package | Logical grouping inside the system boundary |
+  | <<constraint>> note on boundary | System-wide constraint |
   |= Colour |= Delivery priority |
   |<#FFB3B3> | MANDATORY |
   |<#FFD699> | MUST_HAVE |
