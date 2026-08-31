@@ -23,20 +23,8 @@ jobs:
       - name: Reconcile authored-SVG documentation note
         shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('docs/assignment/SDD/SDD.md')
-          text = p.read_text()
-          text = text.replace(
-              'PlantUML files in [`diagrams/`](diagrams/) are the semantic sources for UML and architecture figures, and their SVG files are generated views embedded below.',
-              'PlantUML files in [`diagrams/`](diagrams/) are the semantic sources for UML and most architecture figures, with generated SVG views embedded below. Figure 11 is an authored SVG because its defining geometry is genuinely concentric rather than a graph layout.'
-          )
-          text = text.replace(
-              '[PlantUML source](diagrams/delivery-rings.puml)',
-              '[Authored SVG source](diagrams/delivery-rings.svg)'
-          )
-          p.write_text(text)
-          PY
+          perl -0pi -e 's|PlantUML files in \[`diagrams/`\]\(diagrams/\) are the semantic sources for UML and architecture figures, and their SVG files are generated views embedded below\.|PlantUML files in [`diagrams/`](diagrams/) are the semantic sources for UML and most architecture figures, with generated SVG views embedded below. Figure 11 is an authored SVG because its defining geometry is genuinely concentric rather than a graph layout.|g' docs/assignment/SDD/SDD.md
+          perl -0pi -e 's|\[PlantUML source\]\(diagrams/delivery-rings\.puml\)|[Authored SVG source](diagrams/delivery-rings.svg)|g' docs/assignment/SDD/SDD.md
       - name: Render SDD PlantUML to SVG
         shell: bash
         run: |
