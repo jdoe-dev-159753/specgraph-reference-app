@@ -1,42 +1,41 @@
 @startuml
-title Figure 10 — Deployment and communication topology
+title Figure 10 — UML Deployment diagram — runtime nodes and communication paths
 top to bottom direction
 skinparam linetype polyline
-skinparam nodesep 35
-skinparam ranksep 45
+skinparam nodesep 45
+skinparam ranksep 55
 
-node "Operator device" as Device {
+node "Operator device" as Device <<device>> {
   artifact "Web browser" as Browser
 }
 
-node "Docker Compose / Linux host" as Host {
-  node "web service / container" as Web {
-    artifact "React static UI\n(+ reverse proxy in remote demo)" as React
+node "Docker Compose / Linux host" as Host <<executionEnvironment>> {
+  node "frontend service / container" as Web <<executionEnvironment>> {
+    artifact "React operator UI" as React
   }
 
-  node "api service / container" as Api {
+  node "API service / container" as Api <<executionEnvironment>> {
     artifact "Spring Boot modular monolith" as Spring
     artifact "Offline adapters\nStaticPolicyAdapter +\nDeterministicAnalysisStub" as Offline
   }
 
-  database "db service / container\nPostgreSQL + pgvector" as DB
+  node "database service / container" as DB <<database>> {
+    artifact "PostgreSQL + pgvector" as PostgreSQL
+  }
 }
 
-cloud "Optional external AI provider" as Provider
+node "External AI provider" as Provider <<external>>
 
-Browser --> Web : HTTP localhost\nHTTPS remote demo
+Browser --> Web : HTTP\nlocal baseline
 Web --> Api : HTTP/JSON /api/*\nCompose private network
 Api --> DB : JDBC / PostgreSQL\nTCP 5432 private network
-Api ..> Provider : HTTPS provider API\nonly when configured
+Api ..> Provider : HTTPS provider API\nonly when explicitly configured
 Api --> Offline : in-process baseline path
 
-Web -[hidden]down-> Api
-Api -[hidden]down-> DB
-DB -[hidden]right-> Provider
-
 note bottom of Host
-  Baseline communication is synchronous request/response.
+  The mandatory baseline is local and does not require a reverse proxy.
+  TLS termination, ingress, load balancing, or a reverse proxy are deployment-specific
+  concerns and are intentionally not prescribed while AMB-DEP-001 remains unresolved.
   No WebSocket, broker, FIFO, Redis, or separate identity service is assumed.
-  The database port remains private to the Compose network.
 end note
 @enduml
