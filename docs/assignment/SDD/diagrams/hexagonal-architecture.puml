@@ -54,6 +54,6 @@ ModelAdapters ..> Provider : HTTPS only when live adapter selected
 note bottom of Core
   Hexagonal-architecture schematic, not a UML diagram type.
   The hexagon is deliberate: application/domain policy remains inside;
-  driving and driven infrastructure attaches only through named ports.
+  driving and driven infrastructure attaches only through the named ports above.
 end note
 @enduml
