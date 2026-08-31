@@ -1,4 +1,5 @@
 @startuml
+title Customer Activity Analytics — Grounded analysis runtime sequence
 hide footbox
 actor Operator
 participant "React UI" as UI
