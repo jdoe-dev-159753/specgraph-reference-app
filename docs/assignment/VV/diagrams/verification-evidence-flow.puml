@@ -1,0 +1,41 @@
+@startuml
+title Figure 1 — Verification evidence flow
+top to bottom direction
+skinparam componentStyle rectangle
+skinparam linetype polyline
+skinparam nodesep 35
+skinparam ranksep 45
+
+artifact "SRS\nrequirements.yaml\nrequirements / invariants / acceptance" as SRS
+artifact "SDD\ndesign-map.yaml\ncontrolled design identities" as SDD
+artifact "V&V\nverification.yaml\nstable verification obligations" as VV
+component "Executable tests / checks" as Tests
+component "Reusable SpecGraph\ntraceability validation" as Harness
+artifact "Machine-readable\ncurrent evidence" as Evidence
+artifact "Generated RTM / status views\n(disposable)" as Views
+actor "Human reviewer" as Human
+
+SRS --> VV : normative IDs
+SDD --> VV : design IDs
+VV --> Tests : obligations / markers
+SRS --> Harness
+SDD --> Harness
+VV --> Harness
+Tests --> Harness : executable evidence
+Harness --> Evidence : deterministic graph / status
+Evidence --> Views
+Evidence --> Human : reproducible evidence
+Views --> Human : readable projection
+Human ..> VV : semantic adequacy / UX / demo validation
+
+note bottom of Evidence
+  Current pass/fail/coverage state lives in executable or generated evidence,
+  never as manually copied status inside the durable V&V strategy.
+end note
+
+legend bottom
+  Artifacts = controlled or generated evidence objects.
+  Components = executable validation mechanisms.
+  Arrows show evidence/identity flow, not work-item lifecycle.
+endlegend
+@enduml
