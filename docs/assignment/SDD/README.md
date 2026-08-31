@@ -35,7 +35,7 @@ The stable application contracts are `CustomerSnapshot`, project-owned activity/
 
 [PlantUML source](diagrams/domain-contracts.puml)
 
-`AnalysisHistoryEntry` is the project-owned history read/write projection: analysis/customer identity, generating operator, generation time, structured result, and reviewable evidence provenance. JPA rows never cross `AnalysisHistoryPort`.
+`AnalysisHistoryCreateCommand` is the project-owned write input and deliberately has no generated analysis identity. `AnalysisHistoryEntry` is the persisted/read projection: analysis/customer identity, generating operator, generation time, structured result, and reviewable evidence provenance. JPA rows never cross `AnalysisHistoryPort`.
 
 ## Relational design
 
