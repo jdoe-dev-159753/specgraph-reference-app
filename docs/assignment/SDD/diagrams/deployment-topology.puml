@@ -1,9 +1,9 @@
 @startuml
 title Figure 10 — Deployment and communication topology
-left to right direction
+top to bottom direction
 skinparam linetype polyline
-skinparam nodesep 45
-skinparam ranksep 55
+skinparam nodesep 35
+skinparam ranksep 45
 
 node "Operator device" as Device {
   artifact "Web browser" as Browser
@@ -22,7 +22,7 @@ node "Docker Compose / Linux host" as Host {
   database "db service / container\nPostgreSQL + pgvector" as DB
 }
 
-cloud "Optional external\nAI provider" as Provider
+cloud "Optional external AI provider" as Provider
 
 Browser --> Web : HTTP localhost\nHTTPS remote demo
 Web --> Api : HTTP/JSON /api/*\nCompose private network
@@ -30,10 +30,9 @@ Api --> DB : JDBC / PostgreSQL\nTCP 5432 private network
 Api ..> Provider : HTTPS provider API\nonly when configured
 Api --> Offline : in-process baseline path
 
-Browser -[hidden]-> React
-Web -[hidden]-> Api
-Api -[hidden]-> DB
-DB -[hidden]-> Provider
+Web -[hidden]down-> Api
+Api -[hidden]down-> DB
+DB -[hidden]right-> Provider
 
 note bottom of Host
   Baseline communication is synchronous request/response.
