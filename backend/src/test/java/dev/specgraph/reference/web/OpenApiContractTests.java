@@ -30,15 +30,28 @@ class OpenApiContractTests {
         assertThat(operation.getResponses()).containsKeys("200", "404");
 
         Schema<?> activity = api.getComponents().getSchemas().get("Activity");
-        assertThat(activity.getRequired()).containsAll(Set.of(
-                "transactionId", "type", "amount", "currency", "status", "createdAt", "details"));
-        assertThat(activity.getProperties()).containsKeys(
-                "transactionId", "type", "amount", "currency", "status", "createdAt", "details");
+        assertThat(activity.getOneOf()).extracting(Schema::get$ref).containsExactlyInAnyOrder(
+                "#/components/schemas/CardActivity",
+                "#/components/schemas/PaymentActivity",
+                "#/components/schemas/CryptoActivity");
+        assertThat(activity.getDiscriminator()).isNotNull();
+        assertThat(activity.getDiscriminator().getPropertyName()).isEqualTo("type");
+        assertThat(activity.getDiscriminator().getMapping()).containsAllEntriesOf(java.util.Map.of(
+                "CARD", "#/components/schemas/CardActivity",
+                "PAYMENT", "#/components/schemas/PaymentActivity",
+                "CRYPTO", "#/components/schemas/CryptoActivity"));
+
+        Schema<?> base = api.getComponents().getSchemas().get("ActivityBase");
+        assertThat(base.getRequired()).containsAll(Set.of(
+                "transactionId", "amount", "currency", "status", "createdAt"));
+        assertThat(base.getProperties()).containsKeys(
+                "transactionId", "amount", "currency", "status", "createdAt");
 
         Schema<?> risk = api.getComponents().getSchemas().get("RiskEvidence");
         assertThat(risk.getRequired()).containsAll(Set.of(
                 "transactionId", "ruleId", "ruleName", "triggeredAt", "scoreContribution"));
         assertThat(api.getComponents().getSchemas()).containsKeys(
+                "CardActivity", "PaymentActivity", "CryptoActivity",
                 "CardDetails", "PaymentDetails", "CryptoDetails");
     }
 }
