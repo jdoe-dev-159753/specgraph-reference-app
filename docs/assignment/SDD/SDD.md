@@ -4,7 +4,7 @@
 **Design map:** [`design-map.yaml`](design-map.yaml)  
 **Normative requirements:** [`CAA-SRS-001`](../SRS/SRS.md)  
 **Machine-readable requirements:** [`requirements.yaml`](../SRS/requirements.yaml)  
-**Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md)  
+**Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md), [`ADR-006`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md)  
 **Verification strategy:** [`CAA-VV-001`](../VV/VV.md)
 
 This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. [`design-map.yaml`](design-map.yaml) remains the machine-readable requirement-to-design mapping. PlantUML and Graphviz/DOT text files in [`diagrams/`](diagrams/) are the maintainable semantic sources for UML and architecture figures; rendered SVG files are generated views embedded below.
@@ -48,7 +48,7 @@ Detailed Sequence diagrams remain available as supplementary design sources wher
 
 - [`CAA-SRS-001`](../SRS/SRS.md) owns normative requirements, invariants, assumptions and acceptance criteria.
 - [`requirements.yaml`](../SRS/requirements.yaml) owns machine-readable requirement identity, provenance and acceptance links.
-- [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), and [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md) own independently reviewable architecture decisions.
+- [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md), and [`ADR-006`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md) own independently reviewable architecture decisions.
 - [`design-map.yaml`](design-map.yaml) owns the current mapping from requirements to design elements, ports, adapters, ADRs and delivery rings.
 - PlantUML and Graphviz/DOT sources in [`diagrams/`](diagrams/) own diagram semantics; rendered SVG files are generated views.
 - implementation and executable verification become authoritative for their concrete behavior once introduced, but do not silently rewrite requirements or ADR rationale.
@@ -185,9 +185,9 @@ Figure 10 is the deployment shape of **one checkpoint instance**. The J1 reviewe
 
 Local execution remains the mandatory baseline defined by [`ASM-DEP-001`](../SRS/SRS.md#asm-dep-001--local-execution-is-the-mandatory-deployment-baseline). The same single-image Compose topology may run on a dedicated Docker-capable reviewer VM or VPS-style host. The externally reachable host is not an application dependency and is supplied through host-local `DEMO_HOST`, `R0_PORT`, `R1_PORT` and optional full-URL overrides rather than hard-coded into source or design. This preserves `AMB-DEP-001`: the assignment still does not prescribe a production deployment target.
 
-The human demo entry point is part of `INF-COMPOSE-001`: `./scripts/demo-up.sh` pulls both prebuilt checkpoint images, starts R0 and R1 detached with `--no-build`, waits for both healthchecks, then prints `R0 ready: <URL>` and `R1 ready: <URL>`. The default host mappings are R0 `:8080` and R1 `:8081`; a reviewer host may configure browser-reachable addressing once in the untracked `.env.demo`. Individual `r0`/`r1` script modes remain diagnostic conveniences rather than the nominal presentation path.
+The canonical reviewer/deployment entry point is part of `INF-COMPOSE-001`: Docker Compose 2.34+ loads the runtime-only application directly from the published GHCR OCI artifact with `docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait`. The artifact contains the side-by-side R0/R1 topology and resolves the checkpoint image references to exact OCI digests, so no source checkout or local Compose file is required merely to run the system. `./scripts/demo-up.sh` remains the source-checkout convenience path for configurable local diagnostics, not the canonical distribution mechanism.
 
-This packaging decision is controlled by [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md). Node/Vite and Maven are build-stage tools, not persistent reviewer runtimes. A separate Caddy/nginx frontend service or reverse proxy was explicitly rejected for J1 because React does not need an independent runtime process here. Embedded Tomcat already owns the required HTTP serving boundary.
+The single-JAR packaging decision is controlled by [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md); Compose-as-OCI distribution and multi-platform publication are controlled by [`ADR-006`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md). Node/Vite and Maven are build-stage tools, not persistent reviewer runtimes. R0/R1 are published as one logical image reference with `linux/amd64` and `linux/arm64` variants; Docker selects the matching runtime architecture. A separate Caddy/nginx frontend service or reverse proxy remains unnecessary because embedded Tomcat owns the required HTTP serving boundary.
 
 TLS termination, ingress routing, DNS, load balancing or router forwarding remain deployment-profile concerns. They can be introduced by a future concrete public-deployment decision but are not hidden prerequisites for local execution, CI verification or the dedicated-VM demo profile.
 
@@ -246,13 +246,14 @@ A later ring substitutes infrastructure behind stable seams. It does not introdu
 
 ## ADR consistency
 
-The current design remains consistent with the five accepted architecture decisions:
+The current design remains consistent with the six accepted architecture decisions:
 
 - [`ADR-001 — Modular monolith with hexagonal boundaries`](../ADR/ADR-001-modular-monolith-hexagonal.md);
 - [`ADR-002 — Provider-neutral analysis`](../ADR/ADR-002-provider-neutral-analysis.md);
 - [`ADR-003 — PostgreSQL + pgvector persistence`](../ADR/ADR-003-postgresql-pgvector-persistence.md);
 - [`ADR-004 — Baseline Java/Spring/React web stack`](../ADR/ADR-004-baseline-web-stack.md);
-- [`ADR-005 — Prebuilt single-image reviewer packaging`](../ADR/ADR-005-prebuilt-demo-container-packaging.md).
+- [`ADR-005 — Prebuilt single-image reviewer packaging`](../ADR/ADR-005-prebuilt-demo-container-packaging.md);
+- [`ADR-006 — Compose OCI and multi-platform distribution`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md).
 
 The contract refinements made during design review, including the split between `AnalysisHistoryCreateCommand` and `AnalysisHistoryEntry`, refine the application design without invalidating those decisions. The explicit Adapter/Strategy/Facade mapping restores inception intent inside the accepted architectural decisions, while ADR-005 separately records the concrete packaging boundary because moving from development-process containers to one executable-JAR runtime is a durable deployment decision rather than mere terminology.
 
@@ -270,5 +271,6 @@ A reviewer should be able to answer from this document, without reconstructing P
 - how the principal successful and failure workflows execute;
 - where each network or persistence protocol actually occurs;
 - how one prebuilt Spring Boot image shape supports two simultaneously runnable reviewer checkpoints (R0 and R1) without adding a frontend runtime or routing tier;
+- how the runtime-only Compose OCI artifact keeps the operator command stable while Buildx publishes the same checkpoint identities for `linux/amd64` and `linux/arm64`;
 - how the R0–R5 concentric delivery rings extend one architecture;
 - which accepted ADR explains each major design choice.

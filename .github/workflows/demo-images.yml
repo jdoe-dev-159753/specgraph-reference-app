@@ -6,6 +6,7 @@ on:
     paths:
       - 'docker/**'
       - 'compose.yaml'
+      - 'compose.oci.yaml'
       - 'scripts/**'
       - '.github/workflows/demo-images.yml'
   workflow_dispatch:
@@ -19,8 +20,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       APP_PACKAGE: ghcr.io/${{ github.repository_owner }}/specgraph-reference-app
-      COMPOSE_PROJECT_NAME: specgraph-demo-images-${{ github.run_id }}
-      DEMO_HOST: 127.0.0.1
+      COMPOSE_PACKAGE: ghcr.io/${{ github.repository_owner }}/specgraph-reference-app-compose
       R0_PORT: '8080'
       R1_PORT: '8081'
     steps:
@@ -44,13 +44,29 @@ jobs:
           path: packaging/checkpoints/r1
           persist-credentials: false
 
-      - name: Build checkpoint images locally
+      - name: Confirm OCI-capable Docker tooling
+        working-directory: packaging
+        run: |
+          docker version
+          docker buildx version
+          docker compose version
+          docker compose -f compose.oci.yaml config --quiet
+
+      - name: Build native checkpoint images for pre-publication verification
         working-directory: packaging
         run: |
           r0_sha="$(git -C checkpoints/r0 rev-parse HEAD)"
           r1_sha="$(git -C checkpoints/r1 rev-parse HEAD)"
+          packaging_short="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          r0_short="$(printf '%s' "$r0_sha" | cut -c1-12)"
+          r1_short="$(printf '%s' "$r1_sha" | cut -c1-12)"
+
           echo "R0_SHA=$r0_sha" >> "$GITHUB_ENV"
           echo "R1_SHA=$r1_sha" >> "$GITHUB_ENV"
+          echo "R0_IMMUTABLE=r0-${r0_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
+          echo "R1_IMMUTABLE=r1-${r1_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
+          echo "COMPOSE_IMMUTABLE=demo-r0-${r0_short}-r1-${r1_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
+          echo "BUILDER_NAME=specgraph-multiarch-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
 
           docker build -f docker/app.Dockerfile \
             --build-arg SOURCE_ROOT=checkpoints/r0 \
@@ -70,6 +86,7 @@ jobs:
         env:
           APP_R0_IMAGE: specgraph-reference-app:r0
           APP_R1_IMAGE: specgraph-reference-app:r1
+          COMPOSE_PROJECT_NAME: specgraph-prepublish-${{ github.run_id }}
         run: |
           docker compose up -d --no-build r0 r1
 
@@ -106,58 +123,69 @@ jobs:
       - name: Authenticate to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Publish R0 and R1 checkpoint tags
+      - name: Create Buildx multi-platform builder
         run: |
-          r0_short="$(printf '%s' "$R0_SHA" | cut -c1-12)"
-          r1_short="$(printf '%s' "$R1_SHA" | cut -c1-12)"
-          packaging_short="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
-          r0_immutable="r0-${r0_short}-pkg-${packaging_short}"
-          r1_immutable="r1-${r1_short}-pkg-${packaging_short}"
+          docker buildx create --name "$BUILDER_NAME" --driver docker-container --use
+          docker buildx inspect "$BUILDER_NAME" --bootstrap
 
-          docker tag specgraph-reference-app:r0 "$APP_PACKAGE:r0"
-          docker tag specgraph-reference-app:r0 "$APP_PACKAGE:$r0_immutable"
-          docker tag specgraph-reference-app:r1 "$APP_PACKAGE:r1"
-          docker tag specgraph-reference-app:r1 "$APP_PACKAGE:$r1_immutable"
+      - name: Publish amd64 and arm64 checkpoint images
+        working-directory: packaging
+        run: |
+          docker buildx build --builder "$BUILDER_NAME" \
+            --platform linux/amd64,linux/arm64 \
+            -f docker/app.Dockerfile \
+            --build-arg SOURCE_ROOT=checkpoints/r0 \
+            --label "org.opencontainers.image.revision=$R0_SHA" \
+            --label "dev.specgraph.checkpoint.revision=$R0_SHA" \
+            --label "dev.specgraph.packaging.revision=$GITHUB_SHA" \
+            -t "$APP_PACKAGE:r0" \
+            -t "$APP_PACKAGE:$R0_IMMUTABLE" \
+            --push .
 
-          r0_push="$(docker push "$APP_PACKAGE:$r0_immutable" 2>&1)"
-          printf '%s\n' "$r0_push"
-          r0_digest="$(printf '%s\n' "$r0_push" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -1)"
+          docker buildx build --builder "$BUILDER_NAME" \
+            --platform linux/amd64,linux/arm64 \
+            -f docker/app.Dockerfile \
+            --build-arg SOURCE_ROOT=checkpoints/r1 \
+            --label "org.opencontainers.image.revision=$R1_SHA" \
+            --label "dev.specgraph.checkpoint.revision=$R1_SHA" \
+            --label "dev.specgraph.packaging.revision=$GITHUB_SHA" \
+            -t "$APP_PACKAGE:r1" \
+            -t "$APP_PACKAGE:$R1_IMMUTABLE" \
+            --push .
+
+      - name: Verify published multi-platform manifests
+        run: |
+          r0_inspect="$(docker buildx imagetools inspect "$APP_PACKAGE:$R0_IMMUTABLE")"
+          r1_inspect="$(docker buildx imagetools inspect "$APP_PACKAGE:$R1_IMMUTABLE")"
+          printf '%s\n' "$r0_inspect"
+          printf '%s\n' "$r1_inspect"
+
+          printf '%s\n' "$r0_inspect" | grep -E 'Platform:[[:space:]]+linux/amd64'
+          printf '%s\n' "$r0_inspect" | grep -E 'Platform:[[:space:]]+linux/arm64'
+          printf '%s\n' "$r1_inspect" | grep -E 'Platform:[[:space:]]+linux/amd64'
+          printf '%s\n' "$r1_inspect" | grep -E 'Platform:[[:space:]]+linux/arm64'
+
+          r0_digest="$(printf '%s\n' "$r0_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
+          r1_digest="$(printf '%s\n' "$r1_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
           test -n "$r0_digest"
-          docker push "$APP_PACKAGE:r0"
-
-          r1_push="$(docker push "$APP_PACKAGE:$r1_immutable" 2>&1)"
-          printf '%s\n' "$r1_push"
-          r1_digest="$(printf '%s\n' "$r1_push" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -1)"
           test -n "$r1_digest"
-          docker push "$APP_PACKAGE:r1"
-
-          echo "R0_IMMUTABLE=$r0_immutable" >> "$GITHUB_ENV"
-          echo "R1_IMMUTABLE=$r1_immutable" >> "$GITHUB_ENV"
           echo "R0_DIGEST=$r0_digest" >> "$GITHUB_ENV"
           echo "R1_DIGEST=$r1_digest" >> "$GITHUB_ENV"
 
-          {
-            echo '## Published reviewer checkpoint images'
-            echo
-            echo '| Checkpoint | Source revision | Packaging revision | Immutable tag | OCI digest |'
-            echo '| --- | --- | --- | --- | --- |'
-            printf '| R0 | `%s` | `%s` | `%s:%s` | `%s` |\n' "$R0_SHA" "$GITHUB_SHA" "$APP_PACKAGE" "$r0_immutable" "$r0_digest"
-            printf '| R1 | `%s` | `%s` | `%s:%s` | `%s` |\n' "$R1_SHA" "$GITHUB_SHA" "$APP_PACKAGE" "$r1_immutable" "$r1_digest"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Prove day-of-demo command pulls published images
+      - name: Publish runtime Compose application as OCI artifact
         working-directory: packaging
         run: |
-          docker compose down --remove-orphans || true
-          docker image rm -f \
-            specgraph-reference-app:r0 \
-            specgraph-reference-app:r1 \
-            "$APP_PACKAGE:r0" \
-            "$APP_PACKAGE:r1" \
-            "$APP_PACKAGE:$R0_IMMUTABLE" \
-            "$APP_PACKAGE:$R1_IMMUTABLE" || true
+          docker compose -f compose.oci.yaml publish -y --resolve-image-digests "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
+          docker compose -f compose.oci.yaml publish -y --resolve-image-digests "$COMPOSE_PACKAGE:demo"
+          docker buildx imagetools inspect "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
 
-          ./scripts/demo-up.sh
+      - name: Prove remote Compose OCI deployment pulls from registry
+        working-directory: packaging
+        run: |
+          COMPOSE_PROJECT_NAME="specgraph-prepublish-${GITHUB_RUN_ID}" docker compose down --remove-orphans || true
+          docker image rm -f specgraph-reference-app:r0 specgraph-reference-app:r1 || true
+
+          docker compose -f "oci://$COMPOSE_PACKAGE:demo" up -d --wait
 
           curl -fsS http://127.0.0.1:8080/ >/dev/null
           curl -fsS http://127.0.0.1:8081/ >/dev/null
@@ -171,12 +199,27 @@ jobs:
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test'
 
-          docker inspect "$APP_PACKAGE:r0" --format '{{index .RepoDigests 0}}' | grep -F "@$R0_DIGEST"
-          docker inspect "$APP_PACKAGE:r1" --format '{{index .RepoDigests 0}}' | grep -F "@$R1_DIGEST"
+          docker compose -f "oci://$COMPOSE_PACKAGE:demo" ps
+
+          {
+            echo '## Published reviewer deployment'
+            echo
+            echo '| Artifact | Checkpoint source | Packaging source | Multi-platform digest |'
+            echo '| --- | --- | --- | --- |'
+            printf '| R0 image | `%s` | `%s` | `%s` |\n' "$R0_SHA" "$GITHUB_SHA" "$R0_DIGEST"
+            printf '| R1 image | `%s` | `%s` | `%s` |\n' "$R1_SHA" "$GITHUB_SHA" "$R1_DIGEST"
+            printf '| Compose OCI | R0 + R1 | `%s` | `%s:%s` |\n' "$GITHUB_SHA" "$COMPOSE_PACKAGE" "$COMPOSE_IMMUTABLE"
+            echo
+            echo 'Published image manifests contain both `linux/amd64` and `linux/arm64`.'
+            echo
+            printf 'Reviewer command: `docker compose -f oci://%s:demo up -d --wait`\n' "$COMPOSE_PACKAGE"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup checkpoint test deployments
         if: always()
         working-directory: packaging
         run: |
-          ./scripts/demo-down.sh || true
+          COMPOSE_PROJECT_NAME="specgraph-prepublish-${GITHUB_RUN_ID}" docker compose down --remove-orphans || true
+          docker compose -f "oci://$COMPOSE_PACKAGE:demo" down --remove-orphans || true
+          docker buildx rm "$BUILDER_NAME" || true
           docker logout ghcr.io || true

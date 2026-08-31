@@ -9,6 +9,7 @@ on:
       - 'docker/**'
       - 'scripts/**'
       - 'compose.yaml'
+      - 'compose.oci.yaml'
       - '.dockerignore'
       - '.github/workflows/application-ci.yml'
   push:
@@ -20,6 +21,7 @@ on:
       - 'docker/**'
       - 'scripts/**'
       - 'compose.yaml'
+      - 'compose.oci.yaml'
       - '.dockerignore'
       - '.github/workflows/application-ci.yml'
 
@@ -73,8 +75,10 @@ jobs:
           docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$app_image" .
           echo "APP_R1_IMAGE=$app_image" >> "$GITHUB_ENV"
 
-      - name: Validate side-by-side deployment topology
-        run: docker compose config --quiet
+      - name: Validate source and OCI deployment topologies
+        run: |
+          docker compose config --quiet
+          docker compose -f compose.oci.yaml config --quiet
 
       - name: Start exact-head checkpoint as R1 service
         run: docker compose up -d --no-build r1

@@ -10,6 +10,7 @@
 ![React 19.2.8](https://img.shields.io/badge/React-19.2.8-informational)
 ![TypeScript 7.0.2](https://img.shields.io/badge/TypeScript-7.0.2-informational)
 ![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0_build--time-informational)
+![Platforms](https://img.shields.io/badge/runtime-linux%2Famd64%20%7C%20linux%2Farm64-informational)
 
 **A runnable reference application for specification-driven, AI-assisted software engineering.**
 
@@ -17,69 +18,76 @@ The application lets a Customer Care operator search a customer, inspect determi
 
 ## Fast reviewer demo
 
-The published R0/R1 checkpoint images are self-contained. **Viewing the application does not require cloning the private source repository, creating an SSH key, installing Maven/Node, or building anything.**
+The published R0/R1 checkpoint images and the deployment manifest are self-contained OCI artifacts. **Viewing the application does not require cloning the private source repository, creating an SSH key, installing Maven/Node, or building anything.**
 
-Both checkpoints use the same packaging boundary: React is compiled ahead of time and embedded in the Spring Boot executable JAR; the running container is Java 21 + Spring Boot + embedded Tomcat.
+Both checkpoints use the same runtime boundary: React is compiled ahead of time and embedded in the Spring Boot executable JAR; the running container is Java 21 + Spring Boot + embedded Tomcat. The published image references contain both `linux/amd64` and `linux/arm64`; Docker selects the appropriate runtime automatically.
 
-### Fastest path: run R1 directly from Docker
+### Canonical path: one remote Docker Compose deployment
 
-The GHCR package is currently private, so authenticate Docker once. The value entered at the `Password` prompt is a **GitHub personal access token (classic) with `read:packages`**, not the GitHub account password:
+Requires Docker Compose **2.34+**, which supports Compose applications published as OCI artifacts.
+
+The GHCR packages are currently private, so authenticate Docker once. The value entered at the `Password` prompt is a **GitHub personal access token (classic) with `read:packages`**, not the GitHub account password:
 
 ```bash
 docker login ghcr.io -u jdoe-dev-159753
 ```
 
-Then launch R1 directly. No Git checkout is involved:
+Then, from any directory on the Docker host, start the complete published reviewer deployment directly from GHCR:
 
 ```bash
-docker run --rm --pull=always -p 8081:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r1
+docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait
 ```
 
-Open `http://localhost:8081/` when the browser runs on the Docker host, or `http://<docker-host>:8081/` from another machine.
+No local Compose file or Git checkout is involved. The OCI Compose artifact pins the exact published R0/R1 image digests.
 
-Use the deterministic seeded Customer ID:
-
-```text
-11111111-1111-1111-1111-111111111111
-```
-
-The R1 UI exposes CARD, PAYMENT and CRYPTO activity plus associated risk evidence. Searching an unknown UUID exercises the explicit not-found path. Stop the foreground container with `Ctrl+C`.
-
-### Run R0 directly
-
-R0 is the intentionally hollow pre-business checkpoint:
+For a copy/paste demo line that also prints browser-clickable addresses using the host's first advertised IP:
 
 ```bash
-docker run --rm --pull=always -p 8080:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0
+docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait && H="$(hostname -I | awk '{print $1}')" && printf '\nR0: http://%s:8080/\nR1: http://%s:8081/\n' "$H" "$H"
 ```
 
-Open `http://localhost:8080/` locally or `http://<docker-host>:8080/` remotely.
-
-### Run R0 and R1 side by side without cloning the repository
-
-```bash
-docker run -d --rm --pull=always --name specgraph-r0 -p 8080:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0
-docker run -d --rm --pull=always --name specgraph-r1 -p 8081:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r1
-```
-
-Then open:
+Then open both checkpoints side by side:
 
 ```text
 R0: http://<docker-host>:8080/
 R1: http://<docker-host>:8081/
 ```
 
-Stop both with:
+R0 is the intentionally hollow deployable shell. R1 is the first MANDATORY customer/activity/risk slice. Use the deterministic seeded Customer ID in R1:
 
-```bash
-docker rm -f specgraph-r0 specgraph-r1
+```text
+11111111-1111-1111-1111-111111111111
 ```
 
-This is the shortest reviewer path today: one GHCR authentication on a fresh Docker host, then plain Docker commands. If the GHCR package is deliberately made public later, public GHCR images support anonymous pulls and the `docker login` step disappears; the `docker run` commands stay unchanged. Making a package public is an explicit publication decision and is not required for the current private-source workflow.
+Stop and remove the published deployment with:
+
+```bash
+docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo down
+```
+
+This Compose command is the durable operator contract. When R2+ adds PostgreSQL or other mandatory services, the deployment artifact can grow while the command used by the reviewer stays the same.
+
+If the OCI packages are deliberately made public later, GHCR allows anonymous pulls and the one-time `docker login` disappears; the Compose command remains unchanged. Package visibility is an explicit publication decision and is not changed implicitly by this repository.
+
+### Direct checkpoint shortcut with `docker run`
+
+R1 can still be launched directly when only one checkpoint is wanted:
+
+```bash
+docker run --rm --pull=always -p 8081:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r1
+```
+
+R0 likewise:
+
+```bash
+docker run --rm --pull=always -p 8080:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0
+```
+
+`docker run` is useful for image/debug inspection, but Compose is the canonical system deployment abstraction because later rings are multi-service.
 
 ### Source checkout from a fresh host
 
-Clone the repository only when source inspection, development, Compose orchestration, or the project-owned demo scripts are wanted. A fresh host does **not** need an SSH keypair: prefer GitHub CLI browser authentication over HTTPS.
+Clone the repository only when source inspection, development, local build work or project-owned scripts are wanted. A fresh host does **not** need an SSH keypair: prefer GitHub CLI browser authentication over HTTPS.
 
 ```bash
 gh auth login --web --git-protocol https
@@ -96,46 +104,26 @@ cd specgraph-reference-app
 
 Because the repository is private, plain `git clone` still requires a GitHub credential; `gh auth login --web` is the preferred route when avoiding SSH key management.
 
-Once the source is checked out, the reproducible side-by-side Compose path remains:
+With source checked out, the local configurable Compose/script path remains available:
 
 ```bash
 ./scripts/demo-up.sh
 ```
 
-The script pulls both prebuilt images, starts them detached without building, waits for both healthchecks, then prints browser-usable R0/R1 URLs. If Docker has not already been authenticated to the private package, run the `docker login ghcr.io -u jdoe-dev-159753` command above once.
-
-If the browser should use an address other than the host's fully-qualified hostname, configure it once:
-
-```bash
-cp .env.demo.example .env.demo
-$EDITOR .env.demo
-```
-
-`.env.demo` is ignored by Git. Physical lab/VPS addressing remains deployment configuration rather than application source.
-
-Stop the Compose path with:
+and:
 
 ```bash
 ./scripts/demo-down.sh
 ```
 
-Individual diagnostic modes remain available:
-
-```bash
-./scripts/demo-up.sh r0
-./scripts/demo-up.sh r1
-./scripts/demo-down.sh r0
-./scripts/demo-down.sh r1
-```
-
 The preserved source branches `demo/r0` and `demo/r1` remain available for code inspection. Operational comparison uses prebuilt images and does not require rebuilding or switching the working tree.
 
-## Runtime packaging
+## Runtime packaging and distribution
 
-Each checkpoint is the same deployment shape, mapped to a different host port for side-by-side demonstration:
+Each checkpoint is the same application shape, mapped to a different host port for side-by-side demonstration:
 
 ```text
-build time
+build time on BUILDPLATFORM
   Node/Vite -> React static assets
                   |
                   v
@@ -148,16 +136,28 @@ runtime      executable JAR
              /          /api/*
           React UI    Spring MVC
 
-side-by-side demo host
+OCI image manifest
+  linux/amd64
+  linux/arm64
+
+side-by-side Compose deployment
   R0 container :8080 -> container :8080
   R1 container :8081 -> container :8080
 ```
 
-This keeps the assignment's preferred React technology without inventing an independently deployed frontend. [`ADR-005`](docs/assignment/ADR/ADR-005-prebuilt-demo-container-packaging.md) records the packaging and checkpoint-comparison decision.
+[`ADR-005`](docs/assignment/ADR/ADR-005-prebuilt-demo-container-packaging.md) records the single-JAR checkpoint packaging. [`ADR-006`](docs/assignment/ADR/ADR-006-compose-oci-multi-platform-distribution.md) records Compose-as-OCI distribution and multi-platform Buildx publication.
 
-Trusted `demo-images` automation builds the same packaging definition against the preserved `demo/r0` and `demo/r1` source checkpoints, proves both start simultaneously, proves R1 with Playwright, then publishes moving GHCR convenience tags `r0` and `r1`. Reproducible evidence uses compound immutable tags such as `r1-<checkpoint-sha>-pkg-<packaging-sha>`; the workflow summary records checkpoint revision, packaging revision and OCI digest for the exact image tested and published.
+Trusted `demo-images` automation builds the current packaging definition against the preserved `demo/r0` and `demo/r1` source checkpoints. It first proves both checkpoints natively, then publishes each checkpoint as one OCI manifest containing `linux/amd64` and `linux/arm64` variants. Moving convenience tags remain `r0` and `r1`; reproducible evidence uses compound immutable tags such as `r1-<checkpoint-sha>-pkg-<packaging-sha>` plus the OCI digest.
 
-After publication, the workflow removes its local checkpoint images and invokes the same `./scripts/demo-up.sh` command used by a reviewer with a source checkout. That gate proves the side-by-side Compose demonstration is actually pulled back from GHCR rather than accidentally succeeding from the runner's local image cache. The even shorter direct `docker run` path uses the same published `r0` and `r1` images without making source checkout a runtime dependency.
+The workflow then publishes `compose.oci.yaml` itself with Docker Compose `publish --resolve-image-digests`. The moving deployment artifact is:
+
+```text
+ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo
+```
+
+An immutable Compose artifact tag also contains both checkpoint revisions and the packaging revision. After publication, CI removes its locally built checkpoint images and starts the system through the remote `oci://...:demo` artifact, then re-runs R1 Playwright. That gate proves the advertised reviewer deployment comes back from the registry rather than succeeding from the build cache.
+
+The multi-platform Dockerfile deliberately runs Node/Vite and Maven on `BUILDPLATFORM`. Their outputs are architecture-neutral. Only the final Java 21 JRE layer varies by target platform, so ARM64 publication does not require emulating the complete build. This makes an ARM64 Docker host such as a Brume technically compatible with the same `r0`/`r1` references; resource sizing remains a separate deployment concern.
 
 ## Canonical engineering evidence
 
@@ -175,7 +175,7 @@ Machine-readable companions live beside those documents and remain the authority
 
 The application is a modular monolith with hexagonal boundaries. Project-owned application/domain contracts sit inside the framework boundary; inbound HTTP/UI adapters and outbound activity, persistence, knowledge, model and history adapters remain replaceable behind stable ports.
 
-The implementation uses Java 21, Spring Boot 4.1.1, Spring Modulith 2.1.1, React 19.2.8 and TypeScript 7.0.2. React/TypeScript/Vite are frontend build technologies; persistent J1 execution is one Spring Boot executable JAR on embedded Tomcat.
+The implementation uses Java 21, Spring Boot 4.1.1, Spring Modulith 2.1.1, React 19.2.8 and TypeScript 7.0.2. React/TypeScript/Vite are frontend build technologies; persistent execution is one Spring Boot executable JAR on embedded Tomcat per checkpoint.
 
 The key R1 request path is intentionally:
 
