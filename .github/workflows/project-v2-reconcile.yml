@@ -18,21 +18,21 @@ jobs:
   reconcile:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci]
     steps:
-      - name: Recover malformed persistent workspace
+      - name: Prepare isolated trusted checkout
         run: |
-          if ! git -C "$GITHUB_WORKSPACE" rev-parse --git-dir >/dev/null 2>&1; then
-            echo "Restoring Git identity in persistent workspace: $GITHUB_WORKSPACE"
-            git -C "$GITHUB_WORKSPACE" init
-            git -C "$GITHUB_WORKSPACE" remote add origin "https://github.com/${GITHUB_REPOSITORY}"
+          trusted="$GITHUB_WORKSPACE/.workgraph-trusted"
+          if [ -e "$trusted" ] && ! git -C "$trusted" rev-parse --git-dir >/dev/null 2>&1; then
+            rm -rf "$trusted"
           fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
+          path: .workgraph-trusted
           persist-credentials: false
       - name: Reconcile Project v2 and native work metadata
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           github-token: ${{ secrets.PROJECTS_TOKEN }}
           script: |
-            const run = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/project-v2-reconcile.cjs`);
+            const run = require(`${process.env.GITHUB_WORKSPACE}/.workgraph-trusted/.github/scripts/project-v2-reconcile.cjs`);
             await run({ github, context, core });
