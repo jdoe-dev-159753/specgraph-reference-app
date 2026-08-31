@@ -25,10 +25,19 @@ class CustomerReadAcceptanceTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.customerId").value(SyntheticActivityAdapter.SEEDED_CUSTOMER_ID.toString()))
                 .andExpect(jsonPath("$.activities[*].type", containsInAnyOrder("CARD", "PAYMENT", "CRYPTO")))
+                .andExpect(jsonPath("$.activities[0].transactionId").value("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"))
+                .andExpect(jsonPath("$.activities[0].amount").exists())
+                .andExpect(jsonPath("$.activities[0].currency").value("CHF"))
+                .andExpect(jsonPath("$.activities[0].status").value("Completed"))
+                .andExpect(jsonPath("$.activities[0].createdAt").value("2026-08-28T09:15:00Z"))
                 .andExpect(jsonPath("$.activities[0].details.merchantName").value("Alpine Camera"))
                 .andExpect(jsonPath("$.activities[1].details.receiverBankCountry").value("DE"))
                 .andExpect(jsonPath("$.activities[2].details.blockchain").value("Bitcoin"))
+                .andExpect(jsonPath("$.riskEvidence[0].transactionId").value("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"))
+                .andExpect(jsonPath("$.riskEvidence[0].ruleId").value("RULE-CARD-01"))
                 .andExpect(jsonPath("$.riskEvidence[0].ruleName").value("Card not present high value"))
+                .andExpect(jsonPath("$.riskEvidence[0].triggeredAt").value("2026-08-28T09:15:01Z"))
+                .andExpect(jsonPath("$.riskEvidence[0].scoreContribution").exists())
                 .andExpect(jsonPath("$.riskEvidence[1].ruleName").value("New crypto destination"));
     }
 
