@@ -1,0 +1,59 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+package "identity" as Identity {
+  package "domain" as IDomain
+  package "application" as IApp
+  package "in/web" as IIn
+  package "out/persistence" as IOut
+}
+package "customer" as Customer {
+  package "domain" as CDomain
+  package "application" as CApp {
+    interface "CustomerActivityPort" as CustomerActivityPort
+  }
+  package "in/web" as CIn
+  package "out/persistence" as COut
+}
+package "risk" as Risk {
+  package "domain" as RDomain
+  package "application" as RApp
+  package "in/web" as RIn
+}
+package "analysis" as Analysis {
+  package "domain" as ADomain
+  package "application" as AApp
+  package "in/web" as AIn
+  package "out/ai" as AAI
+  package "out/knowledge" as AKnow
+  package "out/persistence" as AOut
+}
+
+IIn --> IApp
+IApp --> IDomain
+IOut ..> IApp : implements outbound port
+
+CIn --> CApp
+CApp --> CDomain
+COut ..> CustomerActivityPort : implements
+
+RIn --> RApp
+RApp --> RDomain
+
+AIn --> AApp
+AApp --> ADomain
+AApp --> CustomerActivityPort : requires customer context
+AAI ..> AApp : implements AnalysisModelPort
+AKnow ..> AApp : implements PolicyKnowledgePort
+AOut ..> AApp : implements AnalysisHistoryPort
+
+note bottom
+  Dependency rule: framework and infrastructure packages depend inward on
+  project-owned application/domain contracts. Cross-module behaviour is
+  coordinated through explicit application contracts, not framework types.
+  Source activity and risk evidence share the selected CustomerActivityPort /
+  JpaCustomerActivityAdapter persistence path; there is no competing risk
+  persistence adapter in the baseline design.
+end note
+@enduml

@@ -1,0 +1,107 @@
+@startuml
+left to right direction
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+class CustomerSnapshot <<project contract>> {
+  customerIdentity
+  activities : ActivityProjection[*]
+  riskEvidence : RiskEvidence[*]
+}
+class ActivityProjection <<project contract>> {
+  transactionId
+  family : CARD|PAYMENT|CRYPTO
+  amount
+  currency
+  status
+  occurredAt
+  familyDetails
+}
+class RiskEvidence <<project contract>> {
+  transactionId
+  ruleIdentity
+  ruleName
+  triggeredAt
+  scoreContribution
+}
+class AnalysisResult <<project contract>> {
+  riskLevel : LOW|MEDIUM|HIGH
+  findingsSummary
+  recommendations
+}
+class PolicyEvidence <<project contract>> {
+  sourceIdentity
+  content
+  retrievalMetadata
+}
+class OperatorId <<project value>> {
+  operatorIdentity
+}
+class AnalysisHistoryCreateCommand <<project command>> {
+  customerIdentity
+  operatorIdentity : OperatorId
+  generatedAt
+  result : AnalysisResult
+  evidenceProvenance : PolicyEvidence[*]
+}
+class AnalysisHistoryEntry <<project contract>> {
+  analysisIdentity
+  customerIdentity
+  operatorIdentity : OperatorId
+  generatedAt
+  result : AnalysisResult
+  evidenceProvenance : PolicyEvidence[*]
+}
+
+class Transaction <<source relation>> {
+  transaction_id : UUID
+  customer_id : UUID
+  activity_type : CARD|PAYMENT|CRYPTO
+  amount
+  currency
+  status
+  created_at
+}
+class CardActivity <<source specialization>>
+class PaymentActivity <<source specialization>>
+class CryptoActivity <<source specialization>>
+class RiskAssessment <<source relation>> {
+  triggeredAt
+  scoreContribution
+}
+class RiskRule <<source relation>> {
+  name
+  applicableActivityFamily
+  thresholdLogic
+  defaultWeight
+}
+
+CustomerSnapshot "1" o-- "0..*" ActivityProjection
+CustomerSnapshot "1" o-- "0..*" RiskEvidence
+AnalysisHistoryCreateCommand "1" *-- "1" AnalysisResult
+AnalysisHistoryCreateCommand "1" --> "1" OperatorId
+AnalysisHistoryCreateCommand "1" o-- "0..*" PolicyEvidence
+AnalysisHistoryEntry ..> AnalysisHistoryCreateCommand : persisted form + generated identity
+AnalysisHistoryEntry "1" *-- "1" AnalysisResult
+AnalysisHistoryEntry "1" --> "1" OperatorId
+AnalysisHistoryEntry "1" o-- "0..*" PolicyEvidence
+Transaction <|-- CardActivity : CARD detail
+Transaction <|-- PaymentActivity : PAYMENT detail
+Transaction <|-- CryptoActivity : CRYPTO detail
+Transaction "1" -- "0..*" RiskAssessment
+RiskRule "1" -- "0..*" RiskAssessment
+Transaction ..> ActivityProjection : adapter maps source rows
+CardActivity ..> ActivityProjection : maps family details
+PaymentActivity ..> ActivityProjection : maps family details
+CryptoActivity ..> ActivityProjection : maps family details
+RiskAssessment ..> RiskEvidence : adapter maps evidence
+RiskRule ..> RiskEvidence : adapter resolves rule identity/name
+AnalysisResult ..> CustomerSnapshot : derived from context
+AnalysisResult ..> PolicyEvidence : grounded by when retrieved
+
+note bottom of Transaction
+  Source-schema concepts stop at the adapter boundary. CustomerSnapshot,
+  AnalysisHistoryCreateCommand and AnalysisHistoryEntry contain only project-owned
+  projections; JPA/source relation types never become durable application-contract members.
+end note
+@enduml

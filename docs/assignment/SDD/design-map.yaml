@@ -1,7 +1,7 @@
 schema_version: 1
 design_id: CAA-DESIGN-001
 normative_requirements: ../SRS/requirements.yaml
-current_design_readme: README.md
+current_design_document: SDD.md
 
 adrs:
   ADR-001: ../ADR/ADR-001-modular-monolith-hexagonal.md
@@ -51,6 +51,16 @@ contracts:
     owner: MOD-IDENTITY-001
     contains: [operator_identity]
     invariants: [INV-HIST-001]
+  CTR-ANALYSIS-HISTORY-CREATE-001:
+    name: AnalysisHistoryCreateCommand
+    owner: MOD-ANALYSIS-001
+    contains: [customer_identity, operator_identity, generated_at, result, evidence_provenance]
+    invariants: [INV-HIST-001]
+  CTR-ANALYSIS-HISTORY-ENTRY-001:
+    name: AnalysisHistoryEntry
+    owner: MOD-ANALYSIS-001
+    contains: [analysis_identity, customer_identity, operator_identity, generated_at, result, evidence_provenance]
+    invariants: [INV-HIST-001]
 
 ports:
   PRT-ACTIVITY-001:
@@ -78,7 +88,8 @@ ports:
     name: AnalysisHistoryPort
     owner: MOD-ANALYSIS-001
     direction: outbound
-    stores: CTR-ANALYSIS-RESULT-001
+    accepts: CTR-ANALYSIS-HISTORY-CREATE-001
+    returns: CTR-ANALYSIS-HISTORY-ENTRY-001
     activation_ring: R0
     adrs: [ADR-001, ADR-003]
 
@@ -197,11 +208,11 @@ requirement_design:
     adrs: [ADR-002, ADR-003]
     first_acceptance_ring: R4
   FR-HIST-001:
-    elements: [MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001, INF-DB-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
+    elements: [MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001, INF-DB-001, CTR-ANALYSIS-HISTORY-CREATE-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
     adrs: [ADR-001, ADR-003, ADR-004]
     first_acceptance_ring: R3
   FR-HIST-002:
-    elements: [CMP-UI-001, ADP-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001]
+    elements: [CMP-UI-001, ADP-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001, CTR-ANALYSIS-HISTORY-ENTRY-001]
     adrs: [ADR-001, ADR-003, ADR-004]
     first_acceptance_ring: R3
   NFR-REP-001:
