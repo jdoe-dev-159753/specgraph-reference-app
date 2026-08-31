@@ -1,0 +1,47 @@
+name: temp-finalize-vv
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [docs/vv-strategy-skeleton]
+    paths: ['.github/workflows/temp-finalize-vv.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: docs/vv-strategy-skeleton
+          fetch-depth: 0
+      - name: Rebase document authority on current main
+        shell: bash
+        run: |
+          git fetch origin main
+          git checkout origin/main -- docs/assignment/SDD/SDD.md
+          sed -i 's|\*\*Verification strategy:\*\* `CAA-VV-001` is introduced by the dependent V&V work and is linked once that authority coexists on `main`\.|**Verification strategy:** [`CAA-VV-001`](../VV/VV.md)|' docs/assignment/SDD/SDD.md
+      - name: Render V&V figure
+        shell: bash
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            plantuml/plantuml:1.2026.6 \
+            -tsvg docs/assignment/VV/diagrams/verification-evidence-flow.puml
+      - name: Commit final V&V layer
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/assignment/SDD/SDD.md docs/assignment/VV
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "docs: finalize canonical V&V authority"
+          git push
