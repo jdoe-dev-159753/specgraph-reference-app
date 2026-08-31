@@ -17,24 +17,94 @@ The application lets a Customer Care operator search a customer, inspect determi
 
 ## Fast reviewer demo
 
-The normal reviewer path runs **R0 and R1 simultaneously** from prebuilt checkpoint images so the concentric delivery model can be demonstrated rather than merely described.
+The published R0/R1 checkpoint images are self-contained. **Viewing the application does not require cloning the private source repository, creating an SSH key, installing Maven/Node, or building anything.**
 
-Both checkpoints use the same packaging boundary: React is compiled ahead of time and embedded in the Spring Boot executable JAR; the running container is Java 21 + Spring Boot + embedded Tomcat. No Maven, Node, Vite or reverse proxy runs while somebody is watching.
+Both checkpoints use the same packaging boundary: React is compiled ahead of time and embedded in the Spring Boot executable JAR; the running container is Java 21 + Spring Boot + embedded Tomcat.
 
-### One-time setup on a Docker host
+### Fastest path: run R1 directly from Docker
+
+The GHCR package is currently private, so authenticate Docker once. The value entered at the `Password` prompt is a **GitHub personal access token (classic) with `read:packages`**, not the GitHub account password:
 
 ```bash
-git clone git@github.com:jdoe-dev-159753/specgraph-reference-app.git
+docker login ghcr.io -u jdoe-dev-159753
+```
+
+Then launch R1 directly. No Git checkout is involved:
+
+```bash
+docker run --rm --pull=always -p 8081:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r1
+```
+
+Open `http://localhost:8081/` when the browser runs on the Docker host, or `http://<docker-host>:8081/` from another machine.
+
+Use the deterministic seeded Customer ID:
+
+```text
+11111111-1111-1111-1111-111111111111
+```
+
+The R1 UI exposes CARD, PAYMENT and CRYPTO activity plus associated risk evidence. Searching an unknown UUID exercises the explicit not-found path. Stop the foreground container with `Ctrl+C`.
+
+### Run R0 directly
+
+R0 is the intentionally hollow pre-business checkpoint:
+
+```bash
+docker run --rm --pull=always -p 8080:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0
+```
+
+Open `http://localhost:8080/` locally or `http://<docker-host>:8080/` remotely.
+
+### Run R0 and R1 side by side without cloning the repository
+
+```bash
+docker run -d --rm --pull=always --name specgraph-r0 -p 8080:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0
+docker run -d --rm --pull=always --name specgraph-r1 -p 8081:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r1
+```
+
+Then open:
+
+```text
+R0: http://<docker-host>:8080/
+R1: http://<docker-host>:8081/
+```
+
+Stop both with:
+
+```bash
+docker rm -f specgraph-r0 specgraph-r1
+```
+
+This is the shortest reviewer path today: one GHCR authentication on a fresh Docker host, then plain Docker commands. If the GHCR package is deliberately made public later, public GHCR images support anonymous pulls and the `docker login` step disappears; the `docker run` commands stay unchanged. Making a package public is an explicit publication decision and is not required for the current private-source workflow.
+
+### Source checkout from a fresh host
+
+Clone the repository only when source inspection, development, Compose orchestration, or the project-owned demo scripts are wanted. A fresh host does **not** need an SSH keypair: prefer GitHub CLI browser authentication over HTTPS.
+
+```bash
+gh auth login --web --git-protocol https
+gh repo clone jdoe-dev-159753/specgraph-reference-app
 cd specgraph-reference-app
 ```
 
-Authenticate Docker once to the private GHCR package:
+The plain HTTPS clone URL is also:
 
 ```bash
-printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u jdoe-dev-159753 --password-stdin
+git clone https://github.com/jdoe-dev-159753/specgraph-reference-app.git
+cd specgraph-reference-app
 ```
 
-If the browser should use an address other than the host's own fully-qualified hostname, configure it once:
+Because the repository is private, plain `git clone` still requires a GitHub credential; `gh auth login --web` is the preferred route when avoiding SSH key management.
+
+Once the source is checked out, the reproducible side-by-side Compose path remains:
+
+```bash
+./scripts/demo-up.sh
+```
+
+The script pulls both prebuilt images, starts them detached without building, waits for both healthchecks, then prints browser-usable R0/R1 URLs. If Docker has not already been authenticated to the private package, run the `docker login ghcr.io -u jdoe-dev-159753` command above once.
+
+If the browser should use an address other than the host's fully-qualified hostname, configure it once:
 
 ```bash
 cp .env.demo.example .env.demo
@@ -43,30 +113,7 @@ $EDITOR .env.demo
 
 `.env.demo` is ignored by Git. Physical lab/VPS addressing remains deployment configuration rather than application source.
 
-### Day-of-demo: both checkpoints side by side
-
-```bash
-./scripts/demo-up.sh
-```
-
-The command pulls both prebuilt images, starts them detached without building, waits for both healthchecks, then returns only after printing two browser-usable URLs:
-
-```text
-R0 ready: http://demo-host:8080/
-R1 ready: http://demo-host:8081/
-```
-
-Open both in separate tabs. R0 is intentionally hollow and proves the deployable shell existed before business acceptance. R1 is the first MANDATORY customer/activity/risk slice.
-
-For R1, use the deterministic seeded Customer ID:
-
-```text
-11111111-1111-1111-1111-111111111111
-```
-
-The R1 UI exposes CARD, PAYMENT and CRYPTO activity plus associated risk evidence. Searching an unknown UUID exercises the explicit not-found path.
-
-Stop both checkpoints with:
+Stop the Compose path with:
 
 ```bash
 ./scripts/demo-down.sh
@@ -110,7 +157,7 @@ This keeps the assignment's preferred React technology without inventing an inde
 
 Trusted `demo-images` automation builds the same packaging definition against the preserved `demo/r0` and `demo/r1` source checkpoints, proves both start simultaneously, proves R1 with Playwright, then publishes moving GHCR convenience tags `r0` and `r1`. Reproducible evidence uses compound immutable tags such as `r1-<checkpoint-sha>-pkg-<packaging-sha>`; the workflow summary records checkpoint revision, packaging revision and OCI digest for the exact image tested and published.
 
-After publication, the workflow removes its local checkpoint images and invokes the same `./scripts/demo-up.sh` command used by a reviewer. That final gate proves the side-by-side demonstration is actually pulled back from GHCR rather than accidentally succeeding from the runner's local image cache.
+After publication, the workflow removes its local checkpoint images and invokes the same `./scripts/demo-up.sh` command used by a reviewer with a source checkout. That gate proves the side-by-side Compose demonstration is actually pulled back from GHCR rather than accidentally succeeding from the runner's local image cache. The even shorter direct `docker run` path uses the same published `r0` and `r1` images without making source checkout a runtime dependency.
 
 ## Canonical engineering evidence
 
