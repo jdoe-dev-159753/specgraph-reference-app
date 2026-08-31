@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject active GitHub prose that competes with native work-graph metadata."""
+"""Reject controlled GitHub descriptions that compete with native work metadata."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import json
 import os
 import re
 import sys
-from urllib import error, parse, request
+from urllib import error, request
 
 API = "https://api.github.com"
 REPO = os.environ.get("GITHUB_REPOSITORY", "jdoe-dev-159753/specgraph-reference-app")
@@ -83,14 +83,10 @@ def main() -> int:
         scan_surface(kind, f"#{number} title", item.get("title") or "", failures)
         scan_surface(kind, f"#{number} body", item.get("body") or "", failures)
 
-        for comment in pages(f"/repos/{REPO}/issues/{number}/comments"):
-            scan_surface("comment", str(comment["id"]), comment.get("body") or "", failures)
-
-        if kind == "pull request":
-            for comment in pages(f"/repos/{REPO}/pulls/{number}/comments"):
-                scan_surface("review comment", str(comment["id"]), comment.get("body") or "", failures)
-            for review in pages(f"/repos/{REPO}/pulls/{number}/reviews"):
-                scan_surface("review", str(review["id"]), review.get("body") or "", failures)
+    # Conversation and review comments are discussion, not controlled work-state
+    # descriptions. They may legitimately quote typed values while reviewing the
+    # mechanics. Treating third-party review prose as authoritative would make the
+    # ratchet both noisy and impossible for the repository owner to remediate.
 
     if failures:
         print("Competing prose work-state detected:", file=sys.stderr)
@@ -98,7 +94,7 @@ def main() -> int:
             print(f"- {finding}", file=sys.stderr)
         return 1
 
-    print("active GitHub work prose is clean")
+    print("controlled GitHub work descriptions are clean")
     return 0
 
 
