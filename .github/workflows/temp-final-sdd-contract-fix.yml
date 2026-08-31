@@ -1,0 +1,117 @@
+name: temp-final-sdd-contract-fix
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/temp-final-sdd-contract-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Fix grounding termination and history write contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          seq = Path('docs/assignment/SDD/diagrams/sequence-analysis.puml')
+          text = seq.read_text()
+          old = '''Policy --> Analysis : PolicyEvidence[] / explicit no-evidence
+Analysis -> Model : analyze(context, evidence) [in-process port]
+alt deterministic baseline adapter
+  Model -> Deterministic : dispatch [in-process]
+  Deterministic --> Model : structured candidate / failure
+else explicitly configured live adapter
+  Model -> LiveAdapter : dispatch [in-process]
+  LiveAdapter -> Provider : HTTPS provider API
+  Provider --> LiveAdapter : response / network-provider failure
+  LiveAdapter --> Model : structured candidate / failure
+end
+Model --> Analysis : candidate AnalysisResult / failure
+Analysis -> Analysis : validate structured result
+Analysis -> History : persist(result, customer, operator, time, provenance)
+History -> HistoryAdapter : dispatch [in-process]
+HistoryAdapter -> DB : JDBC INSERT analysis history
+DB --> HistoryAdapter : persisted
+HistoryAdapter --> History : analysis identity
+History --> Analysis : analysis identity
+Analysis --> Http : completed structured analysis
+Http --> UI : 200 JSON
+UI --> Operator : risk level + findings + recommendations + provenance
+'''
+          new = '''Policy --> Analysis : PolicyEvidence[] / explicit no-evidence
+alt no relevant policy evidence
+  Analysis --> Http : insufficient grounding
+  Http --> UI : explicit grounding failure/degraded result
+  UI --> Operator : analysis not represented as grounded/completed
+else relevant evidence available
+  Analysis -> Model : analyze(context, evidence) [in-process port]
+  alt deterministic baseline adapter
+    Model -> Deterministic : dispatch [in-process]
+    Deterministic --> Model : structured candidate / failure
+  else explicitly configured live adapter
+    Model -> LiveAdapter : dispatch [in-process]
+    LiveAdapter -> Provider : HTTPS provider API
+    Provider --> LiveAdapter : response / network-provider failure
+    LiveAdapter --> Model : structured candidate / failure
+  end
+  Model --> Analysis : candidate AnalysisResult / failure
+  Analysis -> Analysis : validate structured result
+  Analysis -> History : persist(AnalysisHistoryCreateCommand)
+  History -> HistoryAdapter : dispatch [in-process]
+  HistoryAdapter -> DB : JDBC INSERT analysis history
+  DB --> HistoryAdapter : persisted + generated identity
+  HistoryAdapter --> History : AnalysisHistoryEntry
+  History --> Analysis : AnalysisHistoryEntry
+  Analysis --> Http : completed structured analysis
+  Http --> UI : 200 JSON
+  UI --> Operator : risk level + findings + recommendations + provenance
+end
+'''
+          if old not in text:
+              raise SystemExit('sequence-analysis expected block not found')
+          seq.write_text(text.replace(old, new))
+
+          design = Path('docs/assignment/SDD/design-map.yaml')
+          text = design.read_text()
+          anchor = '''  CTR-ANALYSIS-HISTORY-ENTRY-001:\n    name: AnalysisHistoryEntry\n    owner: MOD-ANALYSIS-001\n    contains: [analysis_identity, customer_identity, operator_identity, generated_at, result, evidence_provenance]\n    invariants: [INV-HIST-001]\n'''
+          create = '''  CTR-ANALYSIS-HISTORY-CREATE-001:\n    name: AnalysisHistoryCreateCommand\n    owner: MOD-ANALYSIS-001\n    contains: [customer_identity, operator_identity, generated_at, result, evidence_provenance]\n    invariants: [INV-HIST-001]\n'''
+          if 'CTR-ANALYSIS-HISTORY-CREATE-001:' not in text:
+              text = text.replace(anchor, create + anchor)
+          text = text.replace('''  PRT-HISTORY-001:\n    name: AnalysisHistoryPort\n    owner: MOD-ANALYSIS-001\n    direction: outbound\n    stores: CTR-ANALYSIS-HISTORY-ENTRY-001\n    returns: CTR-ANALYSIS-HISTORY-ENTRY-001\n''', '''  PRT-HISTORY-001:\n    name: AnalysisHistoryPort\n    owner: MOD-ANALYSIS-001\n    direction: outbound\n    accepts: CTR-ANALYSIS-HISTORY-CREATE-001\n    returns: CTR-ANALYSIS-HISTORY-ENTRY-001\n''')
+          text = text.replace('''  FR-HIST-001:\n    elements: [MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001, INF-DB-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]\n''', '''  FR-HIST-001:\n    elements: [MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001, INF-DB-001, CTR-ANALYSIS-HISTORY-CREATE-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]\n''')
+          design.write_text(text)
+
+          domain = Path('docs/assignment/SDD/diagrams/domain-contracts.puml')
+          text = domain.read_text()
+          anchor = '''class OperatorId <<project value>> {\n  operatorIdentity\n}\n'''
+          addition = '''class AnalysisHistoryCreateCommand <<project command>> {\n  customerIdentity\n  operatorIdentity\n  generatedAt\n  result\n  evidenceProvenance\n}\nclass AnalysisHistoryEntry <<project contract>> {\n  analysisIdentity\n  customerIdentity\n  operatorIdentity\n  generatedAt\n  result\n  evidenceProvenance\n}\n'''
+          if 'class AnalysisHistoryCreateCommand' not in text:
+              text = text.replace(anchor, anchor + addition)
+          relation_anchor = 'AnalysisResult ..> OperatorId : persisted attribution\n'
+          relations = '''AnalysisHistoryCreateCommand ..> AnalysisResult : carries validated result\nAnalysisHistoryCreateCommand ..> OperatorId : carries generating operator\nAnalysisHistoryEntry ..> AnalysisHistoryCreateCommand : persisted form + generated identity\n'''
+          if 'AnalysisHistoryEntry ..> AnalysisHistoryCreateCommand' not in text:
+              text = text.replace(relation_anchor, relation_anchor + relations)
+          domain.write_text(text)
+
+          readme = Path('docs/assignment/SDD/README.md')
+          text = readme.read_text()
+          text = text.replace('`AnalysisHistoryEntry` is the project-owned history read/write projection:', '`AnalysisHistoryCreateCommand` is the project-owned history write input without a generated analysis identity. `AnalysisHistoryEntry` is the persisted/read projection:')
+          readme.write_text(text)
+          PY
+      - name: Render all SDD PlantUML views
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace plantuml/plantuml:1.2026.6 -tsvg docs/assignment/SDD/diagrams/*.puml
+      - name: Commit correction
+        run: |
+          git add docs/assignment/SDD
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: terminate ungrounded analysis and split history write contract'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
