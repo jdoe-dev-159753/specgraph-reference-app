@@ -16,16 +16,16 @@ package "Web client" {
 
 package "Spring Boot modular monolith" as Backend {
   component "Spring Security Boundary\nADP-AUTH-SPRING-001" as Auth
-  component "HTTP Adapter\nADP-HTTP-001" as Http
+  component "HTTP Adapter\nADP-HTTP-001\n<<GoF Adapter>>" as Http
 
   component "Identity Module\nMOD-IDENTITY-001" as Identity
   component "Customer Module\nMOD-CUSTOMER-001" as Customer
   component "Risk Module\nMOD-RISK-001" as Risk
-  component "Analysis Module\nMOD-ANALYSIS-001" as Analysis
+  component "Analysis Module\nMOD-ANALYSIS-001\napplication-service facade" as Analysis
 
-  interface "CustomerActivityPort\nPRT-ACTIVITY-001" as ActivityPort
-  interface "PolicyKnowledgePort\nPRT-POLICY-001" as PolicyPort
-  interface "AnalysisModelPort\nPRT-MODEL-001" as ModelPort
+  interface "CustomerActivityPort\nPRT-ACTIVITY-001\n<<Strategy seam>>" as ActivityPort
+  interface "PolicyKnowledgePort\nPRT-POLICY-001\n<<Strategy seam>>" as PolicyPort
+  interface "AnalysisModelPort\nPRT-MODEL-001\n<<Strategy seam>>" as ModelPort
   interface "AnalysisHistoryPort\nPRT-HISTORY-001" as HistoryPort
 
   Identity -[hidden]right-> Customer
@@ -37,13 +37,13 @@ package "Spring Boot modular monolith" as Backend {
 }
 
 package "Replaceable adapters" as Adapters {
-  component "Synthetic Activity\nADP-ACT-SYN-001\nR0/R1" as ActivitySynthetic
-  component "JPA Activity\nADP-ACT-JPA-001\nR2" as ActivityJpa
-  component "Static Policy\nADP-POL-STATIC-001\nR0" as PolicyStatic
-  component "pgvector Policy\nADP-POL-PGV-001\nR4" as PolicyPg
-  component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3" as ModelDet
-  component "Spring AI Model\nADP-MODEL-AI-001\nR4 optional" as ModelAi
-  component "JPA Analysis History\nADP-HIST-JPA-001\nR3" as HistoryJpa
+  component "Synthetic Activity\nADP-ACT-SYN-001\nR0/R1\n<<GoF Adapter>>" as ActivitySynthetic
+  component "JPA Activity\nADP-ACT-JPA-001\nR2\n<<GoF Adapter>>" as ActivityJpa
+  component "Static Policy\nADP-POL-STATIC-001\nR0\n<<GoF Adapter>>" as PolicyStatic
+  component "pgvector Policy\nADP-POL-PGV-001\nR4\n<<GoF Adapter>>" as PolicyPg
+  component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3\n<<GoF Adapter>>" as ModelDet
+  component "Spring AI Model\nADP-MODEL-AI-001\nR4 optional\n<<GoF Adapter>>" as ModelAi
+  component "JPA Analysis History\nADP-HIST-JPA-001\nR3\n<<GoF Adapter>>" as HistoryJpa
 
   ActivitySynthetic -[hidden]right-> ActivityJpa
   ActivityJpa -[hidden]right-> PolicyStatic
@@ -62,7 +62,7 @@ Auth --> Http : operator context
 Auth --> Identity
 Http --> Customer
 Http --> Risk
-Http --> Analysis
+Http --> Analysis : coarse-grained use case
 
 Customer --> ActivityPort
 Risk --> ActivityPort
@@ -86,7 +86,9 @@ ModelAi ..> Provider : HTTPS
 
 note bottom of Backend
   UML Component diagram: components and provided/required interfaces show structural
-  dependencies. Transport is annotated only where a relationship crosses a runtime
-  boundary; the internal application seams are in-process.
+  dependencies. GoF Adapter labels identify boundary translation roles; Strategy seams
+  identify ports with interchangeable implementations; the analysis application service
+  acts as a Facade over orchestration. These patterns support the hexagonal style rather
+  than defining it. Transport is annotated only across real runtime boundaries.
 end note
 @enduml
