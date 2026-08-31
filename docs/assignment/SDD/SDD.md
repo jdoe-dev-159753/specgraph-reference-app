@@ -4,7 +4,7 @@
 **Design map:** [`design-map.yaml`](design-map.yaml)  
 **Normative requirements:** [`CAA-SRS-001`](../SRS/SRS.md)  
 **Machine-readable requirements:** [`requirements.yaml`](../SRS/requirements.yaml)  
-**Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md)  
+**Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md)  
 **Verification strategy:** [`CAA-VV-001`](../VV/VV.md)
 
 This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. [`design-map.yaml`](design-map.yaml) remains the machine-readable requirement-to-design mapping. PlantUML and Graphviz/DOT text files in [`diagrams/`](diagrams/) are the maintainable semantic sources for UML and architecture figures; rendered SVG files are generated views embedded below.
@@ -48,7 +48,7 @@ Detailed Sequence diagrams remain available as supplementary design sources wher
 
 - [`CAA-SRS-001`](../SRS/SRS.md) owns normative requirements, invariants, assumptions and acceptance criteria.
 - [`requirements.yaml`](../SRS/requirements.yaml) owns machine-readable requirement identity, provenance and acceptance links.
-- [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), and [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md) own independently reviewable architecture decisions.
+- [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), and [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md) own independently reviewable architecture decisions.
 - [`design-map.yaml`](design-map.yaml) owns the current mapping from requirements to design elements, ports, adapters, ADRs and delivery rings.
 - PlantUML and Graphviz/DOT sources in [`diagrams/`](diagrams/) own diagram semantics; rendered SVG files are generated views.
 - implementation and executable verification become authoritative for their concrete behavior once introduced, but do not silently rewrite requirements or ADR rationale.
@@ -173,28 +173,31 @@ For reviewers who want message-level detail, the narrower supplementary Sequence
 
 ## Deployment and communication topology
 
-The runtime remains a modular monolith, not a static box. The deployment view distinguishes the operator device/browser, frontend execution environment, Spring Boot API execution environment, PostgreSQL/pgvector database node and optional external AI-provider node.
+The application remains a modular monolith at runtime. For R0/R1 reviewer packaging, React and the Spring MVC API are not independent deployed services: React is compiled before runtime, copied into Spring Boot classpath static resources, and packaged into the same executable JAR as the Java application. Embedded Tomcat is therefore the single HTTP execution environment for both browser assets and `/api/*` endpoints.
 
-![Figure 10 — UML Deployment diagram — runtime nodes and communication paths](diagrams/deployment-topology.svg)
+![Figure 10 — UML Deployment diagram — packaged runtime and optional external nodes](diagrams/deployment-topology.svg)
 
-**Figure 10 — UML Deployment diagram — runtime nodes and communication paths.** UML Nodes/ExecutionEnvironments and Artifacts describe the Docker Compose baseline. The `Docker Compose / Linux host` node may be the reviewer's local machine or a dedicated Docker-capable demonstration VM; that placement does not change the application topology. Browser → frontend uses HTTP; frontend → API uses HTTP/JSON over the Compose network; API → PostgreSQL uses JDBC/PostgreSQL over the private Compose network; the optional external provider is HTTPS only when explicitly configured.
+**Figure 10 — UML Deployment diagram — packaged runtime and optional external nodes.** The `Docker Compose / Linux host` contains one R0/R1 application container. Its Java 21 runtime executes one Spring Boot JAR; embedded Tomcat serves the built React assets at `/` and Spring MVC endpoints at `/api/*` on the same host-published port. PostgreSQL/pgvector remains a later-ring Compose service when R2+ persistence is activated, and the external AI provider remains optional behind the provider-neutral adapter seam. No frontend-to-API network hop exists inside the R0/R1 package.
 
 [PlantUML source](diagrams/deployment-topology.puml)
 
-Local execution remains the mandatory baseline defined by [`ASM-DEP-001`](../SRS/SRS.md#asm-dep-001--local-execution-is-the-mandatory-deployment-baseline). For reviewer demonstration, the same Compose topology may run on a dedicated Docker-capable VM. The externally reachable host is not an application dependency and is therefore supplied as `DEMO_URL` configuration rather than hard-coded into source or design. This preserves `AMB-DEP-001`: the assignment still does not prescribe a production deployment target.
+Figure 10 is the deployment shape of **one checkpoint instance**. The J1 reviewer comparison instantiates that same shape twice on one Docker host: the R0 image maps container Tomcat `:8080` to host `:8080`, while the R1 image maps container Tomcat `:8080` to host `:8081`. The two instances are complete product checkpoints, not REST API contract versions; using separate host ports deliberately avoids introducing a reverse proxy or `/r0`/`/r1` context-path layer solely for presentation. This side-by-side topology lets a reviewer keep the hollow R0 shell and the first MANDATORY R1 slice open simultaneously while preserving identical package/runtime boundaries.
 
-The human demo entry point is part of `INF-COMPOSE-001`: the frontend launcher waits until the backend health endpoint responds, starts Vite, verifies the served frontend itself responds, then prints `Demo ready: <URL>`. The default URL is `http://localhost:5173/`; a remote demonstration profile supplies the browser-reachable VM URL. A reviewer can therefore Ctrl-click the terminal link only after both application-facing services are ready rather than translating a container address or guessing whether startup has finished.
+Local execution remains the mandatory baseline defined by [`ASM-DEP-001`](../SRS/SRS.md#asm-dep-001--local-execution-is-the-mandatory-deployment-baseline). The same single-image Compose topology may run on a dedicated Docker-capable reviewer VM or VPS-style host. The externally reachable host is not an application dependency and is supplied through host-local `DEMO_HOST`, `R0_PORT`, `R1_PORT` and optional full-URL overrides rather than hard-coded into source or design. This preserves `AMB-DEP-001`: the assignment still does not prescribe a production deployment target.
 
-Foreground `docker compose up` is the interactive demonstration mode. `docker compose up -d` is the detached/persistent mode for the same topology. Neither mode creates a second deployment architecture.
+The human demo entry point is part of `INF-COMPOSE-001`: `./scripts/demo-up.sh` pulls both prebuilt checkpoint images, starts R0 and R1 detached with `--no-build`, waits for both healthchecks, then prints `R0 ready: <URL>` and `R1 ready: <URL>`. The default host mappings are R0 `:8080` and R1 `:8081`; a reviewer host may configure browser-reachable addressing once in the untracked `.env.demo`. Individual `r0`/`r1` script modes remain diagnostic conveniences rather than the nominal presentation path.
 
-A reverse proxy is deliberately **not** part of the J1 baseline design. TLS termination, ingress routing, DNS, load balancing or router forwarding can be introduced by a future concrete deployment decision, but they are not hidden prerequisites for local execution, CI verification or the dedicated-VM demo profile.
+This packaging decision is controlled by [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md). Node/Vite and Maven are build-stage tools, not persistent reviewer runtimes. A separate Caddy/nginx frontend service or reverse proxy was explicitly rejected for J1 because React does not need an independent runtime process here. Embedded Tomcat already owns the required HTTP serving boundary.
+
+TLS termination, ingress routing, DNS, load balancing or router forwarding remain deployment-profile concerns. They can be introduced by a future concrete public-deployment decision but are not hidden prerequisites for local execution, CI verification or the dedicated-VM demo profile.
 
 Communication semantics are explicit where known:
 
-- browser ↔ frontend service: HTTP through the host-published frontend port in the mandatory local baseline or configured VM demo profile;
-- frontend ↔ Spring Boot API: HTTP/JSON over the Compose service network;
-- Spring Boot ↔ PostgreSQL/pgvector: JDBC/PostgreSQL protocol over private TCP;
-- Spring Boot ↔ optional external AI provider: HTTPS provider API;
+- browser ↔ embedded Tomcat: HTTP through the host-published checkpoint port (R0 `8080`, R1 `8081` by default; container port `8080` in both cases);
+- embedded Tomcat ↔ built React assets: same-process static-resource serving from the executable JAR, with no network transport;
+- React browser code ↔ Spring MVC `/api/*`: same-origin HTTP to the same Tomcat process;
+- Spring Boot ↔ PostgreSQL/pgvector: JDBC/PostgreSQL protocol over private TCP when the relational adapter is activated in R2+;
+- Spring Boot ↔ optional external AI provider: HTTPS provider API when explicitly configured;
 - module/port interactions within the modular monolith: in-process calls.
 
 No WebSocket, event broker, FIFO, Redis, separate identity service or other transport/process is introduced merely to make the architecture look more distributed.
@@ -243,14 +246,15 @@ A later ring substitutes infrastructure behind stable seams. It does not introdu
 
 ## ADR consistency
 
-The current design remains consistent with the four accepted architecture decisions:
+The current design remains consistent with the five accepted architecture decisions:
 
 - [`ADR-001 — Modular monolith with hexagonal boundaries`](../ADR/ADR-001-modular-monolith-hexagonal.md);
 - [`ADR-002 — Provider-neutral analysis`](../ADR/ADR-002-provider-neutral-analysis.md);
 - [`ADR-003 — PostgreSQL + pgvector persistence`](../ADR/ADR-003-postgresql-pgvector-persistence.md);
-- [`ADR-004 — Baseline Java/Spring/React web stack`](../ADR/ADR-004-baseline-web-stack.md).
+- [`ADR-004 — Baseline Java/Spring/React web stack`](../ADR/ADR-004-baseline-web-stack.md);
+- [`ADR-005 — Prebuilt single-image reviewer packaging`](../ADR/ADR-005-prebuilt-demo-container-packaging.md).
 
-The contract refinements made during design review, including the split between `AnalysisHistoryCreateCommand` and `AnalysisHistoryEntry`, refine those decisions rather than introducing a new architectural decision. The explicit Adapter/Strategy/Facade mapping likewise restores inception intent inside the accepted architectural decisions rather than creating an extra ADR solely for pattern terminology.
+The contract refinements made during design review, including the split between `AnalysisHistoryCreateCommand` and `AnalysisHistoryEntry`, refine the application design without invalidating those decisions. The explicit Adapter/Strategy/Facade mapping restores inception intent inside the accepted architectural decisions, while ADR-005 separately records the concrete packaging boundary because moving from development-process containers to one executable-JAR runtime is a durable deployment decision rather than mere terminology.
 
 ## Review criterion
 
@@ -265,6 +269,6 @@ A reviewer should be able to answer from this document, without reconstructing P
 - how the supplied relational schema and exact source types map into those contracts;
 - how the principal successful and failure workflows execute;
 - where each network or persistence protocol actually occurs;
-- how one Compose topology supports mandatory local execution, CI verification and the dedicated-VM browser demo without introducing unjustified infrastructure;
+- how one prebuilt Spring Boot image shape supports two simultaneously runnable reviewer checkpoints (R0 and R1) without adding a frontend runtime or routing tier;
 - how the R0–R5 concentric delivery rings extend one architecture;
 - which accepted ADR explains each major design choice.

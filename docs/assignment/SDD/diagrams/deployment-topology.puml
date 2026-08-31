@@ -1,5 +1,5 @@
 @startuml
-title Figure 10 — UML Deployment diagram — runtime nodes and communication paths
+title Figure 10 — UML Deployment diagram — packaged runtime and optional external nodes
 top to bottom direction
 skinparam linetype polyline
 skinparam nodesep 45
@@ -10,32 +10,34 @@ node "Operator device" as Device <<device>> {
 }
 
 node "Docker Compose / Linux host" as Host <<executionEnvironment>> {
-  node "frontend service / container" as Web <<executionEnvironment>> {
-    artifact "React operator UI" as React
-  }
-
-  node "API service / container" as Api <<executionEnvironment>> {
-    artifact "Spring Boot modular monolith" as Spring
+  node "application service / container" as App <<executionEnvironment>> {
+    node "embedded Tomcat 11" as Tomcat <<executionEnvironment>> {
+      artifact "React static assets\nclasspath /static" as React
+      artifact "Spring MVC /api/*" as Api
+    }
+    artifact "Spring Boot executable JAR" as Jar
     artifact "Offline adapters\nStaticPolicyAdapter +\nDeterministicAnalysisStub" as Offline
   }
 
-  node "database service / container" as DB <<database>> {
+  node "database service / container\nR2+ when activated" as DB <<database>> {
     artifact "PostgreSQL + pgvector" as PostgreSQL
   }
 }
 
-node "External AI provider" as Provider <<external>>
+node "External AI provider\noptional later-ring adapter" as Provider <<external>>
 
-Browser --> Web : HTTP\nlocal baseline
-Web --> Api : HTTP/JSON /api/*\nCompose private network
-Api --> DB : JDBC / PostgreSQL\nTCP 5432 private network
+Browser --> Tomcat : HTTP :8080\nhost-published application port
+Tomcat --> React : static /
+Tomcat --> Api : in-process /api/*
+Jar --> Tomcat : packaged runtime
+Api --> DB : JDBC / PostgreSQL\nTCP 5432 private network when activated
 Api ..> Provider : HTTPS provider API\nonly when explicitly configured
-Api --> Offline : in-process baseline path
+Api --> Offline : in-process mandatory baseline path
 
 note bottom of Host
-  The mandatory baseline is local and does not require a reverse proxy.
-  TLS termination, ingress, load balancing, or a reverse proxy are deployment-specific
-  concerns and are intentionally not prescribed while AMB-DEP-001 remains unresolved.
-  No WebSocket, broker, FIFO, Redis, or separate identity service is assumed.
+  R0/R1 reviewer packaging exposes one application container and one browser-facing port.
+  React is compiled before runtime and served from the executable JAR by embedded Tomcat.
+  PostgreSQL and the external provider activate only in later rings when configured.
+  TLS termination, ingress, load balancing, and public DNS remain deployment-profile concerns.
 end note
 @enduml

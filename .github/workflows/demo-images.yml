@@ -1,0 +1,182 @@
+name: demo-images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/**'
+      - 'compose.yaml'
+      - 'scripts/**'
+      - '.github/workflows/demo-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-test-publish:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    env:
+      APP_PACKAGE: ghcr.io/${{ github.repository_owner }}/specgraph-reference-app
+      COMPOSE_PROJECT_NAME: specgraph-demo-images-${{ github.run_id }}
+      DEMO_HOST: 127.0.0.1
+      R0_PORT: '8080'
+      R1_PORT: '8081'
+    steps:
+      - name: Checkout packaging authority
+        uses: actions/checkout@v7
+        with:
+          path: packaging
+          persist-credentials: false
+
+      - name: Checkout R0 source checkpoint
+        uses: actions/checkout@v7
+        with:
+          ref: demo/r0
+          path: packaging/checkpoints/r0
+          persist-credentials: false
+
+      - name: Checkout R1 source checkpoint
+        uses: actions/checkout@v7
+        with:
+          ref: demo/r1
+          path: packaging/checkpoints/r1
+          persist-credentials: false
+
+      - name: Build checkpoint images locally
+        working-directory: packaging
+        run: |
+          r0_sha="$(git -C checkpoints/r0 rev-parse HEAD)"
+          r1_sha="$(git -C checkpoints/r1 rev-parse HEAD)"
+          echo "R0_SHA=$r0_sha" >> "$GITHUB_ENV"
+          echo "R1_SHA=$r1_sha" >> "$GITHUB_ENV"
+
+          docker build -f docker/app.Dockerfile \
+            --build-arg SOURCE_ROOT=checkpoints/r0 \
+            --label "org.opencontainers.image.revision=$r0_sha" \
+            --label "dev.specgraph.checkpoint.revision=$r0_sha" \
+            --label "dev.specgraph.packaging.revision=$GITHUB_SHA" \
+            -t specgraph-reference-app:r0 .
+          docker build -f docker/app.Dockerfile \
+            --build-arg SOURCE_ROOT=checkpoints/r1 \
+            --label "org.opencontainers.image.revision=$r1_sha" \
+            --label "dev.specgraph.checkpoint.revision=$r1_sha" \
+            --label "dev.specgraph.packaging.revision=$GITHUB_SHA" \
+            -t specgraph-reference-app:r1 .
+
+      - name: Verify R0 and R1 side by side before publication
+        working-directory: packaging
+        env:
+          APP_R0_IMAGE: specgraph-reference-app:r0
+          APP_R1_IMAGE: specgraph-reference-app:r1
+        run: |
+          docker compose up -d --no-build r0 r1
+
+          r0_id="$(docker compose ps -q r0)"
+          r1_id="$(docker compose ps -q r1)"
+          for attempt in $(seq 1 90); do
+            r0_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$r0_id" 2>/dev/null || true)"
+            r1_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$r1_id" 2>/dev/null || true)"
+            if [ "$r0_health" = healthy ] && [ "$r1_health" = healthy ]; then
+              break
+            fi
+            if [ "$attempt" -eq 90 ]; then
+              docker compose ps
+              docker compose logs --no-color
+              exit 1
+            fi
+            sleep 2
+          done
+
+          curl -fsS http://127.0.0.1:8080/ >/dev/null
+          curl -fsS http://127.0.0.1:8081/ >/dev/null
+
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL=http://127.0.0.1:8081 \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test'
+
+          docker compose down --remove-orphans
+
+      - name: Authenticate to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Publish R0 and R1 checkpoint tags
+        run: |
+          r0_short="$(printf '%s' "$R0_SHA" | cut -c1-12)"
+          r1_short="$(printf '%s' "$R1_SHA" | cut -c1-12)"
+          packaging_short="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          r0_immutable="r0-${r0_short}-pkg-${packaging_short}"
+          r1_immutable="r1-${r1_short}-pkg-${packaging_short}"
+
+          docker tag specgraph-reference-app:r0 "$APP_PACKAGE:r0"
+          docker tag specgraph-reference-app:r0 "$APP_PACKAGE:$r0_immutable"
+          docker tag specgraph-reference-app:r1 "$APP_PACKAGE:r1"
+          docker tag specgraph-reference-app:r1 "$APP_PACKAGE:$r1_immutable"
+
+          r0_push="$(docker push "$APP_PACKAGE:$r0_immutable" 2>&1)"
+          printf '%s\n' "$r0_push"
+          r0_digest="$(printf '%s\n' "$r0_push" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -1)"
+          test -n "$r0_digest"
+          docker push "$APP_PACKAGE:r0"
+
+          r1_push="$(docker push "$APP_PACKAGE:$r1_immutable" 2>&1)"
+          printf '%s\n' "$r1_push"
+          r1_digest="$(printf '%s\n' "$r1_push" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -1)"
+          test -n "$r1_digest"
+          docker push "$APP_PACKAGE:r1"
+
+          echo "R0_IMMUTABLE=$r0_immutable" >> "$GITHUB_ENV"
+          echo "R1_IMMUTABLE=$r1_immutable" >> "$GITHUB_ENV"
+          echo "R0_DIGEST=$r0_digest" >> "$GITHUB_ENV"
+          echo "R1_DIGEST=$r1_digest" >> "$GITHUB_ENV"
+
+          {
+            echo '## Published reviewer checkpoint images'
+            echo
+            echo '| Checkpoint | Source revision | Packaging revision | Immutable tag | OCI digest |'
+            echo '| --- | --- | --- | --- | --- |'
+            printf '| R0 | `%s` | `%s` | `%s:%s` | `%s` |\n' "$R0_SHA" "$GITHUB_SHA" "$APP_PACKAGE" "$r0_immutable" "$r0_digest"
+            printf '| R1 | `%s` | `%s` | `%s:%s` | `%s` |\n' "$R1_SHA" "$GITHUB_SHA" "$APP_PACKAGE" "$r1_immutable" "$r1_digest"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prove day-of-demo command pulls published images
+        working-directory: packaging
+        run: |
+          docker compose down --remove-orphans || true
+          docker image rm -f \
+            specgraph-reference-app:r0 \
+            specgraph-reference-app:r1 \
+            "$APP_PACKAGE:r0" \
+            "$APP_PACKAGE:r1" \
+            "$APP_PACKAGE:$R0_IMMUTABLE" \
+            "$APP_PACKAGE:$R1_IMMUTABLE" || true
+
+          ./scripts/demo-up.sh
+
+          curl -fsS http://127.0.0.1:8080/ >/dev/null
+          curl -fsS http://127.0.0.1:8081/ >/dev/null
+
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL=http://127.0.0.1:8081 \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test'
+
+          docker inspect "$APP_PACKAGE:r0" --format '{{index .RepoDigests 0}}' | grep -F "@$R0_DIGEST"
+          docker inspect "$APP_PACKAGE:r1" --format '{{index .RepoDigests 0}}' | grep -F "@$R1_DIGEST"
+
+      - name: Cleanup checkpoint test deployments
+        if: always()
+        working-directory: packaging
+        run: |
+          ./scripts/demo-down.sh || true
+          docker logout ghcr.io || true
