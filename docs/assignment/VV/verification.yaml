@@ -23,7 +23,7 @@ verification_obligations:
   VFY-ANALYSIS-CONTRACT-001:
     covers: [FR-AI-001, FR-AI-002, INV-AI-001, CON-AI-001]
     acceptance: [AC-AI-001, AC-AI-002]
-    methods: [unit_property, port_contract, api_acceptance]
+    methods: [unit_property, port_contract, api_acceptance, ui_e2e]
     design: [MOD-ANALYSIS-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001]
     executable_evidence: discovered_by_markers
   VFY-RAG-001:
@@ -59,14 +59,14 @@ verification_obligations:
   VFY-DELIVERY-001:
     covers: [DEL-001, DEL-002, DEL-003, DEL-004]
     acceptance: []
-    methods: [repository_artifact_check, clean_checkout_compose, demo_human_validation, documentation_human_validation]
+    methods: [artifact_presence, link_validation, clean_checkout_compose, human_validation]
     design: [INF-COMPOSE-001]
-    executable_evidence: discovered_by_markers_or_human_evidence
+    executable_evidence: discovered_by_markers
 
 coverage_policy:
   normative_requirements_must_have_obligation: true
-  delivery_requirements_must_have_obligation: true
   acceptance_criteria_must_have_obligation: true
+  delivery_requirements_must_have_obligation: true
   unknown_requirement_reference_is_error: true
   unknown_design_reference_is_error: true
   structural_link_does_not_imply_semantic_adequacy: true
