@@ -9,7 +9,7 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@Tag("VFY-DETERMINISM-001")
+@Tag("architecture")
 class CustomerHttpBoundaryArchitectureTests {
     @Test
     void httpAdapterDependsOnInboundUseCaseAndNeverOnOutboundActivityPort() {
