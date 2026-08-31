@@ -7,12 +7,10 @@ skinparam nodesep 35
 skinparam ranksep 45
 
 actor "Customer Care\nOperator" as Operator
-component "React operator UI" as UI
-component "Spring Security +\nHTTP adapter" as Http
 
 package "Driving adapters" {
-  UI
-  Http
+  component "React operator UI" as UI
+  component "Spring Security +\nHTTP adapter" as Http
 }
 
 interface "Inbound application use cases\ncustomer review · analysis · history" as Inbound
