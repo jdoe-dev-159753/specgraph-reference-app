@@ -1,0 +1,94 @@
+@startuml
+title Figure 7 — UML Activity diagram — grounded analysis workflow
+skinparam linetype polyline
+skinparam activity {
+  BackgroundColor #F7F7F7
+  BorderColor #333333
+}
+
+|Customer Care Operator|
+start
+:Request analysis for selected customer;
+
+|React operator UI|
+:Submit protected analysis request;
+
+|Security / HTTP adapter|
+if (Authenticated?) then (no)
+  :Reject / redirect;
+  |React operator UI|
+  :Display authentication required;
+  |Customer Care Operator|
+  stop
+else (yes)
+  :Attach OperatorId;
+endif
+
+|Analysis application|
+:Load customer context through\nCustomerActivityPort;
+:Retrieve relevant knowledge through\nPolicyKnowledgePort;
+
+|Policy adapter|
+if (Relevant evidence available?) then (no)
+  :Return explicit no-evidence result;
+  |Analysis application|
+  :Create insufficient-grounding outcome;
+  |React operator UI|
+  :Display insufficient grounding;
+  |Customer Care Operator|
+  stop
+else (yes)
+  :Return PolicyEvidence with provenance;
+endif
+
+|Analysis application|
+:Invoke AnalysisModelPort with\ncustomer context + PolicyEvidence;
+
+|Model adapter|
+if (Execution/provider succeeds?) then (no)
+  :Return model failure;
+  |Analysis application|
+  :Create explicit analysis-failure outcome;
+  |React operator UI|
+  :Display analysis failure;
+  |Customer Care Operator|
+  stop
+else (yes)
+  :Return structured candidate;
+endif
+
+|Analysis application|
+:Validate AnalysisResult contract;
+if (Valid structured result?) then (no)
+  :Create explicit validation-failure outcome;
+  |React operator UI|
+  :Display invalid-analysis failure;
+  |Customer Care Operator|
+  stop
+else (yes)
+endif
+
+|History adapter|
+:Persist completed result through\nAnalysisHistoryPort;
+if (Persistence succeeds?) then (no)
+  :Return persistence failure;
+  |Analysis application|
+  :Do not claim retained history;
+  |React operator UI|
+  :Display persistence failure;
+  |Customer Care Operator|
+  stop
+else (yes)
+  :Return generated AnalysisHistoryEntry;
+endif
+
+|Analysis application|
+:Return completed grounded analysis;
+
+|React operator UI|
+:Render risk level, findings,\nrecommendations and provenance;
+
+|Customer Care Operator|
+:Review completed analysis;
+stop
+@enduml
