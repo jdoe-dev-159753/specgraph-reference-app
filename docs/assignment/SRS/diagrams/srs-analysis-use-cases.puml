@@ -1,18 +1,19 @@
 @startuml
+title Customer Activity Analytics — Analysis and history use cases
 left to right direction
-skinparam linetype ortho
-skinparam nodesep 45
-skinparam ranksep 55
 skinparam packageStyle rectangle
+skinparam shadowing false
 skinparam usecase {
   BackgroundColor<<MANDATORY>> #FFB3B3
   BackgroundColor<<MUST_HAVE>> #FFD699
+  BackgroundColor<<NICE_TO_HAVE>> #D6EAF8
 }
 
-actor "Customer Care Operator" as Operator
+actor "Customer Care\nOperator" as Operator
+actor "Customer\n<<business stakeholder>>" as Customer
 
-rectangle "Customer Activity Analytics" as SystemBoundary {
-  package "AI-assisted analysis" {
+rectangle "Customer Activity Analytics\n<<system boundary>>" as SystemBoundary {
+  package "AI-assisted customer analysis" {
     usecase "Request AI Analysis\n[FR-AI-001]" as UC_Request <<MANDATORY>>
     usecase "Build Customer Analysis Context" as UC_Context <<MANDATORY>>
     usecase "Retrieve Relevant Policy Knowledge\n[FR-RAG-001]" as UC_RAG <<MUST_HAVE>>
@@ -20,45 +21,52 @@ rectangle "Customer Activity Analytics" as SystemBoundary {
     usecase "Persist Completed Analysis\n[FR-HIST-001]" as UC_Persist <<MUST_HAVE>>
   }
 
-  package "Analysis history" {
+  package "Analysis history review" {
     usecase "Review Previous Analyses\n[FR-HIST-002]" as UC_History <<MUST_HAVE>>
+    usecase "List Prior Analyses" as UC_List <<MUST_HAVE>>
+    usecase "Inspect Prior Analysis" as UC_Inspect <<MUST_HAVE>>
   }
 
   UC_Request .> UC_Context : <<include>>
   UC_Request .> UC_RAG : <<include>>
+  UC_Result .> UC_Request : <<extend>>\n[valid structured result produced]
   UC_Persist .> UC_Result : <<extend>>\n[valid completed result]
-
-  UC_Context -[hidden]-> UC_RAG
-  UC_RAG -[hidden]-> UC_Result
-  UC_Result -[hidden]-> UC_Persist
+  UC_History .> UC_List : <<include>>
+  UC_Inspect .> UC_History : <<extend>>\n[analysis selected]
 }
 
 Operator -- UC_Request
 Operator -- UC_History
+Customer ..> UC_Request : <<business subject>>
+Customer ..> UC_History : <<business subject>>
 
 note right of UC_Result
-  Successful completion contract:
-  * risk level
-  * non-empty findings summary
-  * one or more recommendations
-  Negative execution paths are shown in the activity view.
+  Successful result contract:
+  risk level + non-empty findings summary + recommendations.
+  This view does not state whether an explicitly ungrounded mode may produce
+  such a result; AMB-RAG-001 remains unresolved.
 end note
 
 note bottom of UC_Request
-  Protected capability.
-  Context construction and grounding retrieval are always attempted.
-  This use-case view does not resolve AMB-RAG-001 minimum-grounding policy.
+  Protected capability. Context construction and policy retrieval are attempted.
+  No use-case relation here resolves AMB-RAG-001 beyond accepted SRS semantics.
 end note
 
-note right of UC_RAG
-  Retrieved policy evidence must be real corpus evidence;
-  absence or provider failure must not be disguised as
-  successful grounding.
+note right of Customer
+  Customer is the subject whose activity is analyzed and retained.
+  The source does not specify direct customer access to the operator application.
 end note
 
 legend bottom
+  |= Notation |= Meaning |
+  | Solid actor association | Direct system interaction |
+  | Dashed <<business subject>> dependency | Business stakeholder/context only; not UI interaction |
+  | <<include>> | Mandatory reused behaviour |
+  | <<extend>> | Conditional behaviour inserted under the stated guard |
+  | Package | Logical grouping inside the system boundary |
   |= Colour |= Delivery priority |
   |<#FFB3B3> | MANDATORY |
   |<#FFD699> | MUST_HAVE |
+  |<#D6EAF8> | NICE_TO_HAVE |
 endlegend
 @enduml

@@ -1,65 +1,70 @@
 @startuml
+title Customer Activity Analytics — Customer review use cases
 left to right direction
-skinparam linetype ortho
-skinparam nodesep 45
-skinparam ranksep 55
 skinparam packageStyle rectangle
+skinparam shadowing false
 skinparam usecase {
   BackgroundColor<<MANDATORY>> #FFB3B3
   BackgroundColor<<MUST_HAVE>> #FFD699
+  BackgroundColor<<NICE_TO_HAVE>> #D6EAF8
 }
 
-actor "Customer Care Operator" as Operator
+actor "Customer Care\nOperator" as Operator
+actor "Customer\n<<business stakeholder>>" as Customer
 
-rectangle "Customer Activity Analytics" as SystemBoundary {
-  package "Access and selection" {
+rectangle "Customer Activity Analytics\n<<system boundary>>" as SystemBoundary {
+  package "Identity and customer selection" {
     usecase "Authenticate Operator\n[FR-AUTH-001]" as UC_Auth <<MUST_HAVE>>
     usecase "Search Customer by ID\n[FR-CUST-001]" as UC_Search <<MANDATORY>>
   }
 
-  package "Customer review" {
+  package "Customer activity review" {
     usecase "Review Customer Dashboard\n[FR-ACT-001]" as UC_Dashboard <<MANDATORY>>
     usecase "Review Customer Activity\n[FR-ACT-001]" as UC_Activity <<MANDATORY>>
     usecase "Review CARD Activity\n[FR-ACT-002]" as UC_Card <<MANDATORY>>
     usecase "Review PAYMENT Activity\n[FR-ACT-002]" as UC_Payment <<MANDATORY>>
     usecase "Review CRYPTO Activity\n[FR-ACT-002]" as UC_Crypto <<MANDATORY>>
+  }
+
+  package "Risk evidence review" {
     usecase "Review Risk Evidence\n[FR-RISK-001]" as UC_Risk <<MANDATORY>>
   }
 
   UC_Dashboard .> UC_Activity : <<include>>
   UC_Dashboard .> UC_Risk : <<include>>
-
   UC_Card -|> UC_Activity
   UC_Payment -|> UC_Activity
   UC_Crypto -|> UC_Activity
-
-  UC_Auth -[hidden]-> UC_Search
-  UC_Activity -[hidden]-> UC_Risk
-  UC_Card -[hidden]-> UC_Payment
-  UC_Payment -[hidden]-> UC_Crypto
 }
 
 Operator -- UC_Auth
 Operator -- UC_Search
 Operator -- UC_Dashboard
-
-note right of UC_Activity
-  Standard UML use-case generalization:
-  CARD, PAYMENT and CRYPTO review specialize
-  the common customer-activity behaviour.
-  The relation is semantic; hidden links above
-  influence layout only.
-end note
+Customer ..> UC_Dashboard : <<business subject>>
+Customer ..> UC_Activity : <<business subject>>
 
 note bottom of UC_Dashboard
-  Protected capability.
-  Authentication is a precondition, not a repeated
-  decorative <<include>> from every protected use case.
+  Protected capability: authentication is a precondition,
+  not a decorative <<include>> repeated from every use case.
+end note
+
+note right of Customer
+  The assignment specifies an operator-facing application.
+  Customer is the business stakeholder and subject of review;
+  no direct customer interaction with this application is implied.
 end note
 
 legend bottom
+  |= Notation |= Meaning |
+  | Solid actor association | Direct system interaction |
+  | Dashed <<business subject>> dependency | Business stakeholder/context only; not UI interaction |
+  | <<include>> | Mandatory reused behaviour |
+  | <<extend>> | Conditional behaviour inserted under a stated condition |
+  | Generalization arrow | Specialized use case inherits common behaviour |
+  | Package | Logical grouping inside the system boundary |
   |= Colour |= Delivery priority |
   |<#FFB3B3> | MANDATORY |
   |<#FFD699> | MUST_HAVE |
+  |<#D6EAF8> | NICE_TO_HAVE |
 endlegend
 @enduml
