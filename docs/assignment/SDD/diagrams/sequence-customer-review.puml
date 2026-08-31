@@ -1,42 +1,44 @@
 @startuml
+title Figure 5 — Authenticated customer review
 hide footbox
+skinparam maxMessageSize 52
+
 actor Operator
 participant "React UI" as UI
-participant "Spring Security\nboundary" as Auth
-participant "HTTP adapter" as Http
-participant "customer/risk\napplication" as App
+participant "Security + HTTP\nboundary" as Boundary
+participant "Customer / Risk\napplication" as App
 participant "CustomerActivityPort" as Port
-participant "SyntheticActivityAdapter" as Stub
-participant "JpaCustomerActivityAdapter" as Jpa
+participant "Activity adapter" as Adapter
 database "PostgreSQL" as DB
 
-Operator -> UI : authenticate and enter Customer ID
-UI -> Auth : protected HTTP request
+Operator -> UI : authenticate + enter Customer ID
+UI -> Boundary : protected GET [HTTP/JSON]
 alt unauthenticated
-  Auth --> UI : 401/redirect; no customer capability
+  Boundary --> UI : 401 / redirect
+  UI --> Operator : authentication required
 else authenticated
-  Auth -> Http : operator context + request
-  Http -> App : lookup(customerId) [in-process]
-  App -> Port : loadSnapshot(customerId) [in-process]
-  alt R1 synthetic path
-    Port -> Stub : loadSnapshot(customerId)
-    Stub --> Port : CustomerSnapshot / not-found
-  else R2+ relational path
-    Port -> Jpa : loadSnapshot(customerId)
-    Jpa -> DB : JDBC / PostgreSQL queries
-    DB --> Jpa : transaction + specialization + risk rows
-    Jpa --> Port : CustomerSnapshot / not-found
+  Boundary -> App : lookup(customerId, operator) [in-process]
+  App -> Port : loadSnapshot(customerId)
+  alt R1 synthetic adapter
+    Port -> Adapter : SyntheticActivityAdapter.loadSnapshot
+    Adapter --> Port : CustomerSnapshot / not-found
+  else R2+ relational adapter
+    Port -> Adapter : JpaCustomerActivityAdapter.loadSnapshot
+    Adapter -> DB : JDBC activity + risk queries
+    DB --> Adapter : source rows
+    Adapter --> Port : CustomerSnapshot / not-found
   end
+
   alt customer exists
     Port --> App : CustomerSnapshot
-    App --> Http : customer/activity/risk projection
-    Http --> UI : 200 JSON dashboard data
-    UI --> Operator : CARD/PAYMENT/CRYPTO + risk evidence
+    App --> Boundary : activity + risk projection
+    Boundary --> UI : 200 JSON
+    UI --> Operator : CARD / PAYMENT / CRYPTO + risk evidence
   else unknown Customer ID
     Port --> App : not-found
-    App --> Http : explicit not-found
-    Http --> UI : 404 / domain not-found response
-    UI --> Operator : customer not found; no fabrication
+    App --> Boundary : explicit not-found
+    Boundary --> UI : 404
+    UI --> Operator : customer not found
   end
 end
 @enduml
