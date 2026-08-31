@@ -20,11 +20,6 @@ jobs:
         with:
           ref: docs/sdd-readable-figures
           persist-credentials: true
-      - name: Reconcile authored-SVG documentation note
-        shell: bash
-        run: |
-          sed -i 's|PlantUML files in \[`diagrams/`\](diagrams/) are the semantic sources for UML and architecture figures, and their SVG files are generated views embedded below.|PlantUML files in [`diagrams/`](diagrams/) are the semantic sources for UML and most architecture figures, with generated SVG views embedded below. Figure 11 is an authored SVG because its defining geometry is genuinely concentric rather than a graph layout.|' docs/assignment/SDD/SDD.md
-          sed -i 's|\[PlantUML source\](diagrams/delivery-rings.puml)|[Authored SVG source](diagrams/delivery-rings.svg)|' docs/assignment/SDD/SDD.md
       - name: Render SDD PlantUML to SVG
         shell: bash
         run: |
@@ -33,12 +28,12 @@ jobs:
             -w /workspace \
             plantuml/plantuml:1.2026.6 \
             -tsvg docs/assignment/SDD/diagrams/*.puml
-      - name: Commit reconciled document and rendered SVGs
+      - name: Commit rendered SVGs
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/assignment/SDD/SDD.md docs/assignment/SDD/diagrams/*.svg
+          git add docs/assignment/SDD/diagrams/*.svg
           git diff --cached --check
           if git diff --cached --quiet; then
             echo "No rendered changes"
