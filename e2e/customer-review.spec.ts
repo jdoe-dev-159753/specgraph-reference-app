@@ -67,6 +67,8 @@ test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testI
     await expect(item).toContainText(evidence.ruleId)
     await expect(item).toContainText(evidence.transactionId)
     await expect(item).toContainText(`+${evidence.scoreContribution}`)
+    await expect(page.getByTestId(`risk-evidence-${evidence.transactionId}-${evidence.ruleId}-time`))
+      .toHaveAttribute('data-triggered-at', evidence.triggeredAt)
   }
 
   await page.screenshot({ path: testInfo.outputPath('r1-customer-review.png'), fullPage: true })
