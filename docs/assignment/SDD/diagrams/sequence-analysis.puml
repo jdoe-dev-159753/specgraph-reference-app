@@ -54,22 +54,34 @@ else relevant evidence available
     LiveAdapter --> Model : structured candidate / failure
   end
   Model --> Analysis : candidate AnalysisResult / failure
-  Analysis -> Analysis : validate structured result
-  Analysis -> History : persist(AnalysisHistoryCreateCommand)
-  History -> HistoryAdapter : dispatch [in-process]
-  HistoryAdapter -> DB : JDBC INSERT analysis history
-  DB --> HistoryAdapter : persisted + generated identity
-  HistoryAdapter --> History : AnalysisHistoryEntry
-  History --> Analysis : AnalysisHistoryEntry
-  Analysis --> Http : completed structured analysis
-  Http --> UI : 200 JSON
-  UI --> Operator : risk level + findings + recommendations + provenance
+  alt model execution or provider failure
+    Analysis --> Http : explicit analysis failure
+    Http --> UI : failed analysis response
+    UI --> Operator : analysis not completed or retained
+  else candidate returned
+    Analysis -> Analysis : validate structured result
+    alt invalid structured result
+      Analysis --> Http : explicit result-validation failure
+      Http --> UI : failed analysis response
+      UI --> Operator : invalid result not completed or retained
+    else valid structured result
+      Analysis -> History : persist(AnalysisHistoryCreateCommand)
+      History -> HistoryAdapter : dispatch [in-process]
+      HistoryAdapter -> DB : JDBC INSERT analysis history
+      DB --> HistoryAdapter : persisted + generated identity
+      HistoryAdapter --> History : AnalysisHistoryEntry
+      History --> Analysis : AnalysisHistoryEntry
+      Analysis --> Http : completed structured analysis
+      Http --> UI : 200 JSON
+      UI --> Operator : risk level + findings + recommendations + provenance
+    end
+  end
 end
 
 note over Policy,Model
   Application-facing ports remain project-owned boundaries. Static/deterministic
   adapters provide the offline path; pgvector/live-provider adapters are R4
-  substitutions. No-evidence terminates this grounded flow explicitly; it does
-  not invent a future policy for a separately specified ungrounded mode.
+  substitutions. No-evidence, model failure and invalid structured output do
+  not fall through into completed/persisted history.
 end note
 @enduml
