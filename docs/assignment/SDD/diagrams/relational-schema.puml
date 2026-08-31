@@ -1,74 +1,82 @@
 @startuml
+left to right direction
 hide methods
-skinparam linetype ortho
+skinparam linetype polyline
+skinparam nodesep 35
+skinparam ranksep 45
 
-entity customers <<project minimal / ASM-DATA-001>> {
-  * customer_id : UUID <<PK>>
+package "Source activity / risk relations" <<SRC-001>> {
+  entity transactions {
+    * transaction_id : UUID <<PK>>
+    --
+    customer_id : UUID <<FK>>
+    activity_type : CARD|PAYMENT|CRYPTO
+    amount
+    currency
+    status
+    created_at
+  }
+  entity card_activity {
+    * transaction_id : UUID <<PK,FK>>
+    --
+    masked_pan
+    card_type
+    merchant / mcc
+    card_present
+    authorization_code
+    decline_reason [optional]
+  }
+  entity payment_activity {
+    * transaction_id : UUID <<PK,FK>>
+    --
+    payment_method
+    sender_account
+    receiver_account
+    receiver_bank_country
+  }
+  entity crypto_activity {
+    * transaction_id : UUID <<PK,FK>>
+    --
+    blockchain
+    source_wallet
+    destination_wallet
+    transaction_hash
+    exchange_name [optional]
+  }
+  entity risk_rules {
+    * source rule key
+    --
+    name
+    applicable_activity_family
+    threshold_logic
+    default_weight
+  }
+  entity risk_assessments {
+    * source assessment key
+    --
+    transaction reference <<FK>>
+    risk_rule reference <<FK>>
+    trigger_time
+    score_contribution
+  }
 }
-entity transactions <<SRC-001>> {
-  * transaction_id : UUID <<PK>>
-  --
-  customer_id : UUID <<FK>>
-  activity_type : CARD|PAYMENT|CRYPTO
-  amount
-  currency
-  status
-  created_at
-}
-entity card_activity <<SRC-001>> {
-  * transaction_id : UUID <<PK,FK>>
-  --
-  masked_pan
-  card_type
-  merchant / mcc
-  card_present
-  authorization_code
-  decline_reason [optional]
-}
-entity payment_activity <<SRC-001>> {
-  * transaction_id : UUID <<PK,FK>>
-  --
-  payment_method
-  sender_account
-  receiver_account
-  receiver_bank_country
-}
-entity crypto_activity <<SRC-001>> {
-  * transaction_id : UUID <<PK,FK>>
-  --
-  blockchain
-  source_wallet
-  destination_wallet
-  transaction_hash
-  exchange_name [optional]
-}
-entity risk_rules <<SRC-001>> {
-  * source rule key
-  --
-  name
-  applicable_activity_family
-  threshold_logic
-  default_weight
-}
-entity risk_assessments <<SRC-001>> {
-  * source assessment key
-  --
-  transaction reference <<FK>>
-  risk_rule reference <<FK>>
-  trigger_time
-  score_contribution
-}
-entity analysis_history <<project extension / ASM-HIST-001>> {
-  * analysis_id : UUID <<PK>>
-  --
-  customer_id : UUID
-  operator_id : project identity value
-  generated_at : timestamp
-  risk_level : LOW|MEDIUM|HIGH
-  findings_summary : text
-  recommendations : JSONB
-  evidence_provenance : JSONB
-  provider_provenance : JSONB
+
+package "Project-owned persistence extensions" {
+  entity customers <<ASM-DATA-001>> {
+    * customer_id : UUID <<PK>>
+  }
+  entity analysis_history <<ASM-HIST-001>> {
+    * analysis_id : UUID <<PK>>
+    --
+    customer_id : UUID
+    operator_id : project identity value
+    generated_at : timestamp
+    risk_level : LOW|MEDIUM|HIGH
+    findings_summary : text
+    recommendations : JSONB
+    evidence_provenance : JSONB
+    provider_provenance : JSONB
+  }
 }
 
 customers ||--o{ transactions : owns
@@ -79,11 +87,15 @@ transactions ||--o{ risk_assessments : evidence
 risk_rules ||--o{ risk_assessments : triggered rule
 customers ||--o{ analysis_history : history
 
+transactions -[hidden]-> risk_rules
+card_activity -[hidden]-> payment_activity
+payment_activity -[hidden]-> crypto_activity
+
 note bottom
   Exact SRC-001 DDL remains authoritative outside the durable repository.
-  Attribute labels above follow the SRS source-schema summary; unspecified
-  source PK/FK column names are intentionally not invented. analysis_history
-  is the minimal project-owned extension permitted by ASM-HIST-001.
-  R4 policy-chunk/pgvector physical shape remains deferred by AMB-RAG-001.
+  Attribute labels follow the SRS source-schema summary; unspecified source
+  PK/FK names are intentionally not invented. analysis_history is the minimal
+  project-owned extension permitted by ASM-HIST-001. R4 policy-chunk/pgvector
+  physical shape remains deferred by AMB-RAG-001.
 end note
 @enduml
