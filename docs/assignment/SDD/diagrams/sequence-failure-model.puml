@@ -1,0 +1,26 @@
+@startuml
+title Figure 9b — Model execution and validation failure
+hide footbox
+skinparam maxMessageSize 48
+
+actor Operator
+participant "UI + HTTP\nboundary" as Boundary
+participant "Analysis\napplication" as Analysis
+participant "AnalysisModelPort" as Model
+
+Analysis -> Model : analyze(context, evidence)
+alt provider / execution failure
+  Model --> Analysis : failure
+  Analysis --> Boundary : explicit analysis failure
+  Boundary --> Operator : not completed / retained
+else candidate returned
+  Model --> Analysis : structured candidate
+  Analysis -> Analysis : validate result contract
+  alt invalid structured result
+    Analysis --> Boundary : validation failure
+    Boundary --> Operator : invalid result not retained
+  else valid result
+    Analysis --> Boundary : continue to persistence
+  end
+end
+@enduml

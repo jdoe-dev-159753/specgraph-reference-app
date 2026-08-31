@@ -1,96 +1,56 @@
 @startuml
-title Customer Activity Analytics — Grounded analysis runtime sequence
+title Figure 7a — Grounded analysis orchestration
 hide footbox
-actor Operator
-participant "React UI" as UI
-participant "Authenticated HTTP adapter" as Http
-participant "analysis application" as Analysis
-participant "CustomerActivityPort" as Activity
-participant "JpaCustomerActivityAdapter" as ActivityAdapter
-participant "PolicyKnowledgePort" as Policy
-participant "StaticPolicyAdapter" as StaticPolicy
-participant "PgVectorPolicyAdapter" as VectorPolicy
-participant "AnalysisModelPort" as Model
-participant "DeterministicAnalysisStub" as Deterministic
-participant "SpringAiAnalysisAdapter" as LiveAdapter
-participant "External AI provider" as Provider
-participant "AnalysisHistoryPort" as History
-participant "JpaAnalysisHistoryAdapter" as HistoryAdapter
-database "PostgreSQL / pgvector" as DB
+skinparam maxMessageSize 50
 
-Operator -> UI : Analyze Customer Activity
-UI -> Http : POST analysis request [HTTP/JSON]
-Http -> Analysis : analyze(customerId, operatorId) [in-process]
-Analysis -> Activity : loadSnapshot(customerId) [in-process]
-Activity -> ActivityAdapter : dispatch when R2+ adapter active [in-process]
-ActivityAdapter -> DB : JDBC customer/activity/risk queries
-DB --> ActivityAdapter : activity + risk evidence
-ActivityAdapter --> Activity : CustomerSnapshot projection
+actor Operator
+participant "UI + HTTP\nboundary" as Boundary
+participant "Analysis\napplication" as Analysis
+participant "CustomerActivityPort" as Activity
+participant "PolicyKnowledgePort" as Policy
+participant "AnalysisModelPort" as Model
+participant "AnalysisHistoryPort" as History
+
+Operator -> Boundary : Analyze selected customer
+Boundary -> Analysis : analyze(customerId, operatorId)
+Analysis -> Activity : loadSnapshot(customerId)
 Activity --> Analysis : CustomerSnapshot
-Analysis -> Policy : retrieveRelevant(context) [in-process]
-alt deterministic/offline policy adapter
-  Policy -> StaticPolicy : dispatch [in-process]
-  StaticPolicy --> Policy : synthetic PolicyEvidence[]
-else R4 vector policy adapter
-  Policy -> VectorPolicy : dispatch [in-process]
-  VectorPolicy -> DB : pgvector query
-  DB --> VectorPolicy : retrieved corpus evidence
-  VectorPolicy --> Policy : PolicyEvidence[]
-end
-Policy --> Analysis : PolicyEvidence[] / explicit no-evidence
+Analysis -> Policy : retrieveRelevant(context)
+
 alt no relevant policy evidence
-  Analysis --> Http : insufficient grounding
-  Http --> UI : explicit grounding failure/degraded result
-  UI --> Operator : analysis not represented as grounded/completed
+  Policy --> Analysis : explicit no-evidence
+  Analysis --> Boundary : insufficient grounding
+  Boundary --> Operator : not presented as grounded/completed
 else relevant evidence available
-  Analysis -> Model : analyze(context, evidence) [in-process port]
-  alt deterministic baseline adapter
-    Model -> Deterministic : dispatch [in-process]
-    Deterministic --> Model : structured candidate / failure
-  else explicitly configured live adapter
-    Model -> LiveAdapter : dispatch [in-process]
-    LiveAdapter -> Provider : HTTPS provider API
-    Provider --> LiveAdapter : response / network-provider failure
-    LiveAdapter --> Model : structured candidate / failure
-  end
-  Model --> Analysis : candidate AnalysisResult / failure
-  alt model execution or provider failure
-    Analysis --> Http : explicit analysis failure
-    Http --> UI : failed analysis response
-    UI --> Operator : analysis not completed or retained
+  Policy --> Analysis : PolicyEvidence[]
+  Analysis -> Model : analyze(context, evidence)
+  alt model/provider failure
+    Model --> Analysis : failure
+    Analysis --> Boundary : explicit analysis failure
+    Boundary --> Operator : not completed / retained
   else candidate returned
-    Analysis -> Analysis : validate structured result
+    Model --> Analysis : structured candidate
+    Analysis -> Analysis : validate result contract
     alt invalid structured result
-      Analysis --> Http : explicit result-validation failure
-      Http --> UI : failed analysis response
-      UI --> Operator : invalid result not completed or retained
-    else valid structured result
+      Analysis --> Boundary : validation failure
+      Boundary --> Operator : invalid result not retained
+    else valid result
       Analysis -> History : persist(AnalysisHistoryCreateCommand)
-      History -> HistoryAdapter : dispatch [in-process]
-      HistoryAdapter -> DB : JDBC INSERT analysis history
-      alt INSERT / persistence failure
-        DB --> HistoryAdapter : INSERT failure
-        HistoryAdapter --> History : persistence failure
-        History --> Analysis : explicit persistence failure
-        Analysis --> Http : explicit persistence failure
-        Http --> UI : failed analysis response
-        UI --> Operator : analysis not represented as retained/completed
+      alt persistence failure
+        History --> Analysis : failure
+        Analysis --> Boundary : explicit persistence failure
+        Boundary --> Operator : not represented as retained/completed
       else persistence succeeds
-        DB --> HistoryAdapter : persisted + generated identity
-        HistoryAdapter --> History : AnalysisHistoryEntry
         History --> Analysis : AnalysisHistoryEntry
-        Analysis --> Http : completed structured analysis
-        Http --> UI : 200 JSON
-        UI --> Operator : risk level + findings + recommendations + provenance
+        Analysis --> Boundary : completed structured analysis
+        Boundary --> Operator : risk + findings + recommendations + provenance
       end
     end
   end
 end
 
-note over Policy,Model
-  Application-facing ports remain project-owned boundaries. Static/deterministic
-  adapters provide the offline path; pgvector/live-provider adapters are R4
-  substitutions. No-evidence, model/provider failure, invalid structured output
-  and persistence failure do not fall through into completed/persisted history.
+note over Activity,History
+  These are project-owned application ports. Figure 7b shows the
+  replaceable adapters and the JDBC/HTTPS infrastructure boundaries.
 end note
 @enduml

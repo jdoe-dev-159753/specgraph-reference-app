@@ -1,0 +1,62 @@
+@startuml
+title Figure 2b — Hexagonal architecture — ports and adapters
+left to right direction
+skinparam linetype polyline
+skinparam componentStyle rectangle
+skinparam nodesep 35
+skinparam ranksep 45
+
+actor "Customer Care\nOperator" as Operator
+
+package "Driving adapters" {
+  component "React operator UI" as UI
+  component "Spring Security +\nHTTP adapter" as Http
+}
+
+interface "Inbound application use cases\ncustomer review · analysis · history" as Inbound
+interface "CustomerActivityPort" as ActivityPort
+interface "PolicyKnowledgePort" as PolicyPort
+interface "AnalysisModelPort" as ModelPort
+interface "AnalysisHistoryPort" as HistoryPort
+
+hexagon "Application core\n\nidentity\ncustomer\nrisk\nanalysis\n\nproject-owned domain + application contracts" as Core
+
+package "Driven adapters" {
+  component "SyntheticActivityAdapter\nJpaCustomerActivityAdapter\n<<GoF Adapter>>" as ActivityAdapters
+  component "StaticPolicyAdapter\nPgVectorPolicyAdapter\n<<GoF Adapter>>" as PolicyAdapters
+  component "DeterministicAnalysisStub\nSpringAiAnalysisAdapter\n<<GoF Adapter>>" as ModelAdapters
+  component "JpaAnalysisHistoryAdapter\n<<GoF Adapter>>" as HistoryAdapter
+}
+
+database "PostgreSQL + pgvector" as DB
+component "External AI provider" as Provider <<external>>
+
+Operator --> UI
+UI --> Http : HTTP/JSON
+Http --> Inbound
+Inbound --> Core
+
+Core --> ActivityPort
+Core --> PolicyPort
+Core --> ModelPort
+Core --> HistoryPort
+
+ActivityPort --> ActivityAdapters : interchangeable strategy implementations
+PolicyPort --> PolicyAdapters : interchangeable strategy implementations
+ModelPort --> ModelAdapters : interchangeable strategy implementations
+HistoryPort --> HistoryAdapter
+
+ActivityAdapters --> DB : JDBC when JPA selected
+PolicyAdapters --> DB : JDBC/pgvector when R4 selected
+HistoryAdapter --> DB : JDBC
+ModelAdapters ..> Provider : HTTPS only when live adapter selected
+
+note bottom of Core
+  Hexagonal architecture is the architectural style, not a GoF pattern.
+  GoF roles used inside it:
+  - Adapter: infrastructure implementations translate external/framework APIs to ports.
+  - Strategy: alternate implementations are selected behind stable port contracts.
+  - Facade/application service: coarse-grained use cases orchestrate several ports
+    without exposing that choreography to the HTTP adapter or UI.
+end note
+@enduml

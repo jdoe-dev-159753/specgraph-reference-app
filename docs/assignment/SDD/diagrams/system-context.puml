@@ -1,0 +1,26 @@
+@startuml
+title Figure 1 — Architectural context schematic — system boundary and external dependencies
+left to right direction
+skinparam linetype polyline
+skinparam nodesep 55
+skinparam ranksep 60
+
+actor "Customer Care\nOperator" as Operator
+rectangle "Customer Activity Analytics\nreference application" as System {
+  component "React operator UI" as UI
+  component "Protected Spring Boot\napplication boundary" as App
+}
+database "PostgreSQL + pgvector\nproduction-like persistence" as DB
+component "External AI provider" as Provider <<external>>
+
+Operator --> UI : review customer / request analysis
+UI --> App : HTTP/JSON
+App --> DB : JDBC / PostgreSQL\nactivity, policy, history
+App ..> Provider : HTTPS\nonly when configured
+
+note bottom of System
+  Architectural context schematic (non-UML). The mandatory baseline runs without
+  the external AI provider. The application is a modular monolith internally;
+  module/port calls are in-process.
+end note
+@enduml

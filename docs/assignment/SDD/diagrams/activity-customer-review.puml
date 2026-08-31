@@ -1,0 +1,64 @@
+@startuml
+title Figure 6 — UML Activity diagram — authenticated customer review
+skinparam linetype polyline
+skinparam activity {
+  BackgroundColor #F7F7F7
+  BorderColor #333333
+}
+
+|Customer Care Operator|
+start
+:Enter credentials;
+
+|React operator UI|
+:Submit login;
+
+|Security / HTTP adapter|
+if (Credentials valid?) then (no)
+  :Reject protected request;
+  |React operator UI|
+  :Display authentication required;
+  |Customer Care Operator|
+  stop
+else (yes)
+  :Establish OperatorId context;
+endif
+
+|Customer Care Operator|
+:Enter Customer ID;
+
+|React operator UI|
+:Request customer review;
+
+|Security / HTTP adapter|
+:Authorize protected GET;
+
+|Customer / Risk application|
+:Load CustomerSnapshot\nthrough CustomerActivityPort;
+
+|Activity adapter|
+if (R1 synthetic profile?) then (yes)
+  :Load deterministic synthetic\nactivity and risk evidence;
+else (R2+ relational profile)
+  :Read source relations through JPA;
+  :Map source rows to\nActivityProjection and RiskEvidence;
+endif
+
+|Customer / Risk application|
+if (Customer exists?) then (no)
+  :Return not-found outcome;
+  |React operator UI|
+  :Display unknown customer;
+  |Customer Care Operator|
+  stop
+else (yes)
+  :Return CustomerSnapshot;
+endif
+
+|React operator UI|
+:Render CARD, PAYMENT, CRYPTO\nactivity and risk evidence;
+
+|Customer Care Operator|
+:Review customer activity;
+stop
+@enduml
