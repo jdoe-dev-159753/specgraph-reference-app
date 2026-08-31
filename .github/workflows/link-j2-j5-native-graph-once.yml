@@ -14,10 +14,10 @@ jobs:
   link:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci]
     steps:
-      - name: Link native parents and dependencies, close J1 milestone
+      - name: Link native graph and publish J1-to-J2 project status
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const parents = new Map([
@@ -25,6 +25,7 @@ jobs:
               [115,63], [116,63], [117,64],
               [119,118], [120,118], [121,118],
               [123,122], [124,122], [125,122], [126,122],
+              [130,128], [131,128],
             ]);
             const dependencies = [
               [118,64],
@@ -33,6 +34,9 @@ jobs:
               [127,122],
               [128,122],
               [129,122],
+              [130,122],
+              [131,122],
+              [131,117],
             ];
 
             for (const [childNumber, parentNumber] of parents) {
@@ -63,8 +67,63 @@ jobs:
               }
             }
 
-            await github.request('PATCH /repos/{owner}/{repo}/milestones/{milestone_number}', {
-              owner, repo, milestone_number: 1, state: 'closed',
-              headers: { 'X-GitHub-Api-Version': '2026-03-10' },
-            });
-            core.info('J1 milestone closed');
+            let project = null;
+            let cursor = null;
+            do {
+              const page = await github.graphql(`
+                query($login: String!, $after: String) {
+                  user(login: $login) {
+                    projectsV2(first: 20, after: $after) {
+                      nodes {
+                        id
+                        title
+                        statusUpdates(last: 20) {
+                          nodes { id body status startDate targetDate createdAt }
+                        }
+                      }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                  }
+                }
+              `, { login: owner, after: cursor });
+              const conn = page.user.projectsV2;
+              project = conn.nodes.find(p => p.title === 'SpecGraph Reference App') ?? null;
+              if (project || !conn.pageInfo.hasNextPage) break;
+              cursor = conn.pageInfo.endCursor;
+            } while (true);
+            if (!project) throw new Error('SpecGraph Reference App Project v2 not found');
+
+            const marker = 'J1 closed; J2 persistence and deterministic-analysis delivery active.';
+            const existing = project.statusUpdates.nodes.find(update => update.body?.includes(marker));
+            if (!existing) {
+              const body = [
+                marker,
+                '',
+                '- J1 closed with controlled SRS/SDD/V&V, executable R0/R1 checkpoints, Compose + Playwright evidence, and polished reviewer-facing R1 publication.',
+                '- J2 now owns PostgreSQL/JPA adapter substitution, end-to-end amount/currency semantics, deterministic risk scenarios, and the SDD/ADR detection-versus-explanation trust boundary.',
+                '- J3 completes grounded retrieval and multi-operator access; J4 hardens bounded high-volume UI/context and degraded paths; J5 freezes, audits, and rehearses the exact submission.',
+                '- NICE_TO_HAVE differentiation is explicitly non-blocking: non-LLM detector benchmarking, model drift evidence, dataset-ceiling analysis, optional live provider, and reviewer telemetry.',
+                '- Remaining Project UI auto-add/roadmap presentation audit stays independently tracked by #49 and does not reopen J1.',
+              ].join('\n');
+              const result = await github.graphql(`
+                mutation($projectId: ID!, $body: String!, $startDate: Date!, $targetDate: Date!) {
+                  createProjectV2StatusUpdate(input: {
+                    projectId: $projectId,
+                    body: $body,
+                    status: ON_TRACK,
+                    startDate: $startDate,
+                    targetDate: $targetDate
+                  }) {
+                    statusUpdate { id status startDate targetDate }
+                  }
+                }
+              `, {
+                projectId: project.id,
+                body,
+                startDate: '2026-08-31',
+                targetDate: '2026-09-04',
+              });
+              core.info(`Project status update created: ${result.createProjectV2StatusUpdate.statusUpdate.id}`);
+            } else {
+              core.info(`Project status update already present: ${existing.id}`);
+            }
