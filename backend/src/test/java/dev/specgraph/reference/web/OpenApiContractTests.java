@@ -47,11 +47,33 @@ class OpenApiContractTests {
         assertThat(base.getProperties()).containsKeys(
                 "transactionId", "amount", "currency", "status", "createdAt");
 
+        assertActivityVariant(api, "CardActivity", "CARD", "CardDetails");
+        assertActivityVariant(api, "PaymentActivity", "PAYMENT", "PaymentDetails");
+        assertActivityVariant(api, "CryptoActivity", "CRYPTO", "CryptoDetails");
+
         Schema<?> risk = api.getComponents().getSchemas().get("RiskEvidence");
         assertThat(risk.getRequired()).containsAll(Set.of(
                 "transactionId", "ruleId", "ruleName", "triggeredAt", "scoreContribution"));
         assertThat(api.getComponents().getSchemas()).containsKeys(
-                "CardActivity", "PaymentActivity", "CryptoActivity",
                 "CardDetails", "PaymentDetails", "CryptoDetails");
+    }
+
+    private static void assertActivityVariant(OpenAPI api, String schemaName, String expectedType, String detailsSchema) {
+        Schema<?> variant = api.getComponents().getSchemas().get(schemaName);
+        assertThat(variant).as(schemaName).isNotNull();
+        assertThat(variant.getAllOf()).as(schemaName + " allOf").hasSize(2);
+        assertThat(variant.getAllOf()).extracting(Schema::get$ref)
+                .contains("#/components/schemas/ActivityBase");
+
+        Schema<?> inline = variant.getAllOf().stream()
+                .filter(schema -> schema.get$ref() == null)
+                .findFirst()
+                .orElseThrow();
+        assertThat(inline.getRequired()).contains("type", "details");
+
+        Schema<?> type = inline.getProperties().get("type");
+        assertThat(type.getEnum()).containsExactly(expectedType);
+        Schema<?> details = inline.getProperties().get("details");
+        assertThat(details.get$ref()).isEqualTo("#/components/schemas/" + detailsSchema);
     }
 }
