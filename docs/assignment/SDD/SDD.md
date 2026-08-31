@@ -4,7 +4,7 @@
 **Design map:** [`design-map.yaml`](design-map.yaml)  
 **Normative requirements:** [`../SRS/SRS.md`](../SRS/SRS.md)  
 **Architecture decisions:** [`../ADR/`](../ADR/)  
-**Verification strategy:** [`../VV/VV.md`](../VV/VV.md)
+**Verification strategy:** `CAA-VV-001` is introduced by the dependent V&V work and is linked from this document once both authorities coexist on `main`.
 
 This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. `design-map.yaml` remains the machine-readable requirement-to-design mapping, while PlantUML files in `diagrams/` are the semantic diagram sources and their SVG files are generated views embedded below.
 
@@ -35,107 +35,107 @@ The component view makes provided/required seams explicit. The web client requir
 
 [PlantUML source](diagrams/component-topology.puml)
 
-The stable application contracts are `CustomerSnapshot`, project-owned activity/risk projections, `AnalysisResult`, `PolicyEvidence`, and `OperatorId`. The class/domain view deliberately distinguishes those contracts from source-schema concepts; source/JPA relation classes are mapped by adapters rather than becoming members of `CustomerSnapshot`.
+The stable application contracts are `CustomerSnapshot`, project-owned activity/risk projections, `AnalysisResult`, `PolicyEvidence`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`. The class/domain view deliberately distinguishes those contracts from source-schema concepts; source/JPA relation classes are mapped by adapters rather than becoming members of `CustomerSnapshot`.
 
 ![Domain and contract view](diagrams/domain-contracts.svg)
 
 [PlantUML source](diagrams/domain-contracts.puml)
 
-`AnalysisHistoryCreateCommand` is the project-owned write input and deliberately has no generated analysis identity. `AnalysisHistoryEntry` is the persisted/read projection: analysis/customer identity, generating operator, generation time, structured result, and reviewable evidence provenance. JPA rows never cross `AnalysisHistoryPort`.
+## Relational persistence
 
-## Relational design
+The relational view separates source-schema facts from the narrow project-owned persistence needed by the reference application. R2 activates PostgreSQL behind `CustomerActivityPort`; R3 adds analysis history; R4 activates pgvector policy retrieval. Exact source DDL names that are not retained in the repository are not invented by the SDD.
 
-The source schema remains authoritative for supplied transaction/activity/risk relations. The SDD adds only extensions permitted by accepted assumptions: a minimal `customers` anchor and analysis-history persistence sufficient for customer/operator/time/result/provenance attribution. Exact source DDL that is not present in the SRS is not reverse-invented here. The R4 policy-chunk physical schema remains deferred with `AMB-RAG-001`.
-
-![Relational schema view](diagrams/relational-schema.svg)
+![Relational schema](diagrams/relational-schema.svg)
 
 [PlantUML source](diagrams/relational-schema.puml)
 
-## Dynamic behaviour
+The selected relational read path is singular: `CustomerActivityPort` is implemented by `JpaCustomerActivityAdapter`, which maps source customer/activity/risk relations into project-owned `CustomerSnapshot`, `ActivityProjection`, and `RiskEvidence` contracts. The `risk` application module does not introduce a competing persistence adapter for the same source risk evidence.
 
-A modular monolith is not a static system. Runtime calls inside one JVM are still ordered interactions, and process/container boundaries add transport semantics. These sequence views are therefore part of the design authority rather than optional decoration.
+## Customer review runtime
 
-### Authenticated customer review
+The customer-review sequence covers the authenticated operator path from React through the HTTP boundary and application contracts to either the R1 deterministic synthetic adapter or the R2+ JPA/PostgreSQL adapter. Authentication rejection and unknown-customer behavior remain explicit.
 
 ![Customer review sequence](diagrams/sequence-customer-review.svg)
 
 [PlantUML source](diagrams/sequence-customer-review.puml)
 
-The sequence shows the same application port with two adapter states: R1 synthetic and R2+ relational. Authentication occurs before protected behaviour; unknown customer is a first-class negative outcome.
+## Grounded analysis runtime
 
-### Analysis, grounding and persistence
+Analysis first loads the customer context through `CustomerActivityPort`, then obtains policy evidence behind `PolicyKnowledgePort`, runs a deterministic or configured live model behind `AnalysisModelPort`, validates the structured result, and persists through `AnalysisHistoryPort`. Local application/port dispatch remains in-process; JDBC and HTTPS appear only across their real infrastructure boundaries.
 
-![Analysis sequence](diagrams/sequence-analysis.svg)
+No relevant policy evidence terminates the successfully-grounded flow with an explicit insufficient-grounding result. Model/provider failure, invalid structured output, and persistence failure likewise terminate explicitly and cannot fall through into completed/retained history.
+
+![Grounded analysis sequence](diagrams/sequence-analysis.svg)
 
 [PlantUML source](diagrams/sequence-analysis.puml)
 
-The stable orchestration is `CustomerActivityPort -> PolicyKnowledgePort -> AnalysisModelPort -> validation -> AnalysisHistoryPort`. Static/deterministic and pgvector/live implementations are substitutions behind those seams, not parallel application architectures. For the optional live model, port dispatch remains in-process and HTTPS begins only at the live adapter -> external-provider boundary.
+## Analysis history review
 
-### Analysis-history review
+Authenticated operators can list/inspect prior analyses through `AnalysisHistoryPort`. The read contract is `AnalysisHistoryEntry`, which carries analysis/customer identity, generating operator, generation time, structured result and evidence provenance required by `AC-HIST-002`. `AnalysisHistoryCreateCommand` is the separate write input and intentionally lacks the generated analysis identity.
 
-![Analysis history read sequence](diagrams/sequence-analysis-history.svg)
+![Analysis history review sequence](diagrams/sequence-analysis-history.svg)
 
 [PlantUML source](diagrams/sequence-analysis-history.puml)
 
-`FR-HIST-002` has its own authenticated read path: prior results are loaded through `AnalysisHistoryPort` and projected with generation time, generating operator, risk level, findings and recommendations. Persisting a result and reviewing history are therefore distinct runtime interactions even though they share the same persistence adapter.
+## Failure and degraded behavior
 
-### Failure and degraded paths
+The focused failure view makes the negative paths independently reviewable: authentication rejection, insufficient grounding, model/provider failure, invalid structured output, and persistence failure. None of those paths may be represented as successfully completed/retained analysis.
 
-![Failure-mode sequence](diagrams/sequence-failure-modes.svg)
+![Failure and degraded sequence](diagrams/sequence-failure-modes.svg)
 
 [PlantUML source](diagrams/sequence-failure-modes.puml)
 
-The failure view covers authentication rejection, explicit insufficient grounding, model/provider failure, invalid structured result, and persistence failure. Unauthenticated execution does not reconverge into analysis. For `AC-RAG-002`, a request with no relevant evidence ends with an explicit insufficient-grounding outcome and is never presented as successfully grounded. This does not resolve `AMB-RAG-001` into a universal minimum-evidence rule: any future explicitly ungrounded mode would require separately reviewed semantics rather than an accidental fall-through.
-
 ## Deployment and communication topology
+
+The runtime remains a modular monolith, not a static box. The deployment view distinguishes browser, web/frontend service, Spring Boot API process/container, PostgreSQL/pgvector and the optional external AI provider.
 
 ![Deployment topology](diagrams/deployment-topology.svg)
 
 [PlantUML source](diagrams/deployment-topology.puml)
 
-Baseline runtime communication is deliberately simple and explicit:
+Communication semantics are explicit where known:
 
-- browser to web edge: HTTP locally or HTTPS for the remote demo;
-- web edge to Spring Boot API: HTTP/JSON over the Compose/private network;
-- backend to PostgreSQL/pgvector: JDBC over the PostgreSQL protocol/TCP on the private network;
-- backend to an external model provider: HTTPS only when the optional live adapter is explicitly configured;
-- application-module, port and adapter dispatch inside the Spring Boot monolith: in-process calls.
+- browser ↔ web edge: HTTP locally, HTTPS for the remote demo;
+- web ↔ Spring Boot API: HTTP/JSON;
+- Spring Boot ↔ PostgreSQL/pgvector: JDBC/PostgreSQL protocol over private TCP;
+- Spring Boot ↔ optional external AI provider: HTTPS provider API;
+- module/port interactions within the modular monolith: in-process calls.
 
-No WebSocket, broker, FIFO, Redis, separate identity service, or streaming transport is claimed unless implementation evidence later creates that need. Simplicity is a design choice; pretending simple execution has no dynamics would just be refusal to draw the arrows.
+No WebSocket, event broker, FIFO, Redis, separate identity service or other transport/process is introduced merely to make the architecture look more distributed.
 
 ## Concentric delivery activation
 
-### R0 — deployable hollow shell
+The design is activated through concentric rings rather than parallel throwaway architectures:
 
-R0 creates the Java/React shells, module/package topology, project-owned contracts/ports, synthetic/static adapters, deterministic model boundary and Compose deployment skeleton.
+- **R0 — hollow shell:** Java/Spring/React deployment shell, application modules, project-owned contracts and replaceable ports/adapters;
+- **R1 — authenticated synthetic read slice:** protected customer/activity/risk path with deterministic synthetic data;
+- **R2 — relational read slice:** substitute JPA/PostgreSQL/Flyway/Testcontainers behind `CustomerActivityPort`;
+- **R3 — deterministic analysis/history:** static grounding, deterministic analysis and persistent reviewable history;
+- **R4 — grounded provider path:** pgvector retrieval and optional live model adapter behind the existing ports;
+- **R5 — hardening/demo:** reliability, observability and demo polish without changing the established boundaries.
 
-### R1 — first authenticated visible read slice
+A later ring substitutes infrastructure behind stable seams. It does not introduce a second architecture merely because a more realistic adapter is available.
 
-R1 activates authentication plus Customer ID search through `CustomerActivityPort` and `SyntheticActivityAdapter`, displaying CARD/PAYMENT/CRYPTO activity and source-shaped risk evidence with explicit not-found and unauthenticated outcomes.
+## ADR consistency
 
-### R2 — production-like relational read path
+The current design remains consistent with the four accepted architecture decisions:
 
-Replace the synthetic activity adapter with the JPA/PostgreSQL adapter, Flyway schema and deterministic seed data without changing `CustomerActivityPort` or `CustomerSnapshot`.
+- **ADR-001:** modular monolith with strict hexagonal boundaries;
+- **ADR-002:** provider-neutral analysis/policy ports with deterministic baseline adapters;
+- **ADR-003:** PostgreSQL + pgvector as the unified production-like persistence/vector service;
+- **ADR-004:** assemble the Java/Spring/React implementation from mature ecosystem components rather than reimplementing commodity infrastructure.
 
-### R3 — deterministic analysis, history and full offline baseline
+The contract refinements made during design review, including the split between `AnalysisHistoryCreateCommand` and `AnalysisHistoryEntry`, refine those decisions rather than introducing a new architectural decision. No synthetic ADR is added merely to record normal design elaboration.
 
-Activate analysis orchestration through `AnalysisModelPort` and `AnalysisHistoryPort`, deterministic structured output, validation and PostgreSQL-backed history. This is the first ring that can accept the complete mandatory read-and-analysis verification baseline.
+## Review criterion
 
-### R4 — policy retrieval and optional live-model integration
+A reviewer should be able to answer from this document, without reconstructing PR diffs:
 
-Activate `PolicyKnowledgePort` with pgvector and, optionally, a live `SpringAiAnalysisAdapter`. Static/deterministic adapters remain available for offline verification.
-
-### R5 — hardening and demo polish
-
-Exercise remaining failure paths, E2E verification, readiness/health and final demo ergonomics without changing architecture merely to improve screenshots.
-
-## Deferred design details
-
-The SRS intentionally preserves source ambiguities. The design therefore does not pretend the following are settled earlier than needed:
-
-- exact local credential storage/seed mechanism beyond distinct authenticated operators;
-- any analysis-history physical detail beyond the minimal fields permitted by `ASM-HIST-001` until the R3 migration is authored;
-- policy chunking/embedding/ranking thresholds and physical vector-corpus shape;
-- optional live-model provider/model selection.
-
-The complete machine-readable requirement-to-design mapping remains in [`design-map.yaml`](design-map.yaml).
+- what the static module/component boundaries are;
+- which contracts and ports are application-owned;
+- how source data maps into those contracts;
+- how the principal successful and failure flows execute;
+- where each network or persistence protocol actually occurs;
+- how the deployment is composed;
+- how later delivery rings replace adapters without changing the architecture;
+- which accepted ADR explains each major design choice.
