@@ -23,6 +23,15 @@ test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testI
   expect(snapshot.riskEvidence.map((evidence: { ruleName: string }) => evidence.ruleName)).toEqual(
     expect.arrayContaining(['Card not present high value', 'New crypto destination']))
 
+  await expect(page.getByRole('columnheader', { name: 'Amount' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Currency' })).toBeVisible()
+
+  const card = snapshot.activities.find((activity: { type: string }) => activity.type === 'CARD')
+  expect(card).toBeTruthy()
+  await expect(page.getByTestId('activity-card-amount')).toHaveAttribute('data-amount', String(card.amount))
+  await expect(page.getByTestId('activity-card-amount')).not.toContainText(card.currency)
+  await expect(page.getByTestId('activity-card-currency')).toHaveText(card.currency)
+
   await expect(page.getByTestId('activity-card')).toContainText('Alpine Camera')
   await expect(page.getByTestId('activity-payment')).toContainText('receiverBankCountry: DE')
   await expect(page.getByTestId('activity-crypto')).toContainText('blockchain: Bitcoin')
