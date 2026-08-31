@@ -1,0 +1,65 @@
+graph DeliveryRings {
+  graph [
+    layout=neato,
+    overlap=true,
+    splines=false,
+    outputorder=edgesfirst,
+    bgcolor="#FFFFFF",
+    margin=0.08,
+    pad=0.25,
+    labelloc=t,
+    label="Figure 11 — Concentric delivery rings",
+    fontsize=18,
+    fontname="Arial"
+  ];
+
+  node [
+    shape=circle,
+    fixedsize=true,
+    label="",
+    color="#374151",
+    penwidth=2.0,
+    pin=true
+  ];
+
+  r5 [width=9.2, height=9.2, pos="0,0!"];
+  r4 [width=7.6, height=7.6, pos="0,0!"];
+  r3 [width=6.0, height=6.0, pos="0,0!"];
+  r2 [width=4.5, height=4.5, pos="0,0!"];
+  r1 [width=3.0, height=3.0, pos="0,0!"];
+  r0 [width=1.55, height=1.55, pos="0,0!", style=filled, fillcolor="#F3F4F6"];
+
+  node [
+    shape=plain,
+    fixedsize=false,
+    pin=true,
+    fontname="Arial",
+    fontcolor="#111827",
+    fontsize=12
+  ];
+
+  t0 [label=<<B>R0</B><BR/>Deployable hollow shell>, pos="0,0!"];
+  t1 [label=<<B>R1</B>  Authenticated synthetic read slice>, pos="0,1.15!"];
+  t2 [label=<<B>R2</B>  Relational read slice>, pos="0,1.90!"];
+  t3 [label=<<B>R3</B>  Deterministic analysis + history>, pos="0,2.65!"];
+  t4 [label=<<B>R4</B>  Grounded provider path>, pos="0,3.40!"];
+  t5 [label=<<B>R5</B>  Hardening + demo>, pos="0,4.20!"];
+
+  invariant [
+    label=<<B>Invariant</B>: same application core · stable ports · adapters activated/substituted concentrically>,
+    pos="0,-4.20!"
+  ];
+
+  node [shape=plain, pin=true, fontname="Arial", fontsize=11, fontcolor="#111827"];
+  legend_title [label=<<B>Legend</B>>, pos="6.15,3.75!"];
+  legend_r0 [label=<<B>R0</B>  Java/Spring/React shell; project-owned contracts and ports>, pos="6.15,3.25!"];
+  legend_r1 [label=<<B>R1</B>  Authentication + deterministic synthetic customer/activity/risk>, pos="6.15,2.65!"];
+  legend_r2 [label=<<B>R2</B>  JPA/PostgreSQL/Flyway/Testcontainers behind CustomerActivityPort>, pos="6.15,2.05!"];
+  legend_r3 [label=<<B>R3</B>  Static grounding + deterministic analysis + persistent history>, pos="6.15,1.45!"];
+  legend_r4 [label=<<B>R4</B>  pgvector retrieval + optional live AI adapter>, pos="6.15,0.85!"];
+  legend_r5 [label=<<B>R5</B>  Reliability, observability and demo hardening>, pos="6.15,0.25!"];
+
+  reading_1 [label="Each outer ring encloses and extends the same architecture.", pos="6.15,-0.75!"];
+  reading_2 [label="Later rings activate or substitute adapters behind stable ports.", pos="6.15,-1.20!"];
+  reading_3 [label="They do not create parallel throwaway architectures.", pos="6.15,-1.65!"];
+}
