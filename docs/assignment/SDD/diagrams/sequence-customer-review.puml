@@ -1,5 +1,5 @@
 @startuml
-title Figure 5 — Authenticated customer review
+title Figure 6 — Authenticated customer review
 hide footbox
 skinparam maxMessageSize 52
 
