@@ -1,17 +1,14 @@
 schema_version: 1
-document_id: CAA-VV-001
-requirements_catalogue: ../SRS/requirements.yaml
-design_catalogue: ../SDD/design-map.yaml
-status_semantics:
-  durable_file_contains_execution_status: false
-  executable_evidence_is_current_status_authority: true
-  generated_status_views_are_disposable: true
+verification_id: CAA-VV-CATALOGUE-001
+strategy_document: VV.md
+requirements: ../SRS/requirements.yaml
+design: ../SDD/design-map.yaml
 
-verification_obligations:
+obligations:
   VFY-CUSTOMER-READ-001:
     covers: [FR-CUST-001, FR-ACT-001, FR-ACT-002, FR-RISK-001, INV-DATA-001, INV-DATA-002, INV-RISK-001]
     acceptance: [AC-CUST-001, AC-CUST-002, AC-ACT-001, AC-ACT-002, AC-RISK-001]
-    methods: [unit_property, port_contract, integration, api_acceptance, ui_e2e]
+    methods: [unit_property, port_contract, api_acceptance, ui_e2e]
     design: [MOD-CUSTOMER-001, MOD-RISK-001, PRT-ACTIVITY-001, CTR-CUSTOMER-SNAPSHOT-001]
     executable_evidence: discovered_by_markers
   VFY-AUTH-001:
@@ -35,7 +32,7 @@ verification_obligations:
   VFY-HISTORY-001:
     covers: [FR-HIST-001, FR-HIST-002, INV-HIST-001]
     acceptance: [AC-HIST-001, AC-HIST-002]
-    methods: [port_contract, database_integration, api_acceptance]
+    methods: [port_contract, database_integration, api_acceptance, ui_e2e]
     design: [PRT-HISTORY-001, ADP-HIST-JPA-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
     executable_evidence: discovered_by_markers
   VFY-REPRODUCIBILITY-001:
@@ -53,28 +50,12 @@ verification_obligations:
   VFY-FAILURE-PATHS-001:
     covers: [NFR-RES-001, INV-RAG-001]
     acceptance: [AC-RAG-002, AC-RES-001, AC-RES-002]
-    methods: [fault_injection_contract, integration, api_acceptance]
+    methods: [unit_property, port_contract, api_acceptance, failure_injection]
     design: [MOD-ANALYSIS-001, PRT-POLICY-001, PRT-MODEL-001, PRT-HISTORY-001]
     executable_evidence: discovered_by_markers
-  VFY-DELIVERY-001:
-    covers: [DEL-001, DEL-002, DEL-003, DEL-004]
+  VFY-CONFIDENTIALITY-001:
+    covers: [CON-AI-002]
     acceptance: []
-    methods: [artifact_presence, link_validation, clean_checkout_compose, human_validation]
-    design: [INF-COMPOSE-001]
+    methods: [configuration_check, integration_negative]
+    design: [ADP-MODEL-DET-001, ADP-MODEL-AI-001]
     executable_evidence: discovered_by_markers
-
-coverage_policy:
-  normative_requirements_must_have_obligation: true
-  acceptance_criteria_must_have_obligation: true
-  delivery_requirements_must_have_obligation: true
-  unknown_requirement_reference_is_error: true
-  unknown_design_reference_is_error: true
-  structural_link_does_not_imply_semantic_adequacy: true
-  missing_executable_evidence_requires_generated_gap_or_issue: true
-
-harness_integration:
-  reusable_owner: jdoe-dev-159753/specgraph-harness
-  traceability_issue: 81
-  vv_strategy_issue: 82
-  pytest_marker_preference: pytest-requirements
-  local_generic_marker_plugin_allowed: false
