@@ -69,13 +69,13 @@ jobs:
           npm install
           npm run build
 
-      - name: VFY-DELIVERY-001 — Build exact-head application artifact
+      - name: Build exact-head application artifact
         run: |
           app_image="specgraph-reference-app:ci-${GITHUB_SHA}"
           docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$app_image" .
           echo "APP_R1_IMAGE=$app_image" >> "$GITHUB_ENV"
 
-      - name: VFY-DELIVERY-001 — Validate source and OCI deployment topologies
+      - name: Validate source and OCI deployment topologies
         run: |
           docker compose config --quiet
           docker compose -f compose.oci.yaml config --quiet
@@ -103,7 +103,7 @@ jobs:
           curl -fsS http://127.0.0.1:8081/ | grep -F '<div id="root"></div>'
           curl -fsS http://127.0.0.1:8081/actuator/health | grep -F '"status":"UP"'
 
-      - name: VFY-CUSTOMER-READ-001 / VFY-DELIVERY-001 — Verify deployed R1 with Playwright
+      - name: VFY-CUSTOMER-READ-001 — Verify deployed R1 with Playwright
         run: |
           docker run --rm --network host --ipc=host \
             --user "$(id -u):$(id -g)" \
