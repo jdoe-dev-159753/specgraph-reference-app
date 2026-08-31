@@ -8,6 +8,19 @@
 
 This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. `design-map.yaml` remains the machine-readable requirement-to-design mapping, while PlantUML files in `diagrams/` are the semantic diagram sources and their SVG files are generated views embedded below.
 
+## System context and architectural orientation
+
+The system is an operator-facing Customer Activity Analytics application. A human operator uses a browser UI to authenticate, locate a customer, inspect customer activity and risk evidence, request a grounded analysis, and later review persisted analysis history. The application is intentionally delivered as a modular monolith rather than a distributed system: browser/UI, Spring Boot application modules, PostgreSQL/pgvector persistence, and an optional external AI provider are the runtime boundaries that matter.
+
+At the highest level, the architecture therefore has four concerns before any backend package detail matters:
+
+1. **Operator interaction:** a browser-based React UI exposes customer review and analysis workflows.
+2. **Application boundary:** a protected HTTP/JSON API mediates all operator-facing capabilities.
+3. **Domain/application core:** project-owned contracts and ports define customer/activity, risk, policy grounding, analysis, and history behavior independently of infrastructure choices.
+4. **Infrastructure adapters:** synthetic/JPA activity adapters, static/pgvector policy adapters, deterministic/live model adapters, history persistence, and authentication infrastructure implement those ports without becoming the application model.
+
+The remaining figures progressively zoom from this system-level view into package structure, component interfaces, contracts, persistence, runtime interaction, failure behavior, and deployment communication.
+
 ## Authority model
 
 - `../SRS/SRS.md` owns normative requirements, invariants, assumptions and acceptance criteria.
@@ -23,7 +36,9 @@ If code diverges from this map, the divergence must be reconciled by changing th
 
 The backend is one Spring Boot modular monolith with four application modules: `identity`, `customer`, `risk`, and `analysis`. Hexagonal dependency direction is strict: project-owned domain/application contracts point outward only through project-owned ports; Spring MVC, Spring Security, JPA/Hibernate, PostgreSQL/pgvector and Spring AI remain adapters/infrastructure.
 
-![Package/module boundaries](diagrams/package-modules.svg)
+![Figure 1 — Package and module boundaries](diagrams/package-modules.svg)
+
+**Figure 1 — Package and module boundaries.** Application modules and their dependency direction inside the modular monolith. Cross-module behavior uses explicit project-owned application contracts; framework and persistence concerns remain outside the core modules.
 
 [PlantUML source](diagrams/package-modules.puml)
 
@@ -31,13 +46,17 @@ The backend is one Spring Boot modular monolith with four application modules: `
 
 The component view makes provided/required seams explicit. The web client requires the protected HTTP/JSON surface. Inside the backend, application modules require project-owned outbound ports (`CustomerActivityPort`, `AnalysisModelPort`, `PolicyKnowledgePort`, `AnalysisHistoryPort`); replaceable adapters provide those ports.
 
-![Component topology and interfaces](diagrams/component-topology.svg)
+![Figure 2 — Component topology and application interfaces](diagrams/component-topology.svg)
+
+**Figure 2 — Component topology and application interfaces.** Provided and required interfaces across the React client, protected HTTP boundary, application modules, and replaceable outbound adapters. Arrows indicate architectural dependency, not network transport unless explicitly labelled.
 
 [PlantUML source](diagrams/component-topology.puml)
 
 The stable application contracts are `CustomerSnapshot`, project-owned activity/risk projections, `AnalysisResult`, `PolicyEvidence`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`. The class/domain view deliberately distinguishes those contracts from source-schema concepts; source/JPA relation classes are mapped by adapters rather than becoming members of `CustomerSnapshot`.
 
-![Domain and contract view](diagrams/domain-contracts.svg)
+![Figure 3 — Project-owned domain contracts and source mappings](diagrams/domain-contracts.svg)
+
+**Figure 3 — Project-owned domain contracts and source mappings.** Stable application contracts are separated from source-schema relation concepts. Adapter mappings convert source persistence shapes into project-owned activity, risk, analysis, and history representations.
 
 [PlantUML source](diagrams/domain-contracts.puml)
 
@@ -45,7 +64,9 @@ The stable application contracts are `CustomerSnapshot`, project-owned activity/
 
 The relational view separates source-schema facts from the narrow project-owned persistence needed by the reference application. R2 activates PostgreSQL behind `CustomerActivityPort`; R3 adds analysis history; R4 activates pgvector policy retrieval. Exact source DDL names that are not retained in the repository are not invented by the SDD.
 
-![Relational schema](diagrams/relational-schema.svg)
+![Figure 4 — Relational persistence model](diagrams/relational-schema.svg)
+
+**Figure 4 — Relational persistence model.** Source activity/risk relations and the narrowly justified project-owned customer, history, and policy-vector persistence extensions. The figure distinguishes source facts from project-owned additions rather than implying one giant application aggregate.
 
 [PlantUML source](diagrams/relational-schema.puml)
 
@@ -55,9 +76,11 @@ The selected relational read path is singular: `CustomerActivityPort` is impleme
 
 The customer-review sequence covers the authenticated operator path from React through the HTTP boundary and application contracts to either the R1 deterministic synthetic adapter or the R2+ JPA/PostgreSQL adapter. Authentication rejection and unknown-customer behavior remain explicit.
 
-![Customer review sequence](diagrams/sequence-customer-review.svg)
+![Figure 5 — Authenticated customer review sequence](diagrams/sequence-customer-review.svg)
 
-[PlantUML source](diagrams/sequence-customer-review.puml)
+**Figure 5 — Authenticated customer review sequence.** Operator authentication, customer lookup, activity/risk loading through `CustomerActivityPort`, adapter substitution between deterministic and relational paths, plus explicit unauthorized and not-found outcomes.
+
+[Open full-size SVG](diagrams/sequence-customer-review.svg) · [PlantUML source](diagrams/sequence-customer-review.puml)
 
 ## Grounded analysis runtime
 
@@ -65,31 +88,39 @@ Analysis first loads the customer context through `CustomerActivityPort`, then o
 
 No relevant policy evidence terminates the successfully-grounded flow with an explicit insufficient-grounding result. Model/provider failure, invalid structured output, and persistence failure likewise terminate explicitly and cannot fall through into completed/retained history.
 
-![Grounded analysis sequence](diagrams/sequence-analysis.svg)
+![Figure 6 — Grounded analysis sequence](diagrams/sequence-analysis.svg)
 
-[PlantUML source](diagrams/sequence-analysis.puml)
+**Figure 6 — Grounded analysis sequence.** End-to-end synchronous analysis orchestration from customer context through policy grounding, deterministic/live model substitution, result validation, and persisted history. Failure branches terminate before successful completion and are expanded separately in Figure 8.
+
+[Open full-size SVG](diagrams/sequence-analysis.svg) · [PlantUML source](diagrams/sequence-analysis.puml)
 
 ## Analysis history review
 
 Authenticated operators can list/inspect prior analyses through `AnalysisHistoryPort`. The read contract is `AnalysisHistoryEntry`, which carries analysis/customer identity, generating operator, generation time, structured result and evidence provenance required by `AC-HIST-002`. `AnalysisHistoryCreateCommand` is the separate write input and intentionally lacks the generated analysis identity.
 
-![Analysis history review sequence](diagrams/sequence-analysis-history.svg)
+![Figure 7 — Analysis history review sequence](diagrams/sequence-analysis-history.svg)
 
-[PlantUML source](diagrams/sequence-analysis-history.puml)
+**Figure 7 — Analysis history review sequence.** Authenticated read path for listing and inspecting prior analyses while preserving the project-owned `AnalysisHistoryEntry` contract across the persistence boundary.
+
+[Open full-size SVG](diagrams/sequence-analysis-history.svg) · [PlantUML source](diagrams/sequence-analysis-history.puml)
 
 ## Failure and degraded behavior
 
 The focused failure view makes the negative paths independently reviewable: authentication rejection, insufficient grounding, model/provider failure, invalid structured output, and persistence failure. None of those paths may be represented as successfully completed/retained analysis.
 
-![Failure and degraded sequence](diagrams/sequence-failure-modes.svg)
+![Figure 8 — Failure and degraded analysis behavior](diagrams/sequence-failure-modes.svg)
 
-[PlantUML source](diagrams/sequence-failure-modes.puml)
+**Figure 8 — Failure and degraded analysis behavior.** Negative-path semantics for authentication, grounding, provider/model execution, structured-result validation, and history persistence. The figure exists separately from the happy-path sequence so failure semantics remain readable and independently reviewable.
+
+[Open full-size SVG](diagrams/sequence-failure-modes.svg) · [PlantUML source](diagrams/sequence-failure-modes.puml)
 
 ## Deployment and communication topology
 
 The runtime remains a modular monolith, not a static box. The deployment view distinguishes browser, web/frontend service, Spring Boot API process/container, PostgreSQL/pgvector and the optional external AI provider.
 
-![Deployment topology](diagrams/deployment-topology.svg)
+![Figure 9 — Deployment and communication topology](diagrams/deployment-topology.svg)
+
+**Figure 9 — Deployment and communication topology.** Runtime processes/services and the communication boundaries between browser, frontend, Spring Boot API, PostgreSQL/pgvector, and optional external AI provider. Protocol labels describe actual transport boundaries; in-process module/port calls are not drawn as network links.
 
 [PlantUML source](diagrams/deployment-topology.puml)
 
@@ -131,6 +162,7 @@ The contract refinements made during design review, including the split between 
 
 A reviewer should be able to answer from this document, without reconstructing PR diffs:
 
+- what system and operator context the architecture serves;
 - what the static module/component boundaries are;
 - which contracts and ports are application-owned;
 - how source data maps into those contracts;
