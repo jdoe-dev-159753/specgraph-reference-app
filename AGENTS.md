@@ -16,6 +16,45 @@ A custom Project field is justified only for a genuine independent closed dimens
 
 Free text explains purpose, scope, evidence, rationale, assumptions, acceptance criteria, non-goals, and reviewability. It does not duplicate the work graph.
 
+### Delivery priority
+
+`Delivery priority` is a planning dimension with exactly `MANDATORY`, `MUST_HAVE`, and `NICE_TO_HAVE`.
+
+- A root planning issue owns the explicit delivery-priority decision.
+- A sub-issue inherits delivery priority recursively from its native `Parent issue` chain. Do not manually fork the value on descendants.
+- A pull request has no synthetic parent issue. Its delivery priority is derived from the complete set of native closing/Development owner issues, using the highest urgency when more than one owner exists: `MANDATORY > MUST_HAVE > NICE_TO_HAVE`.
+- If a parent or owner relation is cross-repository or missing from the Project, do not infer from a partial graph. Surface the inconsistency for reconciliation.
+- Never infer delivery priority from title wording, labels, milestone, dates, or prose.
+
+### Discovery disposition
+
+`Discovery disposition` applies only to material discovery issues. Ordinary planned issues and pull requests intentionally leave this field not applicable/blank.
+
+Every material discovery requiring reconciliation must be represented by an issue carrying the non-exclusive `discovery` label and exactly one typed Project value:
+
+`IN_SCOPE | FOLLOW_UP | ALREADY_TRACKED | NON_ACTIONABLE`
+
+Map the value to native GitHub facts:
+
+- `IN_SCOPE`: the current corrective PR owns the discovery and closes it;
+- `FOLLOW_UP`: the discovery remains open as independently reviewable work;
+- `ALREADY_TRACKED`: use a native duplicate relation and close as duplicate;
+- `NON_ACTIONABLE`: close as not planned.
+
+Do not use a disposition value on ordinary PR rows merely to eliminate blanks.
+
+### Project status
+
+Project `Status` is a projection of native lifecycle/ownership facts, not an independent workflow state:
+
+- closed issue -> `Done`;
+- open issue with an open owning PR -> `In Progress`;
+- other open issue -> `Todo`;
+- open PR -> `In Progress`;
+- merged or closed PR -> `Done`.
+
+Do not create a second prose lifecycle when these facts are mechanically available.
+
 ## Issues and discoveries
 
 Use issues and pull requests together. An issue owns a reviewable capability, defect, decision, or other durable work node; a pull request owns one concrete reviewable change and links to its owning issue using GitHub Development/closing semantics when targeting the default branch.
