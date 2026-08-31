@@ -58,13 +58,19 @@ The component view makes provided/required seams explicit. The web client requir
 
 [PlantUML source](diagrams/component-topology.puml)
 
-The stable application contracts are `CustomerSnapshot`, project-owned activity/risk projections, `AnalysisResult`, `PolicyEvidence`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`. The class/domain view deliberately distinguishes those contracts from source-schema concepts; source/JPA relation classes are mapped by adapters rather than becoming members of `CustomerSnapshot`.
+The stable application contracts are `CustomerSnapshot`, project-owned activity/risk projections, `AnalysisResult`, `PolicyEvidence`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`. Source-schema concepts are shown separately because the application contract model and the persistence mapping answer different design questions and become unreadable when forced onto one canvas.
 
-![Figure 4 — Project-owned domain contracts and source mappings](diagrams/domain-contracts.svg)
+![Figure 4a — Project-owned application contracts](diagrams/domain-contracts.svg)
 
-**Figure 4 — Project-owned domain contracts and source mappings.** Stable application contracts are separated from source persistence concepts. Adapter mappings convert source shapes into project-owned activity, risk, analysis, and history representations; JPA/source relation classes never cross the application boundary.
+**Figure 4a — Project-owned application contracts.** Stable customer-review, analysis, policy-evidence, operator-attribution, and history contracts. The write-side `AnalysisHistoryCreateCommand` is distinct from the persisted/read `AnalysisHistoryEntry`, which owns the generated analysis identity.
 
 [PlantUML source](diagrams/domain-contracts.puml)
+
+![Figure 4b — Source persistence to application projection mapping](diagrams/source-contract-mapping.svg)
+
+**Figure 4b — Source persistence to application projection mapping.** The JPA/source relations stop at the persistence adapter boundary. Common transaction fields and CARD/PAYMENT/CRYPTO specializations map into `ActivityProjection`; source risk assessments/rules map into `RiskEvidence`. `CustomerSnapshot` therefore contains project-owned projections rather than persistence entities.
+
+[PlantUML source](diagrams/source-contract-mapping.puml)
 
 ## Relational persistence
 
