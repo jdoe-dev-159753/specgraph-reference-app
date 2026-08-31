@@ -7,7 +7,7 @@
 **Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md)  
 **Verification strategy:** `CAA-VV-001` is introduced by the dependent V&V work and is linked once that authority coexists on `main`.
 
-This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. [`design-map.yaml`](design-map.yaml) remains the machine-readable requirement-to-design mapping. PlantUML files in [`diagrams/`](diagrams/) are the semantic sources for UML and most architecture figures, with generated SVG views embedded below. Figure 11 is an authored SVG because its defining geometry is genuinely concentric rather than a graph layout.
+This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. [`design-map.yaml`](design-map.yaml) remains the machine-readable requirement-to-design mapping. PlantUML and Graphviz/DOT text files in [`diagrams/`](diagrams/) are the maintainable semantic sources for UML and architecture figures; rendered SVG files are generated views embedded below.
 
 ## System context and architectural orientation
 
@@ -30,7 +30,7 @@ The remaining figures progressively zoom from this system-level view into packag
 
 ## Figure notation and UML 2.5.1 profile
 
-The SDD uses standard UML 2.5.1 notation where that notation fits the engineering question, and explicitly labels non-UML architecture schematics instead of presenting arbitrary PlantUML shapes as a new diagram type.
+The SDD uses standard UML 2.5.1 notation where that notation fits the engineering question, and explicitly labels non-UML architecture schematics instead of presenting arbitrary rendering-tool shapes as a new diagram type.
 
 - **Figure 1:** architectural context schematic, non-UML.
 - **Figure 2a:** UML Package diagram.
@@ -40,7 +40,7 @@ The SDD uses standard UML 2.5.1 notation where that notation fits the engineerin
 - **Figure 5:** entity-relationship view of the relational schema, non-UML.
 - **Figures 6–9:** UML Activity diagrams using ActivityPartitions (swimlanes) to preserve ordering and responsibility without oversized lifelines.
 - **Figure 10:** UML Deployment diagram.
-- **Figure 11:** concentric delivery-ring schematic, non-UML.
+- **Figure 11:** concentric delivery-ring schematic, non-UML, authored as Graphviz/DOT text and rendered to SVG.
 
 Detailed Sequence diagrams remain available as supplementary design sources where message-level interaction ordering is useful, but they are not the primary embedded workflow views when their lifeline geometry makes normal GitHub reading worse.
 
@@ -50,7 +50,7 @@ Detailed Sequence diagrams remain available as supplementary design sources wher
 - [`requirements.yaml`](../SRS/requirements.yaml) owns machine-readable requirement identity, provenance and acceptance links.
 - [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), and [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md) own independently reviewable architecture decisions.
 - [`design-map.yaml`](design-map.yaml) owns the current mapping from requirements to design elements, ports, adapters, ADRs and delivery rings.
-- PlantUML sources in [`diagrams/`](diagrams/) own diagram semantics; rendered SVG files are generated views.
+- PlantUML and Graphviz/DOT sources in [`diagrams/`](diagrams/) own diagram semantics; rendered SVG files are generated views.
 - implementation and executable verification become authoritative for their concrete behavior once introduced, but do not silently rewrite requirements or ADR rationale.
 
 If code diverges from this map, the divergence must be reconciled by changing the design artifact/ADR or the code. A stale SDD is not permitted to remain apparently authoritative merely because Markdown is patient and never complains.
@@ -75,9 +75,21 @@ The same structure is easier to understand architecturally when drawn in the not
 
 [PlantUML source](diagrams/hexagonal-architecture.puml)
 
+### Gang of Four pattern roles inside the hexagonal design
+
+The inception document deliberately selected three GoF patterns and warned against pattern bingo: **Adapter**, **Strategy**, and **Facade/application service**. The SDD makes all three explicit. Hexagonal architecture itself is not a Strategy pattern; it is the architectural style in which these smaller pattern roles operate.
+
+| Pattern | Role in this design | Concrete examples |
+| --- | --- | --- |
+| **Adapter** | Translate infrastructure/framework/provider APIs into application-owned ports and contracts | `SyntheticActivityAdapter`, `JpaCustomerActivityAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisStub`, `SpringAiAnalysisAdapter`, `JpaAnalysisHistoryAdapter` |
+| **Strategy** | Select interchangeable behavior behind one stable port without provider/storage branching in the application core | synthetic vs JPA activity, static vs pgvector policy retrieval, deterministic vs live model implementation |
+| **Facade / application service** | Expose a coarse-grained use case while hiding orchestration across multiple ports | analysis application service coordinating customer context, policy retrieval, model execution, result validation and history persistence |
+
+This mapping follows the reuse/pattern blueprint in [`Inception.md`](../Inception/Inception.md#12-reuse-first-and-restrained-patterns) and is reflected in [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md) and [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md). Composition, constructor injection, records/final classes and framework-supplied Repository abstractions remain implementation techniques; they are not promoted to additional GoF patterns merely to inflate the vocabulary.
+
 ## Components and interfaces
 
-The component view makes provided/required seams explicit. The web client requires the protected HTTP/JSON surface. Inside the backend, application modules require project-owned outbound ports (`CustomerActivityPort`, `AnalysisModelPort`, `PolicyKnowledgePort`, `AnalysisHistoryPort`); replaceable adapters provide those ports.
+The component view makes provided/required seams explicit. The web client requires the protected HTTP/JSON surface. Inside the backend, application modules require project-owned outbound ports (`CustomerActivityPort`, `AnalysisModelPort`, `PolicyKnowledgePort`, `AnalysisHistoryPort`); replaceable adapters provide those ports. Operator-facing HTTP code depends on coarse-grained application use cases/facades rather than coordinating persistence, retrieval and model adapters itself.
 
 ![Figure 3 — UML Component diagram — application components and interfaces](diagrams/component-topology.svg)
 
@@ -189,7 +201,9 @@ The design is activated through concentric rings rather than parallel throwaway 
 
 **Figure 11 — Concentric delivery rings.** Onion-style activation model from the deployable R0 shell at the center through R1 synthetic read, R2 relational read, R3 deterministic analysis/history, R4 grounded provider integration and R5 hardening/demo. Each outer ring activates or substitutes adapters around the same core rather than creating a second architecture.
 
-[Authored SVG source](diagrams/delivery-rings.svg)
+[Authoritative Graphviz/DOT source](diagrams/delivery-rings.dot)
+
+The SVG is generated from the text source; it is not maintained by hand. Graphviz is used here for the same reason as in the inception concentric-ring figure: exact concentric geometry is the semantic point of the view. Mermaid remains appropriate for diagram types it models directly, but its current diagram catalogue has no native onion/concentric-ring type, so forcing this view through a generic flowchart layout would make the source simpler only by making the geometry less authoritative.
 
 The ring semantics are:
 
@@ -211,7 +225,7 @@ The current design remains consistent with the four accepted architecture decisi
 - [`ADR-003 — PostgreSQL + pgvector persistence`](../ADR/ADR-003-postgresql-pgvector-persistence.md);
 - [`ADR-004 — Baseline Java/Spring/React web stack`](../ADR/ADR-004-baseline-web-stack.md).
 
-The contract refinements made during design review, including the split between `AnalysisHistoryCreateCommand` and `AnalysisHistoryEntry`, refine those decisions rather than introducing a new architectural decision. No synthetic ADR is added merely to record normal design elaboration.
+The contract refinements made during design review, including the split between `AnalysisHistoryCreateCommand` and `AnalysisHistoryEntry`, refine those decisions rather than introducing a new architectural decision. The explicit Adapter/Strategy/Facade mapping likewise restores inception intent inside the accepted architectural decisions rather than creating an extra ADR solely for pattern terminology.
 
 ## Review criterion
 
@@ -221,6 +235,7 @@ A reviewer should be able to answer from this document, without reconstructing P
 - which figures are UML 2.5.1 diagrams and which are explicitly non-UML architecture schematics;
 - how the modular-monolith packages depend on each other;
 - how the hexagonal core, ports, driving adapters and driven adapters relate;
+- where Adapter, Strategy and Facade/application-service roles actually occur and why they are not themselves the architectural style;
 - which contracts and ports are application-owned;
 - how the supplied relational schema and exact source types map into those contracts;
 - how the principal successful and failure workflows execute;
