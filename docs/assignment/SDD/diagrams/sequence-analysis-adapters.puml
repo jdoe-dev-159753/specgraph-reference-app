@@ -1,0 +1,49 @@
+@startuml
+title Figure 6b — Analysis adapter substitutions and infrastructure
+hide footbox
+skinparam maxMessageSize 48
+
+participant "Analysis\napplication" as Analysis
+participant "Activity adapter" as Activity
+participant "Policy adapter" as Policy
+participant "Model adapter" as Model
+participant "History adapter" as History
+database "PostgreSQL /\npgvector" as DB
+participant "External AI\nprovider" as Provider
+
+== Customer context ==
+Analysis -> Activity : CustomerActivityPort.loadSnapshot
+alt R1 deterministic path
+  Activity --> Analysis : SyntheticActivityAdapter → CustomerSnapshot
+else R2+ relational path
+  Activity -> DB : JPA / JDBC activity + risk queries
+  DB --> Activity : source rows
+  Activity --> Analysis : JpaCustomerActivityAdapter → CustomerSnapshot
+end
+
+== Policy grounding ==
+Analysis -> Policy : PolicyKnowledgePort.retrieveRelevant
+alt offline baseline
+  Policy --> Analysis : StaticPolicyAdapter → PolicyEvidence[]
+else R4 vector retrieval
+  Policy -> DB : pgvector query
+  DB --> Policy : corpus evidence
+  Policy --> Analysis : PgVectorPolicyAdapter → PolicyEvidence[]
+end
+
+== Model execution ==
+Analysis -> Model : AnalysisModelPort.analyze
+alt deterministic baseline
+  Model --> Analysis : DeterministicAnalysisStub → candidate
+else configured live provider
+  Model -> Provider : HTTPS provider API
+  Provider --> Model : response / provider failure
+  Model --> Analysis : SpringAiAnalysisAdapter → candidate / failure
+end
+
+== History persistence ==
+Analysis -> History : AnalysisHistoryPort.persist
+History -> DB : JPA / JDBC INSERT
+DB --> History : generated identity / failure
+History --> Analysis : AnalysisHistoryEntry / failure
+@enduml
