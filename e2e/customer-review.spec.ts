@@ -46,15 +46,16 @@ test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testI
   await expect(page.getByRole('columnheader', { name: 'Status' })).toBeVisible()
   await expect(page.getByRole('columnheader', { name: 'Time' })).toBeVisible()
 
-  const card = snapshot.activities.find((activity: Activity) => activity.type === 'CARD') as Activity
-  expect(card).toBeTruthy()
-  await expect(page.getByTestId('activity-card-transaction')).toHaveText(card.transactionId)
-  await expect(page.getByTestId('activity-card-amount')).toHaveAttribute('data-amount', String(card.amount))
-  await expect(page.getByTestId('activity-card-amount')).not.toContainText(card.currency)
-  await expect(page.getByTestId('activity-card-currency')).toHaveText(card.currency)
-  await expect(page.getByTestId('activity-card-status')).toContainText(card.status)
-  await expect(page.getByTestId('activity-card-time')).toBeVisible()
-  await expect(page.getByTestId('activity-card-time')).toHaveAttribute('data-created-at', card.createdAt)
+  for (const activity of snapshot.activities as Activity[]) {
+    const key = activity.type.toLowerCase()
+    await expect(page.getByTestId(`activity-${key}-transaction`)).toHaveText(activity.transactionId)
+    await expect(page.getByTestId(`activity-${key}-amount`)).toHaveAttribute('data-amount', String(activity.amount))
+    await expect(page.getByTestId(`activity-${key}-amount`)).not.toContainText(activity.currency)
+    await expect(page.getByTestId(`activity-${key}-currency`)).toHaveText(activity.currency)
+    await expect(page.getByTestId(`activity-${key}-status`)).toContainText(activity.status)
+    await expect(page.getByTestId(`activity-${key}-time`)).toBeVisible()
+    await expect(page.getByTestId(`activity-${key}-time`)).toHaveAttribute('data-created-at', activity.createdAt)
+  }
 
   await expect(page.getByTestId('activity-card')).toContainText('Alpine Camera')
   await expect(page.getByTestId('activity-payment')).toContainText('receiverBankCountry: DE')
