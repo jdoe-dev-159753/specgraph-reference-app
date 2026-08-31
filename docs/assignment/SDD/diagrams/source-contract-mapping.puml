@@ -1,0 +1,67 @@
+@startuml
+title Figure 4b — Source persistence to application projection mapping
+top to bottom direction
+skinparam classAttributeIconSize 0
+skinparam linetype polyline
+skinparam nodesep 25
+skinparam ranksep 40
+
+package "Source persistence concepts" {
+  class Transaction <<source relation>> {
+    transaction_id : UUID
+    customer_id : UUID
+    activity_type : CARD|PAYMENT|CRYPTO
+  }
+  class CardActivity <<source specialization>>
+  class PaymentActivity <<source specialization>>
+  class CryptoActivity <<source specialization>>
+  class RiskAssessment <<source relation>> {
+    triggeredAt
+    scoreContribution
+  }
+  class RiskRule <<source relation>> {
+    name
+    applicableActivityFamily
+  }
+
+  Transaction <|-- CardActivity : CARD
+  Transaction <|-- PaymentActivity : PAYMENT
+  Transaction <|-- CryptoActivity : CRYPTO
+  Transaction "1" -- "0..*" RiskAssessment
+  RiskRule "1" -- "0..*" RiskAssessment
+
+  CardActivity -[hidden]down-> PaymentActivity
+  PaymentActivity -[hidden]down-> CryptoActivity
+  RiskRule -[hidden]down-> RiskAssessment
+}
+
+package "Project-owned projections" {
+  class ActivityProjection <<project contract>> {
+    transactionId
+    family
+    common fields
+    familyDetails
+  }
+  class RiskEvidence <<project contract>> {
+    transactionId
+    ruleIdentity
+    ruleName
+    triggeredAt
+    scoreContribution
+  }
+
+  ActivityProjection -[hidden]right-> RiskEvidence
+}
+
+Transaction ..> ActivityProjection : common-field mapping
+CardActivity ..> ActivityProjection : CARD family details
+PaymentActivity ..> ActivityProjection : PAYMENT family details
+CryptoActivity ..> ActivityProjection : CRYPTO family details
+RiskAssessment ..> RiskEvidence : trigger / score mapping
+RiskRule ..> RiskEvidence : rule identity / name
+
+note bottom
+  Mapping occurs inside activity persistence adapters. Source/JPA relation types
+  stop at the adapter boundary; CustomerSnapshot receives only project projections.
+end note
+@enduml
