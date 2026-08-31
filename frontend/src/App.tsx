@@ -164,7 +164,12 @@ export default function App() {
                   >
                     <Box>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{evidence.ruleName}</Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        data-testid={`risk-evidence-${evidence.transactionId}-${evidence.ruleId}-time`}
+                        data-triggered-at={evidence.triggeredAt}
+                      >
                         {evidence.ruleId} · transaction {evidence.transactionId} · {new Date(evidence.triggeredAt).toLocaleString()}
                       </Typography>
                     </Box>
