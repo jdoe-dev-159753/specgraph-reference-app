@@ -56,6 +56,7 @@ Http --> Risk : in-process
 Http --> Analysis : in-process
 Customer --> ActivityPort : requires
 Risk --> ActivityPort : requires
+Analysis --> ActivityPort : requires customer context
 Analysis --> ModelPort : requires
 Analysis --> PolicyPort : requires
 Analysis --> HistoryPort : requires
@@ -74,6 +75,7 @@ HistoryJpa --> Db : JDBC
 
 note bottom of Backend
   Project-owned ports make required/provided seams explicit.
+  The analysis application reads customer context through CustomerActivityPort;
   Spring/JPA/provider types remain adapter-side implementation details.
 end note
 @enduml
