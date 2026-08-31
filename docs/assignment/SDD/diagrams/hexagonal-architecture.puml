@@ -1,35 +1,45 @@
 @startuml
 title Figure 2b — Hexagonal architecture — ports and adapters
-left to right direction
+top to bottom direction
 skinparam linetype polyline
 skinparam componentStyle rectangle
-skinparam nodesep 35
-skinparam ranksep 45
+skinparam nodesep 28
+skinparam ranksep 38
 
 actor "Customer Care\nOperator" as Operator
 
 package "Driving adapters" {
   component "React operator UI" as UI
-  component "Spring Security +\nHTTP adapter" as Http
+  component "HTTP adapter\n+ optional auth boundary" as Http
+  UI -[hidden]down-> Http
 }
 
 interface "Inbound application use cases\ncustomer review · analysis · history" as Inbound
+hexagon "Application core\n\nidentity · customer · risk · analysis\n\nproject-owned domain +\napplication contracts" as Core
+
 interface "CustomerActivityPort" as ActivityPort
 interface "PolicyKnowledgePort" as PolicyPort
 interface "AnalysisModelPort" as ModelPort
 interface "AnalysisHistoryPort" as HistoryPort
 
-hexagon "Application core\n\nidentity\ncustomer\nrisk\nanalysis\n\nproject-owned domain + application contracts" as Core
+ActivityPort -[hidden]down-> PolicyPort
+PolicyPort -[hidden]down-> ModelPort
+ModelPort -[hidden]down-> HistoryPort
 
 package "Driven adapters" {
   component "SyntheticActivityAdapter\nJpaCustomerActivityAdapter\n<<GoF Adapter>>" as ActivityAdapters
   component "StaticPolicyAdapter\nPgVectorPolicyAdapter\n<<GoF Adapter>>" as PolicyAdapters
   component "DeterministicAnalysisStub\nSpringAiAnalysisAdapter\n<<GoF Adapter>>" as ModelAdapters
   component "JpaAnalysisHistoryAdapter\n<<GoF Adapter>>" as HistoryAdapter
+
+  ActivityAdapters -[hidden]down-> PolicyAdapters
+  PolicyAdapters -[hidden]down-> ModelAdapters
+  ModelAdapters -[hidden]down-> HistoryAdapter
 }
 
 database "PostgreSQL + pgvector" as DB
 component "External AI provider" as Provider <<external>>
+DB -[hidden]down-> Provider
 
 Operator --> UI
 UI --> Http : HTTP/JSON
@@ -41,22 +51,20 @@ Core --> PolicyPort
 Core --> ModelPort
 Core --> HistoryPort
 
-ActivityPort --> ActivityAdapters : interchangeable strategy implementations
-PolicyPort --> PolicyAdapters : interchangeable strategy implementations
-ModelPort --> ModelAdapters : interchangeable strategy implementations
+ActivityPort --> ActivityAdapters : interchangeable implementations
+PolicyPort --> PolicyAdapters : interchangeable implementations
+ModelPort --> ModelAdapters : interchangeable implementations
 HistoryPort --> HistoryAdapter
 
 ActivityAdapters --> DB : JDBC when JPA selected
-PolicyAdapters --> DB : JDBC/pgvector when R4 selected
+PolicyAdapters --> DB : JDBC/pgvector when selected
 HistoryAdapter --> DB : JDBC
-ModelAdapters ..> Provider : HTTPS only when live adapter selected
+ModelAdapters ..> Provider : HTTPS when live adapter selected
 
 note bottom of Core
   Hexagonal architecture is the architectural style, not a GoF pattern.
-  GoF roles used inside it:
-  - Adapter: infrastructure implementations translate external/framework APIs to ports.
-  - Strategy: alternate implementations are selected behind stable port contracts.
-  - Facade/application service: coarse-grained use cases orchestrate several ports
-    without exposing that choreography to the HTTP adapter or UI.
+  Adapter translates infrastructure/framework APIs to project-owned ports.
+  Strategy selects interchangeable implementations behind stable ports.
+  Facade/application service exposes coarse-grained orchestration.
 end note
 @enduml

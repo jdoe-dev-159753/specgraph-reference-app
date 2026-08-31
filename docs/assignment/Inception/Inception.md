@@ -480,7 +480,7 @@ Keep the stub available in the final repository as an offline/demo fallback. The
 | Risk evidence | stub projection | seeded synthetic assessments | persisted supplied-schema assessments |
 | Policy retrieval | static fixture | real corpus/chunking path | pgvector retrieval |
 | Analysis model | deterministic stub | deterministic stub over real context/RAG | optional live Spring AI provider, stub retained |
-| Identity | temporary protected demo boundary | Spring Security in-memory/JDBC path | persisted multi-operator auth |
+| Identity | `OperatorId` / application seam only; no authentication acceptance | mandatory customer slice remains unblocked by authentication | Spring Security multi-operator authentication activated as MUST_HAVE |
 | Deployment | local Compose + live shell | same topology with real DB | same topology, hardened config |
 
 The shell, ports, and topology should remain stable while implementations become progressively real.

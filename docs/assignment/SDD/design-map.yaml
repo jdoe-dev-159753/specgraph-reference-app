@@ -13,7 +13,7 @@ modules:
   MOD-IDENTITY-001:
     name: identity
     responsibility: authenticated operator context and access boundary
-    activation_ring: R1
+    activation_ring: R4
     adrs: [ADR-001, ADR-004]
   MOD-CUSTOMER-001:
     name: customer
@@ -105,7 +105,7 @@ adapters:
     name: SpringSecurityOperatorAdapter
     kind: inbound_boundary
     technology: Spring Security
-    activation_ring: R1
+    activation_ring: R4
     connects_to: [MOD-IDENTITY-001, ADP-HTTP-001]
     adrs: [ADR-004]
   ADP-ACT-SYN-001:
@@ -148,7 +148,7 @@ adapters:
     name: JpaAnalysisHistoryAdapter
     kind: outbound
     implements: PRT-HISTORY-001
-    activation_ring: R3
+    activation_ring: R4
     adrs: [ADR-003, ADR-004]
 
 infrastructure:
@@ -197,7 +197,7 @@ requirement_design:
   FR-AUTH-001:
     elements: [CMP-UI-001, ADP-AUTH-SPRING-001, MOD-IDENTITY-001, CTR-OPERATOR-ID-001]
     adrs: [ADR-001, ADR-004]
-    first_acceptance_ring: R1
+    first_acceptance_ring: R4
   FR-RAG-001:
     elements: [MOD-ANALYSIS-001, PRT-POLICY-001, CTR-POLICY-EVIDENCE-001, ADP-POL-STATIC-001, ADP-POL-PGV-001]
     adrs: [ADR-002, ADR-003]
@@ -205,11 +205,11 @@ requirement_design:
   FR-HIST-001:
     elements: [MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001, INF-DB-001, CTR-ANALYSIS-HISTORY-CREATE-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
     adrs: [ADR-001, ADR-003, ADR-004]
-    first_acceptance_ring: R3
+    first_acceptance_ring: R4
   FR-HIST-002:
     elements: [CMP-UI-001, ADP-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001, CTR-ANALYSIS-HISTORY-ENTRY-001]
     adrs: [ADR-001, ADR-003, ADR-004]
-    first_acceptance_ring: R3
+    first_acceptance_ring: R4
   NFR-REP-001:
     elements: [INF-COMPOSE-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
     adrs: [ADR-002, ADR-004]
@@ -221,13 +221,13 @@ requirement_design:
   NFR-SEC-001:
     elements: [ADP-AUTH-SPRING-001, MOD-IDENTITY-001, ADP-HTTP-001]
     adrs: [ADR-001, ADR-004]
-    first_acceptance_ring: R1
+    first_acceptance_ring: R4
 
 first_vertical_slice:
   rings: [R0, R1]
-  requirements: [FR-CUST-001, FR-ACT-001, FR-ACT-002, FR-RISK-001, FR-AUTH-001, NFR-SEC-001]
-  acceptance: [AC-CUST-001, AC-CUST-002, AC-ACT-001, AC-ACT-002, AC-RISK-001, AC-AUTH-001, AC-SEC-001]
-  path: [CMP-UI-001, ADP-AUTH-SPRING-001, MOD-IDENTITY-001, ADP-HTTP-001, MOD-CUSTOMER-001, MOD-RISK-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001]
+  requirements: [FR-CUST-001, FR-ACT-001, FR-ACT-002, FR-RISK-001]
+  acceptance: [AC-CUST-001, AC-CUST-002, AC-ACT-001, AC-ACT-002, AC-RISK-001]
+  path: [CMP-UI-001, ADP-HTTP-001, MOD-CUSTOMER-001, MOD-RISK-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001]
   prohibited_shortcuts:
     - bypassing CustomerActivityPort from the HTTP adapter
     - leaking Spring or persistence types into CustomerSnapshot
@@ -237,11 +237,11 @@ first_vertical_slice:
 design_gaps:
   GAP-HIST-001:
     source_ambiguity: AMB-HIST-001
-    needed_by_ring: R3
+    needed_by_ring: R4
     question: exact relational fields and evidence provenance for persisted analyses
   GAP-AUTH-001:
     source_ambiguity: AMB-AUTH-001
-    needed_by_ring: R1
+    needed_by_ring: R4
     question: local demo credential storage and seeding mechanism
   GAP-RAG-001:
     source_ambiguity: AMB-RAG-001

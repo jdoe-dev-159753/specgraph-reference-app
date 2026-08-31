@@ -1,5 +1,8 @@
 @startuml
+title Customer Activity Analytics — illustrative functional use cases
 left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
 actor "Customer Care Operator" as Operator
 
 skinparam usecase {
@@ -8,26 +11,37 @@ skinparam usecase {
   BackgroundColor<<NICE_TO_HAVE>> #CDECCF
 }
 
-rectangle "Customer Risk Analysis Reference Application" as SystemBoundary {
-  usecase "Authenticate Operator" as UC_Auth <<MUST_HAVE>>
-  usecase "Search Customer" as UC_Search <<MANDATORY>>
-  usecase "Review Customer Dashboard" as UC_Dashboard <<MANDATORY>>
+rectangle "Customer Risk Analysis Reference Application\n<<system boundary>>" as SystemBoundary {
+  package "Identity and customer selection" {
+    usecase "Authenticate Operator\n[FR-AUTH-001]" as UC_Auth <<MUST_HAVE>>
+    usecase "Search Customer\n[FR-CUST-001]" as UC_Search <<MANDATORY>>
+  }
 
-  usecase "Review Customer Activity" as UC_Activity <<MANDATORY>>
-  usecase "Review CARD Activity" as UC_Card <<MANDATORY>>
-  usecase "Review PAYMENT Activity" as UC_Payment <<MANDATORY>>
-  usecase "Review CRYPTO Activity" as UC_Crypto <<MANDATORY>>
-  usecase "Review Risk Signals" as UC_Risk <<MANDATORY>>
+  package "Customer activity review" {
+    usecase "Review Customer Dashboard\n[FR-ACT-001]" as UC_Dashboard <<MANDATORY>>
+    usecase "Review Customer Activity\n[FR-ACT-001]" as UC_Activity <<MANDATORY>>
+    usecase "Review CARD Activity\n[FR-ACT-002]" as UC_Card <<MANDATORY>>
+    usecase "Review PAYMENT Activity\n[FR-ACT-002]" as UC_Payment <<MANDATORY>>
+    usecase "Review CRYPTO Activity\n[FR-ACT-002]" as UC_Crypto <<MANDATORY>>
+    usecase "Filter Activity" as UC_Filter <<NICE_TO_HAVE>>
+    usecase "Inspect Transaction Details" as UC_Detail <<NICE_TO_HAVE>>
+  }
 
-  usecase "Request AI Analysis" as UC_AI <<MANDATORY>>
-  usecase "Build Analysis Context" as UC_Context <<MANDATORY>>
-  usecase "Produce Structured Risk Analysis" as UC_Assessment <<MANDATORY>>
-  usecase "Ground Analysis with Relevant Policies" as UC_Grounded <<MUST_HAVE>>
-  usecase "Retain Analysis for Later Review" as UC_Retain <<MUST_HAVE>>
-  usecase "Review Analysis History" as UC_History <<MUST_HAVE>>
+  package "Risk evidence review" {
+    usecase "Review Risk Signals\n[FR-RISK-001]" as UC_Risk <<MANDATORY>>
+  }
 
-  usecase "Filter Activity" as UC_Filter <<NICE_TO_HAVE>>
-  usecase "Inspect Transaction Details" as UC_Detail <<NICE_TO_HAVE>>
+  package "AI-assisted customer analysis" {
+    usecase "Request AI Analysis\n[FR-AI-001]" as UC_AI <<MANDATORY>>
+    usecase "Build Analysis Context" as UC_Context <<MANDATORY>>
+    usecase "Produce Structured Risk Analysis\n[FR-AI-002]" as UC_Assessment <<MANDATORY>>
+    usecase "Ground Analysis with Relevant Policies\n[FR-RAG-001]" as UC_Grounded <<MUST_HAVE>>
+    usecase "Retain Analysis for Later Review\n[FR-HIST-001]" as UC_Retain <<MUST_HAVE>>
+  }
+
+  package "Analysis history review" {
+    usecase "Review Analysis History\n[FR-HIST-002]" as UC_History <<MUST_HAVE>>
+  }
 
   UC_Dashboard .> UC_Activity : <<include>>
   UC_Dashboard .> UC_Risk : <<include>>
@@ -52,8 +66,9 @@ Operator -- UC_AI
 Operator -- UC_History
 
 note right of UC_Auth
-  Precondition for protected use cases;
-  not repeated as an <<include>> edge.
+  Completed-system precondition for protected use cases.
+  MUST_HAVE priority means authentication is activated after
+  the mandatory centre; it is not an R1 acceptance gate.
 end note
 
 note bottom of UC_Activity
@@ -66,13 +81,10 @@ note bottom of UC_Assessment
   findings summary and recommendations.
 end note
 
-note bottom of UC_Grounded
-  Delivery priority: MUST_HAVE.
-  Priority does not determine UML relation semantics.
-end note
-
-note bottom of UC_Retain
-  Delivery priority: MUST_HAVE.
-  The completed target retains generated analyses.
-end note
+legend bottom
+  UML Package = logical namespace/grouping of coherent use cases.
+  System boundary = subject to which the use cases apply; visual containment
+  does not replace package ownership. Requirement IDs are traceability labels,
+  not Requirement elements embedded in this UML use-case view.
+endlegend
 @enduml
