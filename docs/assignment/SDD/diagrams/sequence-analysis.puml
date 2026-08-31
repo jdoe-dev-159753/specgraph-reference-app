@@ -1,5 +1,5 @@
 @startuml
-title Figure 6a — Grounded analysis orchestration
+title Figure 7a — Grounded analysis orchestration
 hide footbox
 skinparam maxMessageSize 50
 
@@ -50,7 +50,7 @@ else relevant evidence available
 end
 
 note over Activity,History
-  These are project-owned application ports. Figure 6b shows the
+  These are project-owned application ports. Figure 7b shows the
   replaceable adapters and the JDBC/HTTPS infrastructure boundaries.
 end note
 @enduml
