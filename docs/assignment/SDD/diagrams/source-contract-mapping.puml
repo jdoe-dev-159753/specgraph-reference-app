@@ -1,5 +1,5 @@
 @startuml
-title Figure 4b — Source persistence to application projection mapping
+title Figure 4b — UML Class diagram — source-to-application mapping
 top to bottom direction
 skinparam classAttributeIconSize 0
 skinparam linetype polyline
@@ -61,7 +61,8 @@ RiskAssessment ..> RiskEvidence : trigger / score mapping
 RiskRule ..> RiskEvidence : rule identity / name
 
 note bottom
-  Mapping occurs inside activity persistence adapters. Source/JPA relation types
-  stop at the adapter boundary; CustomerSnapshot receives only project projections.
+  UML Class diagram used as a mapping view. Mapping occurs inside activity persistence
+  adapters. Source/JPA relation types stop at the adapter boundary; CustomerSnapshot
+  receives only project-owned projections.
 end note
 @enduml
