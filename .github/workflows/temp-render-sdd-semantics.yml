@@ -7,6 +7,7 @@ on:
       - docs/sdd-readable-figures
     paths:
       - 'docs/assignment/SDD/diagrams/**.puml'
+      - 'docs/assignment/SDD/diagrams/**.dot'
       - '.github/workflows/temp-render-sdd-semantics.yml'
 
 permissions:
@@ -20,14 +21,26 @@ jobs:
         with:
           ref: docs/sdd-readable-figures
           persist-credentials: true
-      - name: Render SDD PlantUML to SVG
+      - name: Render PlantUML sources
         shell: bash
         run: |
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
             -v "$PWD:/workspace" \
             -w /workspace \
             plantuml/plantuml:1.2026.6 \
             -tsvg docs/assignment/SDD/diagrams/*.puml
+      - name: Render Graphviz delivery rings
+        shell: bash
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --entrypoint dot \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            plantuml/plantuml:1.2026.6 \
+            -Tsvg docs/assignment/SDD/diagrams/delivery-rings.dot \
+            -o docs/assignment/SDD/diagrams/delivery-rings.svg
       - name: Commit rendered SVGs
         shell: bash
         run: |
@@ -39,5 +52,5 @@ jobs:
             echo "No rendered changes"
             exit 0
           fi
-          git commit -m "docs: render UML-aligned SDD figures"
+          git commit -m "docs: render final SDD figures"
           git push
