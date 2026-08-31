@@ -1,33 +1,36 @@
 @startuml
+title Figure 7 — Analysis history review
 hide footbox
+skinparam maxMessageSize 52
+
 actor Operator
 participant "React UI" as UI
-participant "Spring Security / HTTP boundary" as Boundary
-participant "analysis application" as Analysis
+participant "Security + HTTP\nboundary" as Boundary
+participant "Analysis application" as Analysis
 participant "AnalysisHistoryPort" as History
-participant "JpaAnalysisHistoryAdapter" as Jpa
+participant "History adapter" as Adapter
 database "PostgreSQL" as DB
 
-Operator -> UI : open prior analyses for selected customer
-UI -> Boundary : GET analysis history [HTTP/JSON]
+Operator -> UI : open prior analyses
+UI -> Boundary : GET customer history [HTTP/JSON]
 alt unauthenticated
   Boundary --> UI : reject / redirect
   UI --> Operator : authentication required
 else authenticated
-  Boundary -> Analysis : listHistory(customerId, operatorContext) [in-process]
-  Analysis -> History : listByCustomer(customerId) [in-process port]
-  History -> Jpa : dispatch [in-process]
-  Jpa -> DB : JDBC SELECT analysis_history by customer
-  DB --> Jpa : persisted prior analyses
-  Jpa --> History : history entries
-  History --> Analysis : history entries
-  Analysis --> Boundary : history DTOs with AC-HIST-002 fields
+  Boundary -> Analysis : listHistory(customerId, operator)
+  Analysis -> History : listByCustomer(customerId)
+  History -> Adapter : JpaAnalysisHistoryAdapter
+  Adapter -> DB : JDBC SELECT analysis_history
+  DB --> Adapter : persisted analyses
+  Adapter --> History : AnalysisHistoryEntry[]
+  History --> Analysis : AnalysisHistoryEntry[]
+  Analysis --> Boundary : history projection
   Boundary --> UI : 200 JSON
-  UI --> Operator : list and inspect previous result
+  UI --> Operator : list + inspect prior analyses
 end
 
 note right of History
-  FR-HIST-002 / AC-HIST-002 read path is distinct from persistence.
-  Persistence infrastructure does not leak JPA rows through the port.
+  The application port returns project-owned AnalysisHistoryEntry values;
+  JPA rows do not cross the persistence boundary.
 end note
 @enduml
