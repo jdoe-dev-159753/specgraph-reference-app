@@ -1,0 +1,70 @@
+name: link-j2-j5-native-graph-once
+
+on:
+  push:
+    branches: [ops/populate-j2-j5-workgraph-once]
+    paths:
+      - '.github/workflows/link-j2-j5-native-graph-once.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  link:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci]
+    steps:
+      - name: Link native parents and dependencies, close J1 milestone
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const parents = new Map([
+              [99,102], [100,102], [112,102], [114,112],
+              [115,63], [116,63], [117,64],
+              [119,118], [120,118], [121,118],
+              [123,122], [124,122], [125,122], [126,122],
+            ]);
+            const dependencies = [
+              [118,64],
+              [122,118],
+              [125,123],
+              [127,122],
+              [128,122],
+              [129,122],
+            ];
+
+            for (const [childNumber, parentNumber] of parents) {
+              const { data: child } = await github.rest.issues.get({ owner, repo, issue_number: childNumber });
+              try {
+                await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                  owner, repo, issue_number: parentNumber, sub_issue_id: child.id, replace_parent: true,
+                  headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+                });
+                core.info(`parent #${parentNumber} -> child #${childNumber}`);
+              } catch (error) {
+                if (error.status !== 409 && error.status !== 422) throw error;
+                core.info(`parent relation already satisfied: #${parentNumber} -> #${childNumber}`);
+              }
+            }
+
+            for (const [blockedNumber, blockerNumber] of dependencies) {
+              const { data: blocker } = await github.rest.issues.get({ owner, repo, issue_number: blockerNumber });
+              try {
+                await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by', {
+                  owner, repo, issue_number: blockedNumber, issue_id: blocker.id,
+                  headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+                });
+                core.info(`#${blockedNumber} blocked by #${blockerNumber}`);
+              } catch (error) {
+                if (error.status !== 409 && error.status !== 422) throw error;
+                core.info(`dependency already satisfied: #${blockedNumber} <- #${blockerNumber}`);
+              }
+            }
+
+            await github.request('PATCH /repos/{owner}/{repo}/milestones/{milestone_number}', {
+              owner, repo, milestone_number: 1, state: 'closed',
+              headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+            });
+            core.info('J1 milestone closed');
