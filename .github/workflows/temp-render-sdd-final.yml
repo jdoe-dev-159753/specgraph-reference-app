@@ -1,0 +1,41 @@
+name: temp-render-sdd-final
+
+on:
+  push:
+    branches:
+      - docs/sdd-complete-views
+    paths:
+      - '.github/workflows/temp-render-sdd-final.yml'
+      - 'docs/assignment/SDD/diagrams/package-modules.puml'
+      - 'docs/assignment/SDD/diagrams/sequence-analysis.puml'
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+      - name: Render corrected SDD views
+        shell: bash
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/workspace" -w /workspace \
+            plantuml/plantuml:1.2026.6 \
+            docs/assignment/SDD/diagrams/package-modules.puml \
+            docs/assignment/SDD/diagrams/sequence-analysis.puml
+      - name: Commit generated SVG views
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/assignment/SDD/diagrams/package-modules.svg docs/assignment/SDD/diagrams/sequence-analysis.svg
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "docs: render final SDD corrections"
+          git push
