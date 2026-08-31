@@ -1,7 +1,7 @@
 schema_version: 1
 design_id: CAA-DESIGN-001
 normative_requirements: ../SRS/requirements.yaml
-current_design_readme: README.md
+current_design_document: SDD.md
 
 adrs:
   ADR-001: ../ADR/ADR-001-modular-monolith-hexagonal.md
