@@ -160,7 +160,9 @@ infrastructure:
   INF-COMPOSE-001:
     name: ComposeTopology
     activation_ring: R0
-    responsibility: reproducible mandatory local application/dependency topology
+    responsibility: reproducible application topology shared by mandatory local execution, CI verification and dedicated Docker-VM demonstration
+    operator_entrypoint: configurable DEMO_URL printed only after backend and frontend readiness
+    operating_modes: [foreground_interactive, detached_persistent]
     adrs: [ADR-004]
   CMP-UI-001:
     name: OperatorDashboard

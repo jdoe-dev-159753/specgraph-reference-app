@@ -177,16 +177,22 @@ The runtime remains a modular monolith, not a static box. The deployment view di
 
 ![Figure 10 — UML Deployment diagram — runtime nodes and communication paths](diagrams/deployment-topology.svg)
 
-**Figure 10 — UML Deployment diagram — runtime nodes and communication paths.** UML Nodes/ExecutionEnvironments and Artifacts describe the local Compose baseline. Browser → frontend uses HTTP locally; frontend → API uses HTTP/JSON; API → PostgreSQL uses JDBC/PostgreSQL over the private Compose network; the optional external provider is HTTPS only when explicitly configured.
+**Figure 10 — UML Deployment diagram — runtime nodes and communication paths.** UML Nodes/ExecutionEnvironments and Artifacts describe the Docker Compose baseline. The `Docker Compose / Linux host` node may be the reviewer's local machine or a dedicated Docker-capable demonstration VM; that placement does not change the application topology. Browser → frontend uses HTTP; frontend → API uses HTTP/JSON over the Compose network; API → PostgreSQL uses JDBC/PostgreSQL over the private Compose network; the optional external provider is HTTPS only when explicitly configured.
 
 [PlantUML source](diagrams/deployment-topology.puml)
 
-A reverse proxy is deliberately **not** part of the baseline design. The assignment does not require one, [`AMB-DEP-001`](../SRS/SRS.md#amb-dep-001--deployment-target) leaves the external deployment target unspecified, and [`ASM-DEP-001`](../SRS/SRS.md#asm-dep-001--local-execution-is-the-mandatory-deployment-baseline) makes local execution sufficient. TLS termination, ingress routing, load balancing or a reverse proxy can be introduced by a future concrete deployment decision, but they are not architectural facts today.
+Local execution remains the mandatory baseline defined by [`ASM-DEP-001`](../SRS/SRS.md#asm-dep-001--local-execution-is-the-mandatory-deployment-baseline). For reviewer demonstration, the same Compose topology may run on a dedicated Docker-capable VM. The externally reachable host is not an application dependency and is therefore supplied as `DEMO_URL` configuration rather than hard-coded into source or design. This preserves `AMB-DEP-001`: the assignment still does not prescribe a production deployment target.
+
+The human demo entry point is part of `INF-COMPOSE-001`: the frontend launcher waits until the backend health endpoint responds, starts Vite, verifies the served frontend itself responds, then prints `Demo ready: <URL>`. The default URL is `http://localhost:5173/`; a remote demonstration profile supplies the browser-reachable VM URL. A reviewer can therefore Ctrl-click the terminal link only after both application-facing services are ready rather than translating a container address or guessing whether startup has finished.
+
+Foreground `docker compose up` is the interactive demonstration mode. `docker compose up -d` is the detached/persistent mode for the same topology. Neither mode creates a second deployment architecture.
+
+A reverse proxy is deliberately **not** part of the J1 baseline design. TLS termination, ingress routing, DNS, load balancing or router forwarding can be introduced by a future concrete deployment decision, but they are not hidden prerequisites for local execution, CI verification or the dedicated-VM demo profile.
 
 Communication semantics are explicit where known:
 
-- browser ↔ frontend service: HTTP in the mandatory local baseline;
-- frontend ↔ Spring Boot API: HTTP/JSON;
+- browser ↔ frontend service: HTTP through the host-published frontend port in the mandatory local baseline or configured VM demo profile;
+- frontend ↔ Spring Boot API: HTTP/JSON over the Compose service network;
 - Spring Boot ↔ PostgreSQL/pgvector: JDBC/PostgreSQL protocol over private TCP;
 - Spring Boot ↔ optional external AI provider: HTTPS provider API;
 - module/port interactions within the modular monolith: in-process calls.
@@ -259,6 +265,6 @@ A reviewer should be able to answer from this document, without reconstructing P
 - how the supplied relational schema and exact source types map into those contracts;
 - how the principal successful and failure workflows execute;
 - where each network or persistence protocol actually occurs;
-- how deployment is composed without introducing unjustified infrastructure;
+- how one Compose topology supports mandatory local execution, CI verification and the dedicated-VM browser demo without introducing unjustified infrastructure;
 - how the R0–R5 concentric delivery rings extend one architecture;
 - which accepted ADR explains each major design choice.

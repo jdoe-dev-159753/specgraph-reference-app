@@ -59,3 +59,10 @@ obligations:
     methods: [configuration_check, integration_negative]
     design: [ADP-MODEL-DET-001, ADP-MODEL-AI-001]
     executable_evidence: discovered_by_markers
+  VFY-DELIVERY-001:
+    covers: [NFR-REP-001]
+    delivery: [DEL-001, DEL-002, DEL-003, DEL-004]
+    acceptance: [AC-REP-001]
+    methods: [artifact_check, clean_checkout_compose, ui_e2e, human_validation]
+    design: [INF-COMPOSE-001, CMP-UI-001]
+    executable_evidence: discovered_by_markers
