@@ -1,0 +1,113 @@
+openapi: 3.0.3
+info:
+  title: Customer Activity Analytics API
+  version: r1
+  description: Minimal reviewer-facing contract for the R1 customer activity and source-risk read slice.
+paths:
+  /api/customers/{customerId}:
+    get:
+      operationId: getCustomerSnapshot
+      summary: Read one customer activity and risk snapshot
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Existing customer snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerSnapshot'
+        '404':
+          description: Customer ID is unknown; no customer is fabricated.
+components:
+  schemas:
+    CustomerSnapshot:
+      type: object
+      required: [customerId, activities, riskEvidence]
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        riskEvidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskEvidence'
+    Activity:
+      type: object
+      description: The details object must match the CARD, PAYMENT or CRYPTO value carried by type.
+      required: [transactionId, type, amount, currency, status, createdAt, details]
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [CARD, PAYMENT, CRYPTO]
+        amount:
+          type: number
+          description: Decimal monetary or asset amount. Currency/asset unit is carried separately.
+        currency:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        details:
+          oneOf:
+            - $ref: '#/components/schemas/CardDetails'
+            - $ref: '#/components/schemas/PaymentDetails'
+            - $ref: '#/components/schemas/CryptoDetails'
+    CardDetails:
+      type: object
+      required: [cardPan, cardType, merchantName, mccCode, cardPresent, authorizationCode]
+      properties:
+        cardPan: { type: string }
+        cardType: { type: string }
+        merchantName: { type: string }
+        mccCode: { type: string }
+        cardPresent: { type: string }
+        authorizationCode: { type: string }
+        declineReason: { type: string }
+    PaymentDetails:
+      type: object
+      required: [paymentMethod, senderAccount, receiverAccount, receiverBankCountry]
+      properties:
+        paymentMethod: { type: string }
+        senderAccount: { type: string }
+        receiverAccount: { type: string }
+        receiverBankCountry: { type: string }
+    CryptoDetails:
+      type: object
+      required: [blockchain, walletAddressFrom, walletAddressTo, txHash]
+      properties:
+        blockchain: { type: string }
+        walletAddressFrom: { type: string }
+        walletAddressTo: { type: string }
+        txHash: { type: string }
+        exchangeName: { type: string }
+    RiskEvidence:
+      type: object
+      required: [transactionId, ruleId, ruleName, triggeredAt, scoreContribution]
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+        ruleName:
+          type: string
+        triggeredAt:
+          type: string
+          format: date-time
+        scoreContribution:
+          type: number
