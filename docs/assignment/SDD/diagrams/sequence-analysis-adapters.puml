@@ -1,5 +1,5 @@
 @startuml
-title Figure 6b — Analysis adapter substitutions and infrastructure
+title Figure 7b — Analysis adapter substitutions and infrastructure
 hide footbox
 skinparam maxMessageSize 48
 
