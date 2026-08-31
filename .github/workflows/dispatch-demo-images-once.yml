@@ -1,0 +1,28 @@
+name: dispatch-demo-images-once
+
+on:
+  push:
+    branches: [ops/populate-j2-j5-workgraph-once]
+    paths:
+      - '.github/workflows/dispatch-demo-images-once.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch canonical demo image publication
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'demo-images.yml',
+              ref: 'main',
+            });
+            core.info('demo-images.yml dispatched on main');
