@@ -1,63 +1,62 @@
 @startuml
-title Figure 2 — Package and module boundaries
-left to right direction
+title Figure 2a — UML Package diagram — application module architecture
+top to bottom direction
 skinparam packageStyle rectangle
 skinparam linetype polyline
-skinparam nodesep 30
-skinparam ranksep 45
+skinparam nodesep 35
+skinparam ranksep 50
 
 package "identity" as Identity {
-  package "domain" as IDomain
-  package "application" as IApp
-  package "in/web" as IIn
-  package "out/persistence" as IOut
+  package "identity.domain" as IDomain
+  package "identity.application" as IApp
+  package "identity.adapter.in.web" as IIn
+  package "identity.adapter.out.persistence" as IOut
 }
+
 package "customer" as Customer {
-  package "domain" as CDomain
-  package "application" as CApp {
-    interface "CustomerActivityPort" as CustomerActivityPort
-  }
-  package "in/web" as CIn
-  package "out/persistence" as COut
+  package "customer.domain" as CDomain
+  package "customer.application" as CApp
+  package "customer.adapter.in.web" as CIn
+  package "customer.adapter.out.activity" as COut
 }
+
 package "risk" as Risk {
-  package "domain" as RDomain
-  package "application" as RApp
-  package "in/web" as RIn
+  package "risk.domain" as RDomain
+  package "risk.application" as RApp
+  package "risk.adapter.in.web" as RIn
 }
+
 package "analysis" as Analysis {
-  package "domain" as ADomain
-  package "application" as AApp
-  package "in/web" as AIn
-  package "out/ai" as AAI
-  package "out/knowledge" as AKnow
-  package "out/persistence" as AOut
+  package "analysis.domain" as ADomain
+  package "analysis.application" as AApp
+  package "analysis.adapter.in.web" as AIn
+  package "analysis.adapter.out.model" as AModel
+  package "analysis.adapter.out.knowledge" as AKnowledge
+  package "analysis.adapter.out.history" as AHistory
 }
 
-IIn --> IApp
-IApp --> IDomain
-IOut ..> IApp : implements outbound port
+IIn ..> IApp : uses
+IApp ..> IDomain : uses
+IOut ..> IApp : provides outbound adapter
 
-CIn --> CApp
-CApp --> CDomain
-COut ..> CustomerActivityPort : implements
+CIn ..> CApp : uses
+CApp ..> CDomain : uses
+COut ..> CApp : provides CustomerActivityPort adapter
 
-RIn --> RApp
-RApp --> RDomain
+RIn ..> RApp : uses
+RApp ..> RDomain : uses
+RApp ..> CApp : requires customer activity contract
 
-AIn --> AApp
-AApp --> ADomain
-AApp --> CustomerActivityPort : requires customer context
-AAI ..> AApp : implements AnalysisModelPort
-AKnow ..> AApp : implements PolicyKnowledgePort
-AOut ..> AApp : implements AnalysisHistoryPort
+AIn ..> AApp : uses
+AApp ..> ADomain : uses
+AApp ..> CApp : requires CustomerActivityPort
+AModel ..> AApp : provides AnalysisModelPort adapter
+AKnowledge ..> AApp : provides PolicyKnowledgePort adapter
+AHistory ..> AApp : provides AnalysisHistoryPort adapter
 
 note bottom
-  Dependency rule: framework and infrastructure packages depend inward on
-  project-owned application/domain contracts. Cross-module behaviour is
-  coordinated through explicit application contracts, not framework types.
-  Source activity and risk evidence share the selected CustomerActivityPort /
-  JpaCustomerActivityAdapter persistence path; there is no competing risk
-  persistence adapter in the baseline design.
+  UML Package diagram: packages are namespaces and dashed arrows are dependencies.
+  Fully qualified package labels are shown even inside their enclosing module so the
+  diagram remains intelligible when cropped, quoted, or read independently.
 end note
 @enduml
