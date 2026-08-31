@@ -1,47 +1,12 @@
 @startuml
-title Figure 4 — Project-owned domain contracts and source mappings
+title Figure 4a — Project-owned application contracts
 top to bottom direction
 skinparam classAttributeIconSize 0
 skinparam linetype polyline
 skinparam nodesep 25
 skinparam ranksep 40
 
-package "Source persistence concepts" {
-  class Transaction <<source relation>> {
-    transaction_id : UUID
-    customer_id : UUID
-    activity_type : CARD|PAYMENT|CRYPTO
-    amount
-    currency
-    status
-    created_at
-  }
-  class CardActivity <<source specialization>>
-  class PaymentActivity <<source specialization>>
-  class CryptoActivity <<source specialization>>
-  class RiskAssessment <<source relation>> {
-    triggeredAt
-    scoreContribution
-  }
-  class RiskRule <<source relation>> {
-    name
-    applicableActivityFamily
-    thresholdLogic
-    defaultWeight
-  }
-
-  Transaction <|-- CardActivity : CARD detail
-  Transaction <|-- PaymentActivity : PAYMENT detail
-  Transaction <|-- CryptoActivity : CRYPTO detail
-  Transaction "1" -- "0..*" RiskAssessment
-  RiskRule "1" -- "0..*" RiskAssessment
-
-  CardActivity -[hidden]down-> PaymentActivity
-  PaymentActivity -[hidden]down-> CryptoActivity
-  RiskRule -[hidden]down-> RiskAssessment
-}
-
-package "Project-owned contracts" {
+package "Customer review contracts" {
   class CustomerSnapshot <<project contract>> {
     customerIdentity
     activities : ActivityProjection[*]
@@ -63,6 +28,13 @@ package "Project-owned contracts" {
     triggeredAt
     scoreContribution
   }
+
+  CustomerSnapshot "1" o-- "0..*" ActivityProjection
+  CustomerSnapshot "1" o-- "0..*" RiskEvidence
+  ActivityProjection -[hidden]right-> RiskEvidence
+}
+
+package "Analysis and history contracts" {
   class AnalysisResult <<project contract>> {
     riskLevel : LOW|MEDIUM|HIGH
     findingsSummary
@@ -92,8 +64,6 @@ package "Project-owned contracts" {
     evidenceProvenance : PolicyEvidence[*]
   }
 
-  CustomerSnapshot "1" o-- "0..*" ActivityProjection
-  CustomerSnapshot "1" o-- "0..*" RiskEvidence
   AnalysisHistoryCreateCommand "1" *-- "1" AnalysisResult
   AnalysisHistoryCreateCommand "1" --> "1" OperatorId
   AnalysisHistoryCreateCommand "1" o-- "0..*" PolicyEvidence
@@ -101,23 +71,15 @@ package "Project-owned contracts" {
   AnalysisHistoryEntry "1" *-- "1" AnalysisResult
   AnalysisHistoryEntry "1" --> "1" OperatorId
   AnalysisHistoryEntry "1" o-- "0..*" PolicyEvidence
+  AnalysisResult ..> CustomerSnapshot : derived from customer context
+  AnalysisResult ..> PolicyEvidence : grounded by evidence
 
-  ActivityProjection -[hidden]right-> RiskEvidence
   AnalysisResult -[hidden]right-> PolicyEvidence
+  PolicyEvidence -[hidden]right-> OperatorId
 }
 
-Transaction ..> ActivityProjection : adapter mapping
-CardActivity ..> ActivityProjection : family details
-PaymentActivity ..> ActivityProjection : family details
-CryptoActivity ..> ActivityProjection : family details
-RiskAssessment ..> RiskEvidence : evidence mapping
-RiskRule ..> RiskEvidence : rule identity/name
-AnalysisResult ..> CustomerSnapshot : derived from context
-AnalysisResult ..> PolicyEvidence : grounded by evidence
-
-note bottom of Transaction
-  Source-schema concepts stop at the adapter boundary. Project contracts contain
-  only project-owned projections; JPA/source relation types never become durable
-  application-contract members.
+note bottom
+  These are application-owned contracts. Persistence relations, Spring/JPA types,
+  and provider response types do not become members of this contract model.
 end note
 @enduml
