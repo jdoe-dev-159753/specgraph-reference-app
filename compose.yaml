@@ -13,9 +13,12 @@ services:
   frontend:
     image: node:24-alpine
     working_dir: /workspace
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    command: sh -c "npm install && node scripts/demo.mjs"
     environment:
       VITE_API_TARGET: http://backend:8080
+      DEMO_URL: "${DEMO_URL:-http://localhost:5173/}"
+      DEMO_BACKEND_HEALTH_URL: http://backend:8080/actuator/health
+      DEMO_FRONTEND_HEALTH_URL: http://127.0.0.1:5173/
     volumes:
       - ./frontend:/workspace
       - frontend-modules:/workspace/node_modules

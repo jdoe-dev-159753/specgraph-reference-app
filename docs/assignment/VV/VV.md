@@ -27,7 +27,7 @@ The reusable harness owns generic requirement/design/test graph validation. The 
 
 ## 2. Verification obligations at a glance
 
-The baseline currently defines nine stable obligations. This table is a human reading view of `verification.yaml`, not a second machine authority and not a statement that the evidence already passes.
+The baseline currently defines ten stable obligations. This table is a human reading view of `verification.yaml`, not a second machine authority and not a statement that the evidence already passes.
 
 | Obligation | Concern | Primary evidence level |
 | --- | --- | --- |
@@ -39,6 +39,7 @@ The baseline currently defines nine stable obligations. This table is a human re
 | `VFY-REPRODUCIBILITY-001` | Clean-checkout local/demo startup and deterministic project assembly | deployment/Compose + smoke validation |
 | `VFY-DETERMINISM-001` | Mandatory baseline without a live external LLM | deterministic adapter acceptance |
 | `VFY-FAILURE-PATHS-001` | Authentication, grounding, model/result and persistence failures do not masquerade as success | explicit failure-injection acceptance/integration |
+| `VFY-CONFIDENTIALITY-001` | External-model transmission remains opt-in and deterministic local behavior remains available | configuration + negative integration |
 | `VFY-DELIVERY-001` | Repository/README, short demo, LLM-choice summary and agent-instruction summary | artifact checks + executable demo path + focused human validation |
 
 Exact requirement, acceptance-criterion, invariant, delivery and design IDs for each obligation remain in [`verification.yaml`](verification.yaml).
@@ -91,6 +92,10 @@ The four source delivery requirements are part of the controlled baseline rather
 - `DEL-003`: verify that the controlled reviewer material contains the LLM/provider choice summary and its rationale;
 - `DEL-004`: verify that the controlled reviewer material contains the agent-instruction summary needed to understand how AI-assisted development was governed.
 
+The executable demo path uses the same Docker Compose topology as application CI and the mandatory local baseline. `docker compose up` must not merely start containers: the frontend launcher waits for backend health, starts the UI, verifies frontend readiness and prints a browser-usable `Demo ready: <URL>` line. The default is `http://localhost:5173/`; a dedicated Docker-capable demonstration VM supplies `DEMO_URL` with the address actually reachable from the reviewer browser. The value changes presentation/entry-point configuration, not service-to-service topology.
+
+Foreground interactive execution and detached/persistent execution (`docker compose up -d`) are two operating modes of the same topology. DNS, TLS termination, reverse proxying and router forwarding are not implicit acceptance prerequisites for J1 and require separate evidence if introduced later.
+
 Mechanical artifact checks should prove existence and resolvable references where possible. Human validation proves communicative adequacy where a Boolean file-exists check would merely certify that bytes occupy disk space.
 
 ### Human validation
@@ -132,7 +137,7 @@ Evidence should be cheap to reproduce and close to the behavior it proves:
 - architecture evidence: deterministic dependency/import/module checks;
 - UI evidence: focused E2E assertions for dashboard acceptance plus human review of comprehensibility;
 - provider evidence: deterministic adapter for mandatory baseline, optional live-provider smoke evidence separately tagged;
-- deployment evidence: clean-checkout Compose startup/readiness and documented demo path;
+- deployment evidence: clean-checkout Compose startup/readiness and the same documented browser-ready demo path locally or on the configured Docker VM;
 - delivery evidence: repository artifact/link checks plus focused human validation for the demo and reviewer-facing summaries.
 
 No manually copied pass count is authoritative. If a human-readable matrix is useful, generate it from controlled catalogues and executable evidence.
