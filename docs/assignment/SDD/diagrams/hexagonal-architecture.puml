@@ -1,0 +1,61 @@
+@startuml
+title Figure 2b — Hexagonal architecture — ports and adapters
+left to right direction
+skinparam linetype polyline
+skinparam componentStyle rectangle
+skinparam nodesep 35
+skinparam ranksep 45
+
+actor "Customer Care\nOperator" as Operator
+component "React operator UI" as UI
+component "Spring Security +\nHTTP adapter" as Http
+
+package "Driving adapters" {
+  UI
+  Http
+}
+
+interface "Inbound application use cases\ncustomer review · analysis · history" as Inbound
+interface "CustomerActivityPort" as ActivityPort
+interface "PolicyKnowledgePort" as PolicyPort
+interface "AnalysisModelPort" as ModelPort
+interface "AnalysisHistoryPort" as HistoryPort
+
+hexagon "Application core\n\nidentity\ncustomer\nrisk\nanalysis\n\nproject-owned domain + application contracts" as Core
+
+package "Driven adapters" {
+  component "SyntheticActivityAdapter\nJpaCustomerActivityAdapter" as ActivityAdapters
+  component "StaticPolicyAdapter\nPgVectorPolicyAdapter" as PolicyAdapters
+  component "DeterministicAnalysisStub\nSpringAiAnalysisAdapter" as ModelAdapters
+  component "JpaAnalysisHistoryAdapter" as HistoryAdapter
+}
+
+database "PostgreSQL + pgvector" as DB
+component "External AI provider" as Provider <<external>>
+
+Operator --> UI
+UI --> Http : HTTP/JSON
+Http --> Inbound
+Inbound --> Core
+
+Core --> ActivityPort
+Core --> PolicyPort
+Core --> ModelPort
+Core --> HistoryPort
+
+ActivityPort --> ActivityAdapters
+PolicyPort --> PolicyAdapters
+ModelPort --> ModelAdapters
+HistoryPort --> HistoryAdapter
+
+ActivityAdapters --> DB : JDBC when JPA selected
+PolicyAdapters --> DB : JDBC/pgvector when R4 selected
+HistoryAdapter --> DB : JDBC
+ModelAdapters ..> Provider : HTTPS only when live adapter selected
+
+note bottom of Core
+  Hexagonal-architecture schematic, not a UML diagram type.
+  The hexagon is deliberate: application/domain policy remains inside;
+  driving and driven infrastructure attaches only through named ports.
+end note
+@enduml
