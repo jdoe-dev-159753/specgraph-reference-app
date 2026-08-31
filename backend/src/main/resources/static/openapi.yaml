@@ -42,16 +42,23 @@ components:
           items:
             $ref: '#/components/schemas/RiskEvidence'
     Activity:
+      oneOf:
+        - $ref: '#/components/schemas/CardActivity'
+        - $ref: '#/components/schemas/PaymentActivity'
+        - $ref: '#/components/schemas/CryptoActivity'
+      discriminator:
+        propertyName: type
+        mapping:
+          CARD: '#/components/schemas/CardActivity'
+          PAYMENT: '#/components/schemas/PaymentActivity'
+          CRYPTO: '#/components/schemas/CryptoActivity'
+    ActivityBase:
       type: object
-      description: The details object must match the CARD, PAYMENT or CRYPTO value carried by type.
-      required: [transactionId, type, amount, currency, status, createdAt, details]
+      required: [transactionId, amount, currency, status, createdAt]
       properties:
         transactionId:
           type: string
           format: uuid
-        type:
-          type: string
-          enum: [CARD, PAYMENT, CRYPTO]
         amount:
           type: number
           description: Decimal monetary or asset amount. Currency/asset unit is carried separately.
@@ -62,11 +69,39 @@ components:
         createdAt:
           type: string
           format: date-time
-        details:
-          oneOf:
-            - $ref: '#/components/schemas/CardDetails'
-            - $ref: '#/components/schemas/PaymentDetails'
-            - $ref: '#/components/schemas/CryptoDetails'
+    CardActivity:
+      allOf:
+        - $ref: '#/components/schemas/ActivityBase'
+        - type: object
+          required: [type, details]
+          properties:
+            type:
+              type: string
+              enum: [CARD]
+            details:
+              $ref: '#/components/schemas/CardDetails'
+    PaymentActivity:
+      allOf:
+        - $ref: '#/components/schemas/ActivityBase'
+        - type: object
+          required: [type, details]
+          properties:
+            type:
+              type: string
+              enum: [PAYMENT]
+            details:
+              $ref: '#/components/schemas/PaymentDetails'
+    CryptoActivity:
+      allOf:
+        - $ref: '#/components/schemas/ActivityBase'
+        - type: object
+          required: [type, details]
+          properties:
+            type:
+              type: string
+              enum: [CRYPTO]
+            details:
+              $ref: '#/components/schemas/CryptoDetails'
     CardDetails:
       type: object
       required: [cardPan, cardType, merchantName, mccCode, cardPresent, authorizationCode]
