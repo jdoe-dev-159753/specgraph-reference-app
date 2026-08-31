@@ -68,7 +68,7 @@ else relevant evidence available
       Analysis -> History : persist(AnalysisHistoryCreateCommand)
       History -> HistoryAdapter : dispatch [in-process]
       HistoryAdapter -> DB : JDBC INSERT analysis history
-      alt persistence failure
+      alt INSERT / persistence failure
         DB --> HistoryAdapter : INSERT failure
         HistoryAdapter --> History : persistence failure
         History --> Analysis : explicit persistence failure
