@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" role="img" aria-labelledby="title desc">
+  <title id="title">Figure 11 — Concentric delivery rings</title>
+  <desc id="desc">Six concentric delivery rings from R0 at the center to R5 at the outside, with a legend explaining the activation added by each ring.</desc>
+  <rect x="0" y="0" width="1200" height="780" fill="white"/>
+  <text x="600" y="34" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="700">Figure 11 — Concentric delivery rings</text>
+
+  <g fill="none" stroke="#222" stroke-width="2">
+    <circle cx="390" cy="405" r="320"/>
+    <circle cx="390" cy="405" r="270"/>
+    <circle cx="390" cy="405" r="220"/>
+    <circle cx="390" cy="405" r="170"/>
+    <circle cx="390" cy="405" r="120"/>
+    <circle cx="390" cy="405" r="70"/>
+  </g>
+
+  <g font-family="sans-serif" text-anchor="middle" fill="#111">
+    <text x="390" y="105" font-size="16" font-weight="700">R5 — Hardening + demo</text>
+    <text x="390" y="155" font-size="16" font-weight="700">R4 — Grounded provider path</text>
+    <text x="390" y="205" font-size="16" font-weight="700">R3 — Deterministic analysis + history</text>
+    <text x="390" y="255" font-size="16" font-weight="700">R2 — Relational read slice</text>
+    <text x="390" y="305" font-size="16" font-weight="700">R1 — Authenticated synthetic read slice</text>
+    <text x="390" y="397" font-size="16" font-weight="700">R0</text>
+    <text x="390" y="420" font-size="14">Deployable hollow shell</text>
+  </g>
+
+  <g font-family="sans-serif" fill="#111">
+    <text x="760" y="95" font-size="18" font-weight="700">Legend</text>
+    <line x1="760" y1="108" x2="1155" y2="108" stroke="#222" stroke-width="1"/>
+
+    <text x="760" y="142" font-size="15" font-weight="700">R0</text>
+    <text x="805" y="142" font-size="14">Java/Spring/React shell; project-owned contracts and ports</text>
+
+    <text x="760" y="194" font-size="15" font-weight="700">R1</text>
+    <text x="805" y="194" font-size="14">Authenticated synthetic customer/activity/risk read slice</text>
+
+    <text x="760" y="246" font-size="15" font-weight="700">R2</text>
+    <text x="805" y="246" font-size="14">JPA/PostgreSQL/Flyway/Testcontainers behind</text>
+    <text x="805" y="266" font-size="14">CustomerActivityPort</text>
+
+    <text x="760" y="318" font-size="15" font-weight="700">R3</text>
+    <text x="805" y="318" font-size="14">Static grounding, deterministic analysis and persistent</text>
+    <text x="805" y="338" font-size="14">reviewable history</text>
+
+    <text x="760" y="390" font-size="15" font-weight="700">R4</text>
+    <text x="805" y="390" font-size="14">pgvector retrieval and optional live AI provider adapter</text>
+
+    <text x="760" y="442" font-size="15" font-weight="700">R5</text>
+    <text x="805" y="442" font-size="14">Reliability, observability and demo hardening</text>
+
+    <text x="760" y="515" font-size="14" font-weight="700">Reading rule</text>
+    <text x="760" y="542" font-size="14">Each outer ring encloses and extends the same architecture.</text>
+    <text x="760" y="564" font-size="14">Later rings activate or substitute adapters behind stable ports;</text>
+    <text x="760" y="586" font-size="14">they do not create parallel throwaway architectures.</text>
+  </g>
+</svg>
