@@ -7,6 +7,7 @@ on:
       - '.github/workflows/link-j2-j5-native-graph-once.yml'
 
 permissions:
+  actions: write
   contents: read
   issues: write
 
@@ -77,6 +78,12 @@ jobs:
                       nodes {
                         id
                         title
+                        fields(first: 100) {
+                          nodes {
+                            __typename
+                            ... on ProjectV2SingleSelectField { id name options { id name } }
+                          }
+                        }
                         statusUpdates(last: 20) {
                           nodes { id body status startDate targetDate createdAt }
                         }
@@ -92,6 +99,82 @@ jobs:
               cursor = conn.pageInfo.endCursor;
             } while (true);
             if (!project) throw new Error('SpecGraph Reference App Project v2 not found');
+
+            const priorityField = project.fields.nodes.find(
+              f => f?.__typename === 'ProjectV2SingleSelectField' && f.name === 'Delivery priority'
+            );
+            if (!priorityField) throw new Error('Delivery priority field not found');
+            const priorityOptions = Object.fromEntries(priorityField.options.map(o => [o.name, o.id]));
+
+            const projectItems = [];
+            cursor = null;
+            do {
+              const page = await github.graphql(`
+                query($projectId: ID!, $after: String) {
+                  node(id: $projectId) {
+                    ... on ProjectV2 {
+                      items(first: 100, after: $after) {
+                        nodes {
+                          id
+                          content {
+                            __typename
+                            ... on Issue { id number repository { nameWithOwner } }
+                          }
+                        }
+                        pageInfo { hasNextPage endCursor }
+                      }
+                    }
+                  }
+                }
+              `, { projectId: project.id, after: cursor });
+              projectItems.push(...page.node.items.nodes);
+              if (!page.node.items.pageInfo.hasNextPage) break;
+              cursor = page.node.items.pageInfo.endCursor;
+            } while (true);
+
+            const ensureProjectIssue = async issueNumber => {
+              let item = projectItems.find(i =>
+                i.content?.__typename === 'Issue' &&
+                i.content.repository?.nameWithOwner === `${owner}/${repo}` &&
+                i.content.number === issueNumber
+              );
+              if (item) return item;
+              const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+              const added = await github.graphql(`
+                mutation($projectId: ID!, $contentId: ID!) {
+                  addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                    item { id content { ... on Issue { id number } } }
+                  }
+                }
+              `, { projectId: project.id, contentId: issue.node_id });
+              item = added.addProjectV2ItemById.item;
+              projectItems.push(item);
+              core.info(`Project item added for #${issueNumber}`);
+              return item;
+            };
+
+            for (const issueNumber of [128,130,131]) await ensureProjectIssue(issueNumber);
+
+            const rootPriority = new Map([[128, 'NICE_TO_HAVE']]);
+            for (const [issueNumber, desired] of rootPriority) {
+              const item = await ensureProjectIssue(issueNumber);
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId,
+                    value: { singleSelectOptionId: $optionId }
+                  }) { projectV2Item { id } }
+                }
+              `, {
+                projectId: project.id,
+                itemId: item.id,
+                fieldId: priorityField.id,
+                optionId: priorityOptions[desired],
+              });
+              core.info(`root #${issueNumber}: Delivery priority -> ${desired}`);
+            }
 
             const marker = 'J1 closed; J2 persistence and deterministic-analysis delivery active.';
             const existing = project.statusUpdates.nodes.find(update => update.body?.includes(marker));
@@ -127,3 +210,11 @@ jobs:
             } else {
               core.info(`Project status update already present: ${existing.id}`);
             }
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: 'project-v2-reconcile.yml',
+              ref: 'main',
+            });
+            core.info('project-v2-reconcile.yml dispatched to project inherited child priorities/status');
