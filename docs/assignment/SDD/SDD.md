@@ -4,7 +4,7 @@
 **Design map:** [`design-map.yaml`](design-map.yaml)  
 **Normative requirements:** [`../SRS/SRS.md`](../SRS/SRS.md)  
 **Architecture decisions:** [`../ADR/`](../ADR/)  
-**Verification strategy:** `CAA-VV-001` is introduced by the dependent V&V work and is linked from this document once both authorities coexist on `main`.
+**Verification strategy:** [`CAA-VV-001`](../VV/VV.md)
 
 This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. `design-map.yaml` remains the machine-readable requirement-to-design mapping, while PlantUML files in `diagrams/` are the semantic diagram sources and their SVG files are generated views embedded below.
 
