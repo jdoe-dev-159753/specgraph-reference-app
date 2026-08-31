@@ -22,10 +22,10 @@ interface "AnalysisHistoryPort" as HistoryPort
 hexagon "Application core\n\nidentity\ncustomer\nrisk\nanalysis\n\nproject-owned domain + application contracts" as Core
 
 package "Driven adapters" {
-  component "SyntheticActivityAdapter\nJpaCustomerActivityAdapter" as ActivityAdapters
-  component "StaticPolicyAdapter\nPgVectorPolicyAdapter" as PolicyAdapters
-  component "DeterministicAnalysisStub\nSpringAiAnalysisAdapter" as ModelAdapters
-  component "JpaAnalysisHistoryAdapter" as HistoryAdapter
+  component "SyntheticActivityAdapter\nJpaCustomerActivityAdapter\n<<GoF Adapter>>" as ActivityAdapters
+  component "StaticPolicyAdapter\nPgVectorPolicyAdapter\n<<GoF Adapter>>" as PolicyAdapters
+  component "DeterministicAnalysisStub\nSpringAiAnalysisAdapter\n<<GoF Adapter>>" as ModelAdapters
+  component "JpaAnalysisHistoryAdapter\n<<GoF Adapter>>" as HistoryAdapter
 }
 
 database "PostgreSQL + pgvector" as DB
@@ -41,9 +41,9 @@ Core --> PolicyPort
 Core --> ModelPort
 Core --> HistoryPort
 
-ActivityPort --> ActivityAdapters
-PolicyPort --> PolicyAdapters
-ModelPort --> ModelAdapters
+ActivityPort --> ActivityAdapters : interchangeable strategy implementations
+PolicyPort --> PolicyAdapters : interchangeable strategy implementations
+ModelPort --> ModelAdapters : interchangeable strategy implementations
 HistoryPort --> HistoryAdapter
 
 ActivityAdapters --> DB : JDBC when JPA selected
@@ -52,8 +52,11 @@ HistoryAdapter --> DB : JDBC
 ModelAdapters ..> Provider : HTTPS only when live adapter selected
 
 note bottom of Core
-  Hexagonal-architecture schematic, not a UML diagram type.
-  The hexagon is deliberate: application/domain policy remains inside;
-  driving and driven infrastructure attaches only through the named ports above.
+  Hexagonal architecture is the architectural style, not a GoF pattern.
+  GoF roles used inside it:
+  - Adapter: infrastructure implementations translate external/framework APIs to ports.
+  - Strategy: alternate implementations are selected behind stable port contracts.
+  - Facade/application service: coarse-grained use cases orchestrate several ports
+    without exposing that choreography to the HTTP adapter or UI.
 end note
 @enduml
