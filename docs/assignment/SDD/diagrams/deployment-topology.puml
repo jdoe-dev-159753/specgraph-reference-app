@@ -1,34 +1,42 @@
 @startuml
 left to right direction
-skinparam linetype ortho
+skinparam linetype polyline
+skinparam nodesep 45
+skinparam ranksep 55
 
 node "Operator device" as Device {
   artifact "Web browser" as Browser
 }
 
 node "Docker Compose / Linux host" as Host {
-  node "web service/container" as Web {
+  node "web service / container" as Web {
     artifact "React static UI\n(+ reverse proxy in remote demo)" as React
   }
-  node "api service/container" as Api {
+
+  node "api service / container" as Api {
     artifact "Spring Boot modular monolith" as Spring
-    artifact "StaticPolicyAdapter /\nDeterministicAnalysisStub" as Offline
+    artifact "Offline adapters\nStaticPolicyAdapter +\nDeterministicAnalysisStub" as Offline
   }
-  database "db service/container\nPostgreSQL + pgvector" as DB
+
+  database "db service / container\nPostgreSQL + pgvector" as DB
 }
 
-cloud "Optional external AI provider" as Provider
+cloud "Optional external\nAI provider" as Provider
 
-Browser --> Web : HTTP localhost\nor HTTPS remote demo
-Web --> Api : HTTP/JSON /api/*\nCompose/private network
-Api --> DB : JDBC / PostgreSQL protocol\nTCP 5432 private network
-Api ..> Provider : HTTPS provider API\nonly when explicitly configured
+Browser --> Web : HTTP localhost\nHTTPS remote demo
+Web --> Api : HTTP/JSON /api/*\nCompose private network
+Api --> DB : JDBC / PostgreSQL\nTCP 5432 private network
+Api ..> Provider : HTTPS provider API\nonly when configured
 Api --> Offline : in-process baseline path
+
+Browser -[hidden]-> React
+Web -[hidden]-> Api
+Api -[hidden]-> DB
+DB -[hidden]-> Provider
 
 note bottom of Host
   Baseline communication is synchronous request/response.
-  No WebSocket, event broker, FIFO, Redis or separate identity service is
-  assumed. Those would require an actual design/implementation need.
-  The database port is not exposed publicly.
+  No WebSocket, broker, FIFO, Redis, or separate identity service is assumed.
+  The database port remains private to the Compose network.
 end note
 @enduml
