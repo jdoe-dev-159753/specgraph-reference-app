@@ -1,104 +1,115 @@
 @startuml
-title Figure 5 — Relational persistence model
+title Figure 5 — Entity-relationship view — relational persistence model
 top to bottom direction
 hide methods
 skinparam linetype polyline
-skinparam nodesep 25
-skinparam ranksep 40
+skinparam nodesep 35
+skinparam ranksep 45
 
 package "Source activity / risk relations" <<SRC-001>> {
   entity transactions {
     * transaction_id : UUID <<PK>>
     --
-    customer_id : UUID <<FK>>
-    activity_type : CARD|PAYMENT|CRYPTO
-    amount
-    currency
-    status
-    created_at
+    customer_id : UUID <<FK -> customers>>
+    activity_type : ENUM('CARD','PAYMENT','CRYPTO')
+    amount : DECIMAL(18,2)
+    currency : VARCHAR(10)
+    status : VARCHAR
+    created_at : TIMESTAMP
   }
+
   entity card_activity {
-    * transaction_id : UUID <<PK,FK>>
+    * transaction_id : UUID <<PK,FK -> transactions>>
     --
-    masked_pan
-    card_type
-    merchant / mcc
-    card_present
-    authorization_code
-    decline_reason [optional]
+    card_pan : VARCHAR
+    card_type : VARCHAR
+    merchant_name : VARCHAR
+    mcc_code : VARCHAR(4)
+    card_present : BOOLEAN
+    authorization_code : VARCHAR
+    decline_reason : VARCHAR [nullable]
   }
+
   entity payment_activity {
-    * transaction_id : UUID <<PK,FK>>
+    * transaction_id : UUID <<PK,FK -> transactions>>
     --
-    payment_method
-    sender_account
-    receiver_account
-    receiver_bank_country
+    payment_method : VARCHAR
+    sender_account : VARCHAR
+    receiver_account : VARCHAR
+    receiver_bank_country : CHAR(2)
   }
+
   entity crypto_activity {
-    * transaction_id : UUID <<PK,FK>>
+    * transaction_id : UUID <<PK,FK -> transactions>>
     --
-    blockchain
-    source_wallet
-    destination_wallet
-    transaction_hash
-    exchange_name [optional]
+    blockchain : VARCHAR
+    wallet_address_from : VARCHAR
+    wallet_address_to : VARCHAR
+    tx_hash : VARCHAR
+    exchange_name : VARCHAR [nullable]
   }
-  entity risk_rules {
-    * source rule key
-    --
-    name
-    applicable_activity_family
-    threshold_logic
-    default_weight
-  }
+
   entity risk_assessments {
-    * source assessment key
+    * assessment_id : UUID <<PK>>
     --
-    transaction reference <<FK>>
-    risk_rule reference <<FK>>
-    trigger_time
-    score_contribution
+    transaction_id : UUID <<FK -> transactions>>
+    rule_id : UUID <<FK -> risk_rules>>
+    triggered_at : TIMESTAMP
+    score_contribution : DECIMAL(5,2)
   }
 
-  transactions ||--o| card_activity : CARD
-  transactions ||--o| payment_activity : PAYMENT
-  transactions ||--o| crypto_activity : CRYPTO
-  transactions ||--o{ risk_assessments : evidence
-  risk_rules ||--o{ risk_assessments : triggered rule
-
-  card_activity -[hidden]down-> payment_activity
-  payment_activity -[hidden]down-> crypto_activity
-  risk_rules -[hidden]down-> risk_assessments
+  entity risk_rules {
+    * rule_id : UUID <<PK>>
+    --
+    rule_name : VARCHAR
+    applies_to : ENUM('CARD','PAYMENT','CRYPTO','ALL')
+    threshold_logic : TEXT
+    weight : DECIMAL(5,2)
+  }
 }
 
 package "Project-owned persistence extensions" {
   entity customers <<ASM-DATA-001>> {
     * customer_id : UUID <<PK>>
   }
+
   entity analysis_history <<ASM-HIST-001>> {
     * analysis_id : UUID <<PK>>
     --
-    customer_id : UUID
-    operator_id : project identity value
-    generated_at : timestamp
-    risk_level : LOW|MEDIUM|HIGH
-    findings_summary : text
+    customer_id : UUID <<FK -> customers>>
+    operator_id : VARCHAR
+    generated_at : TIMESTAMP
+    risk_level : VARCHAR
+    findings_summary : TEXT
     recommendations : JSONB
     evidence_provenance : JSONB
     provider_provenance : JSONB
   }
-
-  customers ||--o{ analysis_history : history
 }
 
 customers ||--o{ transactions : owns
+transactions ||--o| card_activity : CARD
+transactions ||--o| payment_activity : PAYMENT
+transactions ||--o| crypto_activity : CRYPTO
+transactions ||--o{ risk_assessments : evidence
+risk_rules ||--o{ risk_assessments : triggered rule
+customers ||--o{ analysis_history : history
+
+note right of customers
+  Synthetic demo identities (illustrative only):
+  - Alice Example
+  - Bob Example
+  - John Doe
+
+  These names are fixture labels, not fields supplied
+  by SRC-001 and not normative schema facts.
+end note
 
 note bottom
-  Exact SRC-001 DDL remains authoritative outside the durable repository.
-  Attribute labels follow the SRS source-schema summary; unspecified source
-  PK/FK names are intentionally not invented. analysis_history is the minimal
-  project-owned extension permitted by ASM-HIST-001. R4 policy-chunk/pgvector
-  physical shape remains deferred by AMB-RAG-001.
+  Source relation names, columns, keys, and SQL types reproduce SRC-001.
+  The source does not define the customers table beyond the referenced customer_id;
+  ASM-DATA-001 therefore adds only the minimum key. analysis_history is the minimal
+  project-owned persistence required by ASM-HIST-001. R4 policy-chunk/pgvector physical
+  shape remains deferred by AMB-RAG-001.
 end note
 @enduml
