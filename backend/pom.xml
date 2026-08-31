@@ -16,6 +16,7 @@
   <properties>
     <java.version>21</java.version>
     <spring-modulith.version>2.1.1</spring-modulith.version>
+    <swagger-parser.version>2.1.48</swagger-parser.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -54,6 +55,12 @@
     <dependency>
       <groupId>org.springframework.modulith</groupId>
       <artifactId>spring-modulith-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.swagger.parser.v3</groupId>
+      <artifactId>swagger-parser</artifactId>
+      <version>${swagger-parser.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
