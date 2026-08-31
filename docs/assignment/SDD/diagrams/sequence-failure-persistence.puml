@@ -1,0 +1,29 @@
+@startuml
+title Figure 9c — Analysis history persistence failure
+hide footbox
+skinparam maxMessageSize 48
+
+actor Operator
+participant "UI + HTTP\nboundary" as Boundary
+participant "Analysis\napplication" as Analysis
+participant "AnalysisHistoryPort" as History
+participant "History adapter" as Adapter
+database "PostgreSQL" as DB
+
+Analysis -> History : persist(AnalysisHistoryCreateCommand)
+History -> Adapter : JpaAnalysisHistoryAdapter
+Adapter -> DB : JDBC INSERT analysis_history
+alt persistence failure
+  DB --> Adapter : INSERT failure
+  Adapter --> History : failure
+  History --> Analysis : explicit persistence failure
+  Analysis --> Boundary : failed analysis response
+  Boundary --> Operator : not represented as retained/completed
+else persistence succeeds
+  DB --> Adapter : generated identity
+  Adapter --> History : AnalysisHistoryEntry
+  History --> Analysis : persisted entry
+  Analysis --> Boundary : completed structured analysis
+  Boundary --> Operator : retained result
+end
+@enduml
