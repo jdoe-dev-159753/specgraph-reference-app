@@ -160,12 +160,7 @@ infrastructure:
   INF-COMPOSE-001:
     name: ComposeTopology
     activation_ring: R0
-    responsibility: reproducible application/dependency topology
-    adrs: [ADR-004]
-  INF-EDGE-001:
-    name: CaddyEdge
-    activation_ring: R5
-    responsibility: optional remote-demo edge and reverse proxy
+    responsibility: reproducible mandatory local application/dependency topology
     adrs: [ADR-004]
   CMP-UI-001:
     name: OperatorDashboard
