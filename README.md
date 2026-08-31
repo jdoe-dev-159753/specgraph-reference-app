@@ -168,6 +168,7 @@ A reviewer should follow these controlled authorities rather than infer design f
 - [SDD](docs/assignment/SDD/SDD.md) — architecture, modules, ports/adapters and delivery projection
 - [ADRs](docs/assignment/ADR/) — durable architectural and deployment decisions
 - [V&V](docs/assignment/VV/VV.md) — verification strategy and evidence model
+- [R1 OpenAPI](backend/src/main/resources/static/openapi.yaml) — minimal deployed HTTP contract, also served by the application at `/openapi.yaml`
 
 Machine-readable companions live beside those documents and remain the authority for mechanically generated traceability views.
 
