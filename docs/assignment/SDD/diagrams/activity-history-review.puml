@@ -1,0 +1,43 @@
+@startuml
+title Figure 8 — UML Activity diagram — analysis history review
+skinparam linetype polyline
+skinparam activity {
+  BackgroundColor #F7F7F7
+  BorderColor #333333
+}
+
+|Customer Care Operator|
+start
+:Open analysis history for selected customer;
+
+|React operator UI|
+:Submit protected history request;
+
+|Security / HTTP adapter|
+if (Authenticated?) then (no)
+  :Reject / redirect;
+  |React operator UI|
+  :Display authentication required;
+  |Customer Care Operator|
+  stop
+else (yes)
+  :Attach OperatorId;
+endif
+
+|Analysis application|
+:Request history through\nAnalysisHistoryPort;
+
+|History adapter|
+:Read persisted analyses;
+:Map persistence rows to\nAnalysisHistoryEntry values;
+
+|Analysis application|
+:Return AnalysisHistoryEntry list;
+
+|React operator UI|
+:Render analysis identity,\ngeneration time, operator, result,\nand evidence provenance;
+
+|Customer Care Operator|
+:Inspect prior analysis;
+stop
+@enduml
