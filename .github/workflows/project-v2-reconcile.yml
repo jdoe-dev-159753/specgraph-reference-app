@@ -18,6 +18,12 @@ jobs:
   reconcile:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci]
     steps:
+      - name: Recover malformed persistent workspace
+        run: |
+          if ! git -C "$GITHUB_WORKSPACE" rev-parse --git-dir >/dev/null 2>&1; then
+            echo "Reinitializing missing Git metadata in persistent workspace: $GITHUB_WORKSPACE"
+            git -C "$GITHUB_WORKSPACE" init
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}

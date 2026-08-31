@@ -28,6 +28,12 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results'
+      - name: Recover malformed persistent workspace
+        run: |
+          if ! git -C "$GITHUB_WORKSPACE" rev-parse --git-dir >/dev/null 2>&1; then
+            echo "Reinitializing missing Git metadata in persistent workspace: $GITHUB_WORKSPACE"
+            git -C "$GITHUB_WORKSPACE" init
+          fi
       - uses: actions/checkout@v7
       - name: Verify backend
         run: >-
