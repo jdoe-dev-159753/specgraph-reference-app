@@ -1,0 +1,33 @@
+name: link-discovery-112-once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/link-discovery-112-once.yml'
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Attach discovery to native parent issue
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const { data: child } = await github.rest.issues.get({ owner, repo, issue_number: 112 });
+            await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+              owner,
+              repo,
+              issue_number: 102,
+              sub_issue_id: child.id,
+              replace_parent: true,
+              headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+            });
+            core.info('Linked #112 under native parent #102');
