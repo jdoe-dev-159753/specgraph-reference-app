@@ -7,7 +7,7 @@
 **Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md)  
 **Verification strategy:** `CAA-VV-001` is introduced by the dependent V&V work and is linked once that authority coexists on `main`.
 
-This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. [`design-map.yaml`](design-map.yaml) remains the machine-readable requirement-to-design mapping. PlantUML files in [`diagrams/`](diagrams/) are the semantic sources for UML and architecture figures, and their SVG files are generated views embedded below.
+This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. [`design-map.yaml`](design-map.yaml) remains the machine-readable requirement-to-design mapping. PlantUML files in [`diagrams/`](diagrams/) are the semantic sources for UML and most architecture figures, with generated SVG views embedded below. Figure 11 is an authored SVG because its defining geometry is genuinely concentric rather than a graph layout.
 
 ## System context and architectural orientation
 
@@ -189,7 +189,7 @@ The design is activated through concentric rings rather than parallel throwaway 
 
 **Figure 11 — Concentric delivery rings.** Onion-style activation model from the deployable R0 shell at the center through R1 synthetic read, R2 relational read, R3 deterministic analysis/history, R4 grounded provider integration and R5 hardening/demo. Each outer ring activates or substitutes adapters around the same core rather than creating a second architecture.
 
-[PlantUML source](diagrams/delivery-rings.puml)
+[Authored SVG source](diagrams/delivery-rings.svg)
 
 The ring semantics are:
 
