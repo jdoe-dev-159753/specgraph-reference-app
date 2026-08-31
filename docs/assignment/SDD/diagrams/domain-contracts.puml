@@ -1,10 +1,45 @@
 @startuml
 title Figure 4 — Project-owned domain contracts and source mappings
-left to right direction
+top to bottom direction
 skinparam classAttributeIconSize 0
 skinparam linetype polyline
-skinparam nodesep 30
-skinparam ranksep 45
+skinparam nodesep 25
+skinparam ranksep 40
+
+package "Source persistence concepts" {
+  class Transaction <<source relation>> {
+    transaction_id : UUID
+    customer_id : UUID
+    activity_type : CARD|PAYMENT|CRYPTO
+    amount
+    currency
+    status
+    created_at
+  }
+  class CardActivity <<source specialization>>
+  class PaymentActivity <<source specialization>>
+  class CryptoActivity <<source specialization>>
+  class RiskAssessment <<source relation>> {
+    triggeredAt
+    scoreContribution
+  }
+  class RiskRule <<source relation>> {
+    name
+    applicableActivityFamily
+    thresholdLogic
+    defaultWeight
+  }
+
+  Transaction <|-- CardActivity : CARD detail
+  Transaction <|-- PaymentActivity : PAYMENT detail
+  Transaction <|-- CryptoActivity : CRYPTO detail
+  Transaction "1" -- "0..*" RiskAssessment
+  RiskRule "1" -- "0..*" RiskAssessment
+
+  CardActivity -[hidden]down-> PaymentActivity
+  PaymentActivity -[hidden]down-> CryptoActivity
+  RiskRule -[hidden]down-> RiskAssessment
+}
 
 package "Project-owned contracts" {
   class CustomerSnapshot <<project contract>> {
@@ -56,48 +91,20 @@ package "Project-owned contracts" {
     result : AnalysisResult
     evidenceProvenance : PolicyEvidence[*]
   }
+
+  CustomerSnapshot "1" o-- "0..*" ActivityProjection
+  CustomerSnapshot "1" o-- "0..*" RiskEvidence
+  AnalysisHistoryCreateCommand "1" *-- "1" AnalysisResult
+  AnalysisHistoryCreateCommand "1" --> "1" OperatorId
+  AnalysisHistoryCreateCommand "1" o-- "0..*" PolicyEvidence
+  AnalysisHistoryEntry ..> AnalysisHistoryCreateCommand : persisted form + generated identity
+  AnalysisHistoryEntry "1" *-- "1" AnalysisResult
+  AnalysisHistoryEntry "1" --> "1" OperatorId
+  AnalysisHistoryEntry "1" o-- "0..*" PolicyEvidence
+
+  ActivityProjection -[hidden]right-> RiskEvidence
+  AnalysisResult -[hidden]right-> PolicyEvidence
 }
-
-package "Source persistence concepts" {
-  class Transaction <<source relation>> {
-    transaction_id : UUID
-    customer_id : UUID
-    activity_type : CARD|PAYMENT|CRYPTO
-    amount
-    currency
-    status
-    created_at
-  }
-  class CardActivity <<source specialization>>
-  class PaymentActivity <<source specialization>>
-  class CryptoActivity <<source specialization>>
-  class RiskAssessment <<source relation>> {
-    triggeredAt
-    scoreContribution
-  }
-  class RiskRule <<source relation>> {
-    name
-    applicableActivityFamily
-    thresholdLogic
-    defaultWeight
-  }
-}
-
-CustomerSnapshot "1" o-- "0..*" ActivityProjection
-CustomerSnapshot "1" o-- "0..*" RiskEvidence
-AnalysisHistoryCreateCommand "1" *-- "1" AnalysisResult
-AnalysisHistoryCreateCommand "1" --> "1" OperatorId
-AnalysisHistoryCreateCommand "1" o-- "0..*" PolicyEvidence
-AnalysisHistoryEntry ..> AnalysisHistoryCreateCommand : persisted form + generated identity
-AnalysisHistoryEntry "1" *-- "1" AnalysisResult
-AnalysisHistoryEntry "1" --> "1" OperatorId
-AnalysisHistoryEntry "1" o-- "0..*" PolicyEvidence
-
-Transaction <|-- CardActivity : CARD detail
-Transaction <|-- PaymentActivity : PAYMENT detail
-Transaction <|-- CryptoActivity : CRYPTO detail
-Transaction "1" -- "0..*" RiskAssessment
-RiskRule "1" -- "0..*" RiskAssessment
 
 Transaction ..> ActivityProjection : adapter mapping
 CardActivity ..> ActivityProjection : family details
@@ -107,9 +114,6 @@ RiskAssessment ..> RiskEvidence : evidence mapping
 RiskRule ..> RiskEvidence : rule identity/name
 AnalysisResult ..> CustomerSnapshot : derived from context
 AnalysisResult ..> PolicyEvidence : grounded by evidence
-
-CardActivity -[hidden]-> PaymentActivity
-PaymentActivity -[hidden]-> CryptoActivity
 
 note bottom of Transaction
   Source-schema concepts stop at the adapter boundary. Project contracts contain
