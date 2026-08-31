@@ -1,0 +1,80 @@
+@startuml
+title Figure 9 — UML Activity diagram — failure and degraded behavior
+skinparam linetype polyline
+skinparam activity {
+  BackgroundColor #F7F7F7
+  BorderColor #333333
+}
+
+|Analysis application|
+start
+:Begin protected analysis request;
+
+if (Authenticated operator?) then (no)
+  |Security / HTTP adapter|
+  :Reject / redirect;
+  |React operator UI|
+  :Display authentication required;
+  stop
+else (yes)
+endif
+
+|Policy adapter|
+:Retrieve relevant evidence;
+if (Relevant evidence?) then (no)
+  |Analysis application|
+  :Return insufficient-grounding outcome;
+  note right
+    No fabricated policy provenance.
+    No successfully grounded completion.
+  end note
+  |React operator UI|
+  :Display insufficient grounding;
+  stop
+else (yes)
+endif
+
+|Model adapter|
+:Execute deterministic or configured live model;
+if (Execution succeeds?) then (no)
+  |Analysis application|
+  :Return explicit model failure;
+  |React operator UI|
+  :Display analysis failure;
+  stop
+else (yes)
+endif
+
+|Analysis application|
+:Validate structured AnalysisResult;
+if (Result valid?) then (no)
+  :Return validation failure;
+  note right: Do not persist invalid output.
+  |React operator UI|
+  :Display invalid-result failure;
+  stop
+else (yes)
+endif
+
+|History adapter|
+:Persist completed analysis;
+if (Persistence succeeds?) then (no)
+  |Analysis application|
+  :Return persistence failure;
+  note right
+    Do not claim retained history.
+    The request is not successful merely because
+    model execution itself succeeded.
+  end note
+  |React operator UI|
+  :Display persistence failure;
+  stop
+else (yes)
+endif
+
+|Analysis application|
+:Return completed retained analysis;
+|React operator UI|
+:Display completed result;
+stop
+@enduml
