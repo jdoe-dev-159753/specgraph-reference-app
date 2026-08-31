@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-CUSTOMER-READ-001")
+@Tag("VFY-REPRODUCIBILITY-001")
 @Tag("unit_property")
 final class SyntheticActivityInvariantTests {
     @Test
