@@ -1,4 +1,5 @@
 @startuml
+title Figure 5 — Relational persistence model
 left to right direction
 hide methods
 skinparam linetype polyline
