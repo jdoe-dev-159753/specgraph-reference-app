@@ -1,3 +1,4 @@
+<!-- GENERATED VIEW. Maintain docs/assignment/SDD/diagrams/delivery-rings.dot instead. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" role="img" aria-labelledby="title desc">
   <title id="title">Figure 11 — Concentric delivery rings</title>
   <desc id="desc">Six concentric delivery rings from R0 at the center to R5 at the outside, with a legend explaining the activation added by each ring.</desc>
