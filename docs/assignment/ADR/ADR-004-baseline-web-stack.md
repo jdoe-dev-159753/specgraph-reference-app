@@ -35,17 +35,19 @@ Use the following baseline composition:
 ### Verification and runtime
 
 - Testcontainers for production-like integration dependencies;
-- Docker Compose for reproducible local/remote topology;
-- Caddy as the simple edge/reverse-proxy component when a remote demo is exposed.
+- Docker Compose for the reproducible mandatory local topology.
 
 Framework types stay outside durable domain/application contracts. The selected libraries supply commodity capability; project-owned code focuses on domain composition, ports and assignment-specific behaviour.
+
+Remote-demo ingress, TLS termination, reverse proxies, load balancers, hosting products and public DNS are deliberately **not** selected by this ADR. The source does not prescribe an external deployment target, and `AMB-DEP-001` leaves that choice unresolved. If a concrete remote demonstration later requires edge infrastructure, it must be selected from the actual deployment constraints rather than precommitted here.
 
 ## Consequences
 
 - the implementation follows the assignment's preferred ecosystem without pretending those preferences are functional requirements;
 - common security, persistence, HTTP, UI, API-documentation and container concerns are reused rather than reimplemented;
 - Java 21 remains within the source's Java 17+ preference;
-- the same application topology can run locally and on a small remote host through Compose.
+- the mandatory application topology is reproducible locally through Compose;
+- no edge component becomes an architectural dependency before a remote deployment target exists.
 
 The trade-off is a moderately broad dependency surface, accepted because each dependency owns a conventional capability and is kept behind appropriate boundaries.
 
@@ -58,6 +60,10 @@ Rejected because it adds code without increasing assignment value.
 ### Kubernetes as the baseline runtime
 
 Rejected because the assignment has no orchestration requirement and Compose is sufficient for the intended topology.
+
+### Preselect a reverse proxy for a hypothetical remote demo
+
+Deferred rather than selected. A reverse proxy may later be useful for TLS termination, routing or load balancing, but none of those concerns is part of the mandatory local baseline and the remote deployment target is unresolved.
 
 ## Requirement and constraint links
 
