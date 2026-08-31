@@ -1,0 +1,22 @@
+services:
+  backend:
+    image: maven:3.9-eclipse-temurin-21
+    working_dir: /workspace
+    command: mvn -B spring-boot:run
+    volumes:
+      - ./backend:/workspace
+      - maven-cache:/root/.m2
+    ports:
+      - "8080:8080"
+  frontend:
+    image: node:24-alpine
+    working_dir: /workspace
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./frontend:/workspace
+      - frontend-modules:/workspace/node_modules
+    ports:
+      - "5173:5173"
+volumes:
+  maven-cache:
+  frontend-modules:

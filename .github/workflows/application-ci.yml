@@ -1,0 +1,49 @@
+name: application-ci
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'compose.yaml'
+      - '.github/workflows/application-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'compose.yaml'
+      - '.github/workflows/application-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - name: Clean container-owned outputs from previous runs
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist'
+      - uses: actions/checkout@v7
+      - name: Verify backend
+        run: >-
+          docker run --rm
+          --user "$(id -u):$(id -g)"
+          -e MAVEN_CONFIG=/tmp/.m2
+          -v "$PWD/backend:/workspace"
+          -w /workspace
+          maven:3.9-eclipse-temurin-21
+          mvn -B verify
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+      - name: Validate deployment topology
+        run: docker compose config --quiet
