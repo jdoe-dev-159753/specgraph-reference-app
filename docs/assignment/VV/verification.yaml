@@ -1,0 +1,61 @@
+schema_version: 1
+verification_id: CAA-VV-CATALOGUE-001
+strategy_document: VV.md
+requirements: ../SRS/requirements.yaml
+design: ../SDD/design-map.yaml
+
+obligations:
+  VFY-CUSTOMER-READ-001:
+    covers: [FR-CUST-001, FR-ACT-001, FR-ACT-002, FR-RISK-001, INV-DATA-001, INV-DATA-002, INV-RISK-001]
+    acceptance: [AC-CUST-001, AC-CUST-002, AC-ACT-001, AC-ACT-002, AC-RISK-001]
+    methods: [unit_property, port_contract, api_acceptance, ui_e2e]
+    design: [MOD-CUSTOMER-001, MOD-RISK-001, PRT-ACTIVITY-001, CTR-CUSTOMER-SNAPSHOT-001]
+    executable_evidence: discovered_by_markers
+  VFY-AUTH-001:
+    covers: [FR-AUTH-001, NFR-SEC-001]
+    acceptance: [AC-AUTH-001, AC-SEC-001]
+    methods: [security_integration, api_acceptance]
+    design: [MOD-IDENTITY-001, ADP-AUTH-SPRING-001]
+    executable_evidence: discovered_by_markers
+  VFY-ANALYSIS-CONTRACT-001:
+    covers: [FR-AI-001, FR-AI-002, INV-AI-001, CON-AI-001]
+    acceptance: [AC-AI-001, AC-AI-002]
+    methods: [unit_property, port_contract, api_acceptance, ui_e2e]
+    design: [MOD-ANALYSIS-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001]
+    executable_evidence: discovered_by_markers
+  VFY-RAG-001:
+    covers: [FR-RAG-001, INV-RAG-001]
+    acceptance: [AC-RAG-001, AC-RAG-002]
+    methods: [port_contract, retrieval_integration, api_acceptance]
+    design: [PRT-POLICY-001, CTR-POLICY-EVIDENCE-001, ADP-POL-STATIC-001, ADP-POL-PGV-001]
+    executable_evidence: discovered_by_markers
+  VFY-HISTORY-001:
+    covers: [FR-HIST-001, FR-HIST-002, INV-HIST-001]
+    acceptance: [AC-HIST-001, AC-HIST-002]
+    methods: [port_contract, database_integration, api_acceptance, ui_e2e]
+    design: [PRT-HISTORY-001, ADP-HIST-JPA-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
+    executable_evidence: discovered_by_markers
+  VFY-REPRODUCIBILITY-001:
+    covers: [NFR-REP-001, CON-DATA-001]
+    acceptance: [AC-REP-001]
+    methods: [clean_checkout_compose, deterministic_seed, smoke_acceptance]
+    design: [INF-COMPOSE-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
+    executable_evidence: discovered_by_markers
+  VFY-DETERMINISM-001:
+    covers: [NFR-VER-001, CON-AI-001, CON-AI-002]
+    acceptance: [AC-VER-001]
+    methods: [deterministic_suite, architecture_check]
+    design: [PRT-MODEL-001, ADP-MODEL-DET-001, PRT-POLICY-001, ADP-POL-STATIC-001]
+    executable_evidence: discovered_by_markers
+  VFY-FAILURE-PATHS-001:
+    covers: [NFR-RES-001, INV-RAG-001]
+    acceptance: [AC-RAG-002, AC-RES-001, AC-RES-002]
+    methods: [unit_property, port_contract, api_acceptance, failure_injection]
+    design: [MOD-ANALYSIS-001, PRT-POLICY-001, PRT-MODEL-001, PRT-HISTORY-001]
+    executable_evidence: discovered_by_markers
+  VFY-CONFIDENTIALITY-001:
+    covers: [CON-AI-002]
+    acceptance: []
+    methods: [configuration_check, integration_negative]
+    design: [ADP-MODEL-DET-001, ADP-MODEL-AI-001]
+    executable_evidence: discovered_by_markers

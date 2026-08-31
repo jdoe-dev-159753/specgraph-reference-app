@@ -5,7 +5,7 @@
 **Normative requirements:** [`CAA-SRS-001`](../SRS/SRS.md)  
 **Machine-readable requirements:** [`requirements.yaml`](../SRS/requirements.yaml)  
 **Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md)  
-**Verification strategy:** `CAA-VV-001` is introduced by the dependent V&V work and is linked once that authority coexists on `main`.
+**Verification strategy:** [`CAA-VV-001`](../VV/VV.md)
 
 This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. [`design-map.yaml`](design-map.yaml) remains the machine-readable requirement-to-design mapping. PlantUML and Graphviz/DOT text files in [`diagrams/`](diagrams/) are the maintainable semantic sources for UML and architecture figures; rendered SVG files are generated views embedded below.
 
