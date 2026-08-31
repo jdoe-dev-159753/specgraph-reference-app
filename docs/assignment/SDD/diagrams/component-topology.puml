@@ -1,5 +1,5 @@
 @startuml
-title Figure 3 — Component topology and application interfaces
+title Figure 3 — UML Component diagram — application components and interfaces
 top to bottom direction
 skinparam componentStyle rectangle
 skinparam packageStyle rectangle
@@ -48,12 +48,12 @@ package "Replaceable adapters" as Adapters {
   ActivitySynthetic -[hidden]right-> ActivityJpa
   ActivityJpa -[hidden]right-> PolicyStatic
   PolicyStatic -[hidden]right-> PolicyPg
-  PolicyStatic -[hidden]down-> ModelDet
   ModelDet -[hidden]right-> ModelAi
   ModelAi -[hidden]right-> HistoryJpa
 }
 
-database "PostgreSQL + pgvector\nINF-DB-001\nR2+" as Db
+component "PostgreSQL + pgvector\nINF-DB-001\nR2+" as Db <<database>>
+component "External AI provider" as Provider <<external>>
 
 Operator --> UI
 UI --> WebApi : HTTP/JSON
@@ -82,9 +82,11 @@ HistoryPort ..> HistoryJpa
 ActivityJpa --> Db : JDBC
 PolicyPg --> Db : JDBC / pgvector
 HistoryJpa --> Db : JDBC
+ModelAi ..> Provider : HTTPS
 
 note bottom of Backend
-  Project-owned ports are the stable application seams.
-  Spring/JPA/provider types remain adapter-side implementation details.
+  UML Component diagram: components and provided/required interfaces show structural
+  dependencies. Transport is annotated only where a relationship crosses a runtime
+  boundary; the internal application seams are in-process.
 end note
 @enduml
