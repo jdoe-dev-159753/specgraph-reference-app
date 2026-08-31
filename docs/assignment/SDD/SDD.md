@@ -19,6 +19,12 @@ At the highest level, the architecture therefore has four concerns before any ba
 3. **Domain/application core:** project-owned contracts and ports define customer/activity, risk, policy grounding, analysis, and history behavior independently of infrastructure choices.
 4. **Infrastructure adapters:** synthetic/JPA activity adapters, static/pgvector policy adapters, deterministic/live model adapters, history persistence, and authentication infrastructure implement those ports without becoming the application model.
 
+![Figure 1 — System context and external boundaries](diagrams/system-context.svg)
+
+**Figure 1 — System context and external boundaries.** The operator-facing system boundary and the only external runtime dependencies that matter architecturally: PostgreSQL/pgvector and the optional live AI provider. The mandatory baseline does not require the provider; internal modular-monolith calls are in-process.
+
+[PlantUML source](diagrams/system-context.puml)
+
 The remaining figures progressively zoom from this system-level view into package structure, component interfaces, contracts, persistence, runtime interaction, failure behavior, and deployment communication.
 
 ## Authority model
@@ -36,9 +42,9 @@ If code diverges from this map, the divergence must be reconciled by changing th
 
 The backend is one Spring Boot modular monolith with four application modules: `identity`, `customer`, `risk`, and `analysis`. Hexagonal dependency direction is strict: project-owned domain/application contracts point outward only through project-owned ports; Spring MVC, Spring Security, JPA/Hibernate, PostgreSQL/pgvector and Spring AI remain adapters/infrastructure.
 
-![Figure 1 — Package and module boundaries](diagrams/package-modules.svg)
+![Figure 2 — Package and module boundaries](diagrams/package-modules.svg)
 
-**Figure 1 — Package and module boundaries.** Application modules and their dependency direction inside the modular monolith. Cross-module behavior uses explicit project-owned application contracts; framework and persistence concerns remain outside the core modules.
+**Figure 2 — Package and module boundaries.** Application modules and their dependency direction inside the modular monolith. Cross-module behavior uses explicit project-owned application contracts; framework and persistence concerns remain outside the core modules.
 
 [PlantUML source](diagrams/package-modules.puml)
 
@@ -46,17 +52,17 @@ The backend is one Spring Boot modular monolith with four application modules: `
 
 The component view makes provided/required seams explicit. The web client requires the protected HTTP/JSON surface. Inside the backend, application modules require project-owned outbound ports (`CustomerActivityPort`, `AnalysisModelPort`, `PolicyKnowledgePort`, `AnalysisHistoryPort`); replaceable adapters provide those ports.
 
-![Figure 2 — Component topology and application interfaces](diagrams/component-topology.svg)
+![Figure 3 — Component topology and application interfaces](diagrams/component-topology.svg)
 
-**Figure 2 — Component topology and application interfaces.** Provided and required interfaces across the React client, protected HTTP boundary, application modules, and replaceable outbound adapters. Arrows indicate architectural dependency, not network transport unless explicitly labelled.
+**Figure 3 — Component topology and application interfaces.** Provided and required interfaces across the React client, protected HTTP boundary, application modules, and replaceable outbound adapters. Arrows indicate architectural dependency, not network transport unless explicitly labelled. The layout deliberately uses non-orthogonal routing so interface relationships remain visually traceable instead of converging into a central routing grid.
 
 [PlantUML source](diagrams/component-topology.puml)
 
 The stable application contracts are `CustomerSnapshot`, project-owned activity/risk projections, `AnalysisResult`, `PolicyEvidence`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`. The class/domain view deliberately distinguishes those contracts from source-schema concepts; source/JPA relation classes are mapped by adapters rather than becoming members of `CustomerSnapshot`.
 
-![Figure 3 — Project-owned domain contracts and source mappings](diagrams/domain-contracts.svg)
+![Figure 4 — Project-owned domain contracts and source mappings](diagrams/domain-contracts.svg)
 
-**Figure 3 — Project-owned domain contracts and source mappings.** Stable application contracts are separated from source-schema relation concepts. Adapter mappings convert source persistence shapes into project-owned activity, risk, analysis, and history representations.
+**Figure 4 — Project-owned domain contracts and source mappings.** Stable application contracts are separated from source persistence concepts. Adapter mappings convert source shapes into project-owned activity, risk, analysis, and history representations; JPA/source relation classes never cross the application boundary.
 
 [PlantUML source](diagrams/domain-contracts.puml)
 
@@ -64,9 +70,9 @@ The stable application contracts are `CustomerSnapshot`, project-owned activity/
 
 The relational view separates source-schema facts from the narrow project-owned persistence needed by the reference application. R2 activates PostgreSQL behind `CustomerActivityPort`; R3 adds analysis history; R4 activates pgvector policy retrieval. Exact source DDL names that are not retained in the repository are not invented by the SDD.
 
-![Figure 4 — Relational persistence model](diagrams/relational-schema.svg)
+![Figure 5 — Relational persistence model](diagrams/relational-schema.svg)
 
-**Figure 4 — Relational persistence model.** Source activity/risk relations and the narrowly justified project-owned customer, history, and policy-vector persistence extensions. The figure distinguishes source facts from project-owned additions rather than implying one giant application aggregate.
+**Figure 5 — Relational persistence model.** Source activity/risk relations are grouped separately from the narrowly justified project-owned customer and analysis-history extensions. Relationship routing is non-orthogonal to keep specialization, risk-evidence, and history associations distinguishable in the GitHub viewport.
 
 [PlantUML source](diagrams/relational-schema.puml)
 
@@ -74,53 +80,73 @@ The selected relational read path is singular: `CustomerActivityPort` is impleme
 
 ## Customer review runtime
 
-The customer-review sequence covers the authenticated operator path from React through the HTTP boundary and application contracts to either the R1 deterministic synthetic adapter or the R2+ JPA/PostgreSQL adapter. Authentication rejection and unknown-customer behavior remain explicit.
+The customer-review sequence covers the authenticated operator path from React through the HTTP boundary and application contracts to either the R1 deterministic synthetic adapter or the R2+ JPA/PostgreSQL adapter. Authentication rejection and unknown-customer behavior remain explicit. The figure intentionally collapses the two concrete activity adapters into one lifeline with an `alt` branch; their exact identities remain explicit in Figure 3 while the runtime figure stays readable at normal Markdown width.
 
-![Figure 5 — Authenticated customer review sequence](diagrams/sequence-customer-review.svg)
+![Figure 6 — Authenticated customer review sequence](diagrams/sequence-customer-review.svg)
 
-**Figure 5 — Authenticated customer review sequence.** Operator authentication, customer lookup, activity/risk loading through `CustomerActivityPort`, adapter substitution between deterministic and relational paths, plus explicit unauthorized and not-found outcomes.
+**Figure 6 — Authenticated customer review sequence.** Operator authentication, customer lookup, activity/risk loading through `CustomerActivityPort`, deterministic-versus-relational adapter substitution, and explicit unauthorized/not-found outcomes.
 
 [Open full-size SVG](diagrams/sequence-customer-review.svg) · [PlantUML source](diagrams/sequence-customer-review.puml)
 
 ## Grounded analysis runtime
 
-Analysis first loads the customer context through `CustomerActivityPort`, then obtains policy evidence behind `PolicyKnowledgePort`, runs a deterministic or configured live model behind `AnalysisModelPort`, validates the structured result, and persists through `AnalysisHistoryPort`. Local application/port dispatch remains in-process; JDBC and HTTPS appear only across their real infrastructure boundaries.
+Analysis first loads customer context through `CustomerActivityPort`, obtains policy evidence behind `PolicyKnowledgePort`, runs a deterministic or configured live model behind `AnalysisModelPort`, validates the structured result, and persists through `AnalysisHistoryPort`. The design is shown as two complementary figures instead of one fifteen-lifeline diagram: Figure 7a is the application orchestration; Figure 7b shows replaceable adapters and real JDBC/HTTPS infrastructure boundaries.
 
 No relevant policy evidence terminates the successfully-grounded flow with an explicit insufficient-grounding result. Model/provider failure, invalid structured output, and persistence failure likewise terminate explicitly and cannot fall through into completed/retained history.
 
-![Figure 6 — Grounded analysis sequence](diagrams/sequence-analysis.svg)
+![Figure 7a — Grounded analysis orchestration](diagrams/sequence-analysis.svg)
 
-**Figure 6 — Grounded analysis sequence.** End-to-end synchronous analysis orchestration from customer context through policy grounding, deterministic/live model substitution, result validation, and persisted history. Failure branches terminate before successful completion and are expanded separately in Figure 8.
+**Figure 7a — Grounded analysis orchestration.** The project-owned application flow from customer context through grounding, model execution, validation, and history persistence. Failure branches terminate before successful completion; adapter and transport details are deliberately delegated to Figure 7b.
 
 [Open full-size SVG](diagrams/sequence-analysis.svg) · [PlantUML source](diagrams/sequence-analysis.puml)
+
+![Figure 7b — Analysis adapter substitutions and infrastructure](diagrams/sequence-analysis-adapters.svg)
+
+**Figure 7b — Analysis adapter substitutions and infrastructure.** Substitution points behind the four project-owned ports: synthetic/JPA customer activity, static/pgvector policy retrieval, deterministic/live model execution, and JPA history persistence. JDBC/pgvector and external-provider HTTPS appear only at their actual infrastructure boundaries.
+
+[Open full-size SVG](diagrams/sequence-analysis-adapters.svg) · [PlantUML source](diagrams/sequence-analysis-adapters.puml)
 
 ## Analysis history review
 
 Authenticated operators can list/inspect prior analyses through `AnalysisHistoryPort`. The read contract is `AnalysisHistoryEntry`, which carries analysis/customer identity, generating operator, generation time, structured result and evidence provenance required by `AC-HIST-002`. `AnalysisHistoryCreateCommand` is the separate write input and intentionally lacks the generated analysis identity.
 
-![Figure 7 — Analysis history review sequence](diagrams/sequence-analysis-history.svg)
+![Figure 8 — Analysis history review sequence](diagrams/sequence-analysis-history.svg)
 
-**Figure 7 — Analysis history review sequence.** Authenticated read path for listing and inspecting prior analyses while preserving the project-owned `AnalysisHistoryEntry` contract across the persistence boundary.
+**Figure 8 — Analysis history review sequence.** Authenticated read path for listing and inspecting prior analyses while preserving the project-owned `AnalysisHistoryEntry` contract across the persistence boundary.
 
 [Open full-size SVG](diagrams/sequence-analysis-history.svg) · [PlantUML source](diagrams/sequence-analysis-history.puml)
 
 ## Failure and degraded behavior
 
-The focused failure view makes the negative paths independently reviewable: authentication rejection, insufficient grounding, model/provider failure, invalid structured output, and persistence failure. None of those paths may be represented as successfully completed/retained analysis.
+Negative behavior is split into three focused figures so each remains readable directly in GitHub. Together they cover authentication/grounding failure, model/validation failure, and persistence failure. None of these paths may be represented as a successfully completed or retained analysis.
 
-![Figure 8 — Failure and degraded analysis behavior](diagrams/sequence-failure-modes.svg)
+![Figure 9a — Authentication and grounding failure](diagrams/sequence-failure-grounding.svg)
 
-**Figure 8 — Failure and degraded analysis behavior.** Negative-path semantics for authentication, grounding, provider/model execution, structured-result validation, and history persistence. The figure exists separately from the happy-path sequence so failure semantics remain readable and independently reviewable.
+**Figure 9a — Authentication and grounding failure.** Unauthenticated access terminates at the protected boundary; missing relevant policy evidence terminates the grounded-analysis request explicitly without fabricated provenance or fall-through into model execution.
 
-[Open full-size SVG](diagrams/sequence-failure-modes.svg) · [PlantUML source](diagrams/sequence-failure-modes.puml)
+[PlantUML source](diagrams/sequence-failure-grounding.puml)
+
+![Figure 9b — Model execution and validation failure](diagrams/sequence-failure-model.svg)
+
+**Figure 9b — Model execution and validation failure.** Provider/execution failures and invalid structured output terminate before persistence. Only a valid structured result may proceed to history storage.
+
+[PlantUML source](diagrams/sequence-failure-model.puml)
+
+![Figure 9c — Analysis history persistence failure](diagrams/sequence-failure-persistence.svg)
+
+**Figure 9c — Analysis history persistence failure.** A failed history insert is surfaced explicitly and cannot be described to the operator as retained/completed; a successful insert returns a generated `AnalysisHistoryEntry` identity.
+
+[PlantUML source](diagrams/sequence-failure-persistence.puml)
+
+The original comprehensive failure sequence remains available as a supplementary semantic source for reviewers who want the entire branch structure in one canvas, but it is no longer embedded as the primary figure because that representation is too deep for normal GitHub document width: [comprehensive PlantUML source](diagrams/sequence-failure-modes.puml).
 
 ## Deployment and communication topology
 
 The runtime remains a modular monolith, not a static box. The deployment view distinguishes browser, web/frontend service, Spring Boot API process/container, PostgreSQL/pgvector and the optional external AI provider.
 
-![Figure 9 — Deployment and communication topology](diagrams/deployment-topology.svg)
+![Figure 10 — Deployment and communication topology](diagrams/deployment-topology.svg)
 
-**Figure 9 — Deployment and communication topology.** Runtime processes/services and the communication boundaries between browser, frontend, Spring Boot API, PostgreSQL/pgvector, and optional external AI provider. Protocol labels describe actual transport boundaries; in-process module/port calls are not drawn as network links.
+**Figure 10 — Deployment and communication topology.** Runtime processes/services and communication boundaries between browser, frontend, Spring Boot API, PostgreSQL/pgvector, and the optional external AI provider. Protocol labels describe actual transport boundaries; in-process module/port calls are not drawn as network links. Non-orthogonal routing avoids implying a bus or network topology that does not exist.
 
 [PlantUML source](diagrams/deployment-topology.puml)
 
