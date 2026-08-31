@@ -317,7 +317,7 @@ for (const item of issueItems) {
         nativeUpdates += 1;
       }
 
-      const ownerPriorities = owningItems.map(effectiveIssuePriority);
+      const ownerPriorities = owningItems.map(item => effectiveIssuePriority(item));
       if (ownerPriorities.every(Boolean)) {
         const desiredPriority = [...ownerPriorities].sort((a, b) => priorityRank[a] - priorityRank[b])[0];
         if (await setSingle(item, priorityField, priorityOption, desiredPriority,
