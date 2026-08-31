@@ -1,28 +1,32 @@
 services:
-  backend:
-    image: maven:3.9-eclipse-temurin-21
-    working_dir: /workspace
-    command: mvn -B spring-boot:run
-    user: "${CI_HOST_UID:-0}:${CI_HOST_GID:-0}"
-    environment:
-      MAVEN_CONFIG: /tmp/.m2
-    volumes:
-      - ./backend:/workspace
+  r0:
+    image: "${APP_R0_IMAGE:-ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0}"
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      args:
+        SOURCE_ROOT: "${R0_SOURCE_ROOT:-.}"
     ports:
-      - "8080:8080"
-  frontend:
-    image: node:24-alpine
-    working_dir: /workspace
-    command: sh -c "npm install && node scripts/demo.mjs"
-    environment:
-      VITE_API_TARGET: http://backend:8080
-      DEMO_URL: "${DEMO_URL:-http://localhost:5173/}"
-      DEMO_BACKEND_HEALTH_URL: http://backend:8080/actuator/health
-      DEMO_FRONTEND_HEALTH_URL: http://127.0.0.1:5173/
-    volumes:
-      - ./frontend:/workspace
-      - frontend-modules:/workspace/node_modules
+      - "${R0_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/actuator/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 45
+      start_period: 5s
+
+  r1:
+    image: "${APP_R1_IMAGE:-ghcr.io/jdoe-dev-159753/specgraph-reference-app:r1}"
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      args:
+        SOURCE_ROOT: "${R1_SOURCE_ROOT:-.}"
     ports:
-      - "5173:5173"
-volumes:
-  frontend-modules:
+      - "${R1_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/actuator/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 45
+      start_period: 5s

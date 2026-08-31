@@ -1,107 +1,116 @@
 # Customer Activity Analytics — SpecGraph Reference App
 
 [![application-ci](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
+[![demo-images](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
 [![work-graph-guard](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml)
 ![Java 21](https://img.shields.io/badge/Java-21-informational)
 ![Spring Boot 4.1.1](https://img.shields.io/badge/Spring_Boot-4.1.1-informational)
 ![Spring Modulith 2.1.1](https://img.shields.io/badge/Spring_Modulith-2.1.1-informational)
-![Node 24](https://img.shields.io/badge/Node-24-informational)
+![Node 24](https://img.shields.io/badge/Node-24_build--time-informational)
 ![React 19.2.8](https://img.shields.io/badge/React-19.2.8-informational)
 ![TypeScript 7.0.2](https://img.shields.io/badge/TypeScript-7.0.2-informational)
-![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0-informational)
+![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0_build--time-informational)
 
 **A runnable reference application for specification-driven, AI-assisted software engineering.**
 
 The application lets a Customer Care operator search a customer, inspect deterministic CARD, PAYMENT and CRYPTO activity, and review source-shaped risk evidence. Later delivery rings add relational persistence, deterministic structured analysis, policy retrieval, analysis history and multi-operator authentication behind the same project-owned ports.
 
-The point of this repository is not the framework stack. It is to demonstrate that requirements, design, implementation and verification can evolve as one traceable engineering system while AI assists the work without becoming the authority for mechanically decidable claims.
+## Fast reviewer demo
 
-## Current runnable checkpoints
+The normal reviewer path runs **R0 and R1 simultaneously** from prebuilt checkpoint images so the concentric delivery model can be demonstrated rather than merely described.
 
-Two stable branches preserve the concentric J1 progression:
+Both checkpoints use the same packaging boundary: React is compiled ahead of time and embedded in the Spring Boot executable JAR; the running container is Java 21 + Spring Boot + embedded Tomcat. No Maven, Node, Vite or reverse proxy runs while somebody is watching.
 
-| Checkpoint | Branch | Meaning |
-| --- | --- | --- |
-| R0 | `demo/r0` | deployable hollow Java/Spring/React shell and architectural seams; no business-flow acceptance claim |
-| R1 | `demo/r1` | mandatory deterministic customer/activity/risk flow with browser-level executable evidence |
-
-### Run R1 interactively
+### One-time setup on a Docker host
 
 ```bash
-git fetch origin
-git switch demo/r1
-docker compose up
+git clone git@github.com:jdoe-dev-159753/specgraph-reference-app.git
+cd specgraph-reference-app
 ```
 
-On Linux, use the host UID/GID so bind-mounted backend outputs remain owned by the invoking user:
+Authenticate Docker once to the private GHCR package:
 
 ```bash
-CI_HOST_UID="$(id -u)" CI_HOST_GID="$(id -g)" docker compose up
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u jdoe-dev-159753 --password-stdin
 ```
 
-The Compose frontend waits for backend health, starts the UI, verifies that the served frontend responds, and then prints a browser-usable line:
+If the browser should use an address other than the host's own fully-qualified hostname, configure it once:
+
+```bash
+cp .env.demo.example .env.demo
+$EDITOR .env.demo
+```
+
+`.env.demo` is ignored by Git. Physical lab/VPS addressing remains deployment configuration rather than application source.
+
+### Day-of-demo: both checkpoints side by side
+
+```bash
+./scripts/demo-up.sh
+```
+
+The command pulls both prebuilt images, starts them detached without building, waits for both healthchecks, then returns only after printing two browser-usable URLs:
 
 ```text
-Demo ready: http://localhost:5173/
+R0 ready: http://demo-host:8080/
+R1 ready: http://demo-host:8081/
 ```
 
-Ctrl-click that URL and use the deterministic seeded Customer ID:
+Open both in separate tabs. R0 is intentionally hollow and proves the deployable shell existed before business acceptance. R1 is the first MANDATORY customer/activity/risk slice.
+
+For R1, use the deterministic seeded Customer ID:
 
 ```text
 11111111-1111-1111-1111-111111111111
 ```
 
-The R1 UI exposes all three required activity families plus associated risk evidence. Searching an unknown UUID exercises the explicit not-found path. Backend health remains available at <http://localhost:8080/actuator/health>.
+The R1 UI exposes CARD, PAYMENT and CRYPTO activity plus associated risk evidence. Searching an unknown UUID exercises the explicit not-found path.
 
-### Run the same demo on a Docker VM
-
-The deployment topology does not change on a dedicated Docker-capable VM. Configure only the URL that the terminal should advertise to the browser:
+Stop both checkpoints with:
 
 ```bash
-DEMO_URL="http://<browser-reachable-vm-host>:5173/" \
-CI_HOST_UID="$(id -u)" CI_HOST_GID="$(id -g)" \
-docker compose up
+./scripts/demo-down.sh
 ```
 
-`DEMO_URL` is presentation/configuration only; browser-to-frontend and frontend-to-backend communication still use the same Compose topology. The repository deliberately does not hard-code a VPS hostname, public IP, DNS record, TLS terminator or reverse proxy.
-
-For detached/persistent operation on that same host:
+Individual diagnostic modes remain available:
 
 ```bash
-DEMO_URL="http://<browser-reachable-vm-host>:5173/" \
-CI_HOST_UID="$(id -u)" CI_HOST_GID="$(id -g)" \
-docker compose up -d
-
-docker compose ps
-docker compose logs frontend
+./scripts/demo-up.sh r0
+./scripts/demo-up.sh r1
+./scripts/demo-down.sh r0
+./scripts/demo-down.sh r1
 ```
 
-Stop and remove the topology with:
+The preserved source branches `demo/r0` and `demo/r1` remain available for code inspection. Operational comparison uses prebuilt images and does not require rebuilding or switching the working tree.
 
-```bash
-docker compose down -v --remove-orphans
+## Runtime packaging
+
+Each checkpoint is the same deployment shape, mapped to a different host port for side-by-side demonstration:
+
+```text
+build time
+  Node/Vite -> React static assets
+                  |
+                  v
+            Maven/Spring Boot
+                  |
+                  v
+runtime      executable JAR
+                  |
+          embedded Tomcat :8080
+             /          /api/*
+          React UI    Spring MVC
+
+side-by-side demo host
+  R0 container :8080 -> container :8080
+  R1 container :8081 -> container :8080
 ```
 
-To inspect the pre-business R0 shell instead:
+This keeps the assignment's preferred React technology without inventing an independently deployed frontend. [`ADR-005`](docs/assignment/ADR/ADR-005-prebuilt-demo-container-packaging.md) records the packaging and checkpoint-comparison decision.
 
-```bash
-git switch demo/r0
-docker compose up
-```
+Trusted `demo-images` automation builds the same packaging definition against the preserved `demo/r0` and `demo/r1` source checkpoints, proves both start simultaneously, proves R1 with Playwright, then publishes moving GHCR convenience tags `r0` and `r1`. Reproducible evidence uses compound immutable tags such as `r1-<checkpoint-sha>-pkg-<packaging-sha>`; the workflow summary records checkpoint revision, packaging revision and OCI digest for the exact image tested and published.
 
-R0 is intentionally hollow. Its value is demonstrating that the deployment and architectural seams existed before R1 added acceptance-bearing behaviour.
-
-## Executable verification evidence
-
-J1 does not treat compilation as proof of deployment. Application CI starts the real Docker Compose topology, waits for backend and frontend health, then runs Playwright against the served browser UI. The browser test also inspects the corresponding API responses and asserts the seeded customer, CARD/PAYMENT/CRYPTO activity, risk evidence and 404 behaviour.
-
-The accepted R1 head was `009b9b7337ced7632b91c0be7e6e9bd05614687b`, merged as `012d6663be8a6dc9edc6d2d2427f3d653de6bccb`. The exact successful Actions run and its evidence artefact are recorded in [`docs/assignment/VV/evidence/J1-R1.md`](docs/assignment/VV/evidence/J1-R1.md).
-
-That evidence is generated by CI rather than copied into a hand-maintained pass/fail matrix. [`verification.yaml`](docs/assignment/VV/verification.yaml) remains the stable machine-readable verification-obligation catalogue; [`VV.md`](docs/assignment/VV/VV.md) remains the canonical human-readable verification strategy.
-
-R1 deliberately has no database. It uses the deterministic synthetic activity adapter, so inventing database assertions here would prove fiction. Persistence evidence starts when a persistence-bearing ring activates PostgreSQL/JPA.
-
-J1 does not require a permanent public HTTPS endpoint. Deployment confidence comes from one reproducible Compose topology used by local execution, clean-deployment CI/Playwright evidence and the dedicated Docker-VM demonstration profile. Public ingress, DNS, TLS termination and router forwarding remain separate deployment choices rather than hidden prerequisites.
+After publication, the workflow removes its local checkpoint images and invokes the same `./scripts/demo-up.sh` command used by a reviewer. That final gate proves the side-by-side demonstration is actually pulled back from GHCR rather than accidentally succeeding from the runner's local image cache.
 
 ## Canonical engineering evidence
 
@@ -110,16 +119,16 @@ A reviewer should follow these controlled authorities rather than infer design f
 - [Inception](docs/assignment/Inception/Inception.md) — problem framing, delivery rings and functional use-case orientation
 - [SRS](docs/assignment/SRS/SRS.md) — normative requirements and acceptance semantics
 - [SDD](docs/assignment/SDD/SDD.md) — architecture, modules, ports/adapters and delivery projection
-- [ADRs](docs/assignment/ADR/) — durable architectural decisions
+- [ADRs](docs/assignment/ADR/) — durable architectural and deployment decisions
 - [V&V](docs/assignment/VV/VV.md) — verification strategy and evidence model
 
-Machine-readable companions live beside those documents and are the source for mechanically generated traceability views.
+Machine-readable companions live beside those documents and remain the authority for mechanically generated traceability views.
 
 ## Architecture
 
 The application is a modular monolith with hexagonal boundaries. Project-owned application/domain contracts sit inside the framework boundary; inbound HTTP/UI adapters and outbound activity, persistence, knowledge, model and history adapters remain replaceable behind stable ports.
 
-The current implementation uses Java 21, Spring Boot 4.1.1, Spring Modulith 2.1.1, React 19.2.8 and TypeScript 7.0.2. PostgreSQL/pgvector are planned infrastructure choices for later rings, not prerequisites for R1. Provider-neutral analysis ports allow deterministic local behaviour to remain the mandatory path while live model integration stays optional and substitutable.
+The implementation uses Java 21, Spring Boot 4.1.1, Spring Modulith 2.1.1, React 19.2.8 and TypeScript 7.0.2. React/TypeScript/Vite are frontend build technologies; persistent J1 execution is one Spring Boot executable JAR on embedded Tomcat.
 
 The key R1 request path is intentionally:
 
@@ -131,11 +140,9 @@ CustomerAnalysisHttpAdapter
         -> SyntheticActivityAdapter
 ```
 
-An architecture test ratchets this boundary so the HTTP adapter cannot silently resume calling the outbound port directly.
+An architecture test ratchets this boundary so the HTTP adapter cannot silently resume calling the outbound port directly. Spring Modulith independently verifies modular-monolith boundaries in executable tests.
 
 ## Delivery rings
-
-The controlled SDD defines the authoritative ring allocation. In short:
 
 - **R0:** deployable hollow shell and stable seams;
 - **R1:** MANDATORY synthetic customer/activity/risk review;
@@ -144,11 +151,9 @@ The controlled SDD defines the authoritative ring allocation. In short:
 - **R4:** MUST_HAVE authentication/security, policy retrieval, persistence/history and related evidence;
 - **R5:** hardening, demonstration quality and NICE_TO_HAVE differentiation.
 
-This ordering is deliberate. Authentication is not allowed to block the mandatory centre merely because an authentication seam already exists structurally.
+Authentication is deliberately not allowed to block the mandatory centre merely because its structural seam exists earlier.
 
 ## Engineering method
-
-The repository is a concrete consumer of the wider SpecGraph engineering approach:
 
 ```text
 problem evidence
@@ -162,8 +167,6 @@ problem evidence
 ```
 
 AI can assist implementation and review, but deterministic claims stay mechanically testable. GitHub-native issues, PR ownership, dependencies, lifecycle and Project metadata represent work state; prose documents do not duplicate those states.
-
-Generated diagrams and matrices are views over controlled semantic sources. PlantUML/DOT sources remain maintainable where UML or architecture semantics matter, while rendered SVGs are review views rather than a second authority.
 
 ## Confidentiality and reuse
 

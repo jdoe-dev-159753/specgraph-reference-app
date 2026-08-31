@@ -8,6 +8,7 @@ adrs:
   ADR-002: ../ADR/ADR-002-provider-neutral-analysis.md
   ADR-003: ../ADR/ADR-003-postgresql-pgvector-persistence.md
   ADR-004: ../ADR/ADR-004-baseline-web-stack.md
+  ADR-005: ../ADR/ADR-005-prebuilt-demo-container-packaging.md
 
 modules:
   MOD-IDENTITY-001:
@@ -158,12 +159,15 @@ infrastructure:
     used_by: [ADP-ACT-JPA-001, ADP-HIST-JPA-001, ADP-POL-PGV-001]
     adrs: [ADR-003]
   INF-COMPOSE-001:
-    name: ComposeTopology
+    name: ComposeCheckpointTopology
     activation_ring: R0
-    responsibility: reproducible application topology shared by mandatory local execution, CI verification and dedicated Docker-VM demonstration
-    operator_entrypoint: configurable DEMO_URL printed only after backend and frontend readiness
-    operating_modes: [foreground_interactive, detached_persistent]
-    adrs: [ADR-004]
+    responsibility: one prebuilt Spring Boot executable-JAR shape instantiated as simultaneous R0 and R1 checkpoints for local, CI and dedicated Docker-VM demonstration
+    runtime_boundary: Java 21 JRE with embedded Tomcat serving built React assets and Spring MVC API from one origin
+    operator_entrypoint: ./scripts/demo-up.sh pulls r0 and r1 images, starts both detached without build, waits for both healthchecks, then prints browser-usable R0 and R1 URLs
+    host_configuration: [DEMO_HOST, R0_PORT, R1_PORT, R0_URL, R1_URL]
+    checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080]
+    operating_modes: [side_by_side_default, individual_diagnostic, detached_persistent]
+    adrs: [ADR-004, ADR-005]
   CMP-UI-001:
     name: OperatorDashboard
     technology: React TypeScript MUI TanStack Query
@@ -214,7 +218,7 @@ requirement_design:
     first_acceptance_ring: R4
   NFR-REP-001:
     elements: [INF-COMPOSE-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
-    adrs: [ADR-002, ADR-004]
+    adrs: [ADR-002, ADR-004, ADR-005]
     first_acceptance_ring: R3
   NFR-VER-001:
     elements: [PRT-ACTIVITY-001, PRT-MODEL-001, PRT-POLICY-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]

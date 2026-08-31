@@ -1,0 +1,10 @@
+.git
+**/.git
+**/target
+**/node_modules
+**/dist
+**/playwright-report
+**/test-results
+.idea
+.vscode
+.DS_Store
