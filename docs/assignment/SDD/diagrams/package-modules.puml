@@ -3,37 +3,58 @@ title Figure 2a — UML Package diagram — application module architecture
 top to bottom direction
 skinparam packageStyle rectangle
 skinparam linetype polyline
-skinparam nodesep 35
-skinparam ranksep 50
+skinparam nodesep 20
+skinparam ranksep 34
 
 package "identity" as Identity {
-  package "identity.domain" as IDomain
-  package "identity.application" as IApp
   package "identity.adapter.in.web" as IIn
+  package "identity.application" as IApp
+  package "identity.domain" as IDomain
   package "identity.adapter.out.persistence" as IOut
+
+  IIn -[hidden]down-> IApp
+  IApp -[hidden]down-> IDomain
+  IDomain -[hidden]down-> IOut
 }
 
 package "customer" as Customer {
-  package "customer.domain" as CDomain
-  package "customer.application" as CApp
   package "customer.adapter.in.web" as CIn
+  package "customer.application" as CApp
+  package "customer.domain" as CDomain
   package "customer.adapter.out.activity" as COut
+
+  CIn -[hidden]down-> CApp
+  CApp -[hidden]down-> CDomain
+  CDomain -[hidden]down-> COut
 }
 
 package "risk" as Risk {
-  package "risk.domain" as RDomain
-  package "risk.application" as RApp
   package "risk.adapter.in.web" as RIn
+  package "risk.application" as RApp
+  package "risk.domain" as RDomain
+
+  RIn -[hidden]down-> RApp
+  RApp -[hidden]down-> RDomain
 }
 
 package "analysis" as Analysis {
-  package "analysis.domain" as ADomain
-  package "analysis.application" as AApp
   package "analysis.adapter.in.web" as AIn
+  package "analysis.application" as AApp
+  package "analysis.domain" as ADomain
   package "analysis.adapter.out.model" as AModel
   package "analysis.adapter.out.knowledge" as AKnowledge
   package "analysis.adapter.out.history" as AHistory
+
+  AIn -[hidden]down-> AApp
+  AApp -[hidden]down-> ADomain
+  ADomain -[hidden]down-> AModel
+  AModel -[hidden]down-> AKnowledge
+  AKnowledge -[hidden]down-> AHistory
 }
+
+Identity -[hidden]down-> Customer
+Customer -[hidden]down-> Risk
+Risk -[hidden]down-> Analysis
 
 IIn ..> IApp : uses
 IApp ..> IDomain : uses
@@ -56,7 +77,7 @@ AHistory ..> AApp : provides AnalysisHistoryPort adapter
 
 note bottom
   UML Package diagram: packages are namespaces and dashed arrows are dependencies.
-  Fully qualified package labels are shown even inside their enclosing module so the
-  diagram remains intelligible when cropped, quoted, or read independently.
+  Fully qualified package labels remain explicit. Modules and their internal package
+  layers are stacked vertically so the figure remains readable at normal GitHub width.
 end note
 @enduml

@@ -117,7 +117,7 @@ The second Class diagram answers a different question: how source persistence co
 
 ## Relational persistence model
 
-The relational view is an entity-relationship view, not a UML Class diagram. It reproduces the source relation names, keys and data types supplied by `SRC-001`, including `DECIMAL(18,2)`, `VARCHAR(10)`, `VARCHAR(4)`, `BOOLEAN`, `CHAR(2)`, `TIMESTAMP`, `TEXT`, and `DECIMAL(5,2)`. R2 activates PostgreSQL behind `CustomerActivityPort`; R3 adds project-owned analysis history; R4 activates pgvector policy retrieval. Source details that are not supplied remain explicitly unspecified rather than being filled with plausible-looking fiction.
+The relational view is an entity-relationship view, not a UML Class diagram. It reproduces the source relation names, keys and data types supplied by `SRC-001`, including `DECIMAL(18,2)`, `VARCHAR(10)`, `VARCHAR(4)`, `BOOLEAN`, `CHAR(2)`, `TIMESTAMP`, `TEXT`, and `DECIMAL(5,2)`. R2 activates PostgreSQL behind `CustomerActivityPort`; R3 proves the mandatory deterministic analysis contract; R4 activates project-owned analysis history, authentication, and pgvector policy retrieval. Source details that are not supplied remain explicitly unspecified rather than being filled with plausible-looking fiction.
 
 ![Figure 5 — Entity-relationship view — relational persistence model](diagrams/relational-schema.svg)
 
@@ -199,7 +199,7 @@ The design is activated through concentric rings rather than parallel throwaway 
 
 ![Figure 11 — Concentric delivery rings](diagrams/delivery-rings.svg)
 
-**Figure 11 — Concentric delivery rings.** Onion-style activation model from the deployable R0 shell at the center through R1 synthetic read, R2 relational read, R3 deterministic analysis/history, R4 grounded provider integration and R5 hardening/demo. Each outer ring activates or substitutes adapters around the same core rather than creating a second architecture.
+**Figure 11 — Concentric delivery rings.** Onion-style activation model from the deployable R0 shell through R1 mandatory synthetic customer review, R2 relational substitution, R3 mandatory deterministic analysis, R4 MUST_HAVE closure, and R5 hardening/demo. Structural seams may exist before the requirement they support first becomes an acceptance obligation; each outer ring still extends the same architecture rather than creating a second one.
 
 [Authoritative Graphviz/DOT source](diagrams/delivery-rings.dot)
 
@@ -207,12 +207,31 @@ The SVG is generated from the text source; it is not maintained by hand. Graphvi
 
 The ring semantics are:
 
-- **R0 — deployable hollow shell:** Java/Spring/React deployment shell, application modules, project-owned contracts and replaceable ports/adapters;
-- **R1 — authenticated synthetic read slice:** protected customer/activity/risk path with deterministic synthetic data;
-- **R2 — relational read slice:** substitute JPA/PostgreSQL/Flyway/Testcontainers behind `CustomerActivityPort`;
-- **R3 — deterministic analysis/history:** static grounding, deterministic analysis and persistent reviewable history;
-- **R4 — grounded provider path:** pgvector retrieval and optional live model adapter behind the existing ports;
-- **R5 — hardening/demo:** reliability, observability and demo polish without changing the established boundaries.
+- **R0 — deployable hollow shell:** Java/Spring/React deployment shell, application modules, project-owned contracts and replaceable ports/adapters. R0 deliberately carries no business-use-case acceptance obligation;
+- **R1 — mandatory synthetic customer review:** first acceptance of customer search, CARD/PAYMENT/CRYPTO activity review and source-derived risk evidence on deterministic synthetic data. Authentication is not an R1 gate;
+- **R2 — relational substitution:** replace the synthetic activity implementation with JPA/PostgreSQL/Flyway/Testcontainers behind `CustomerActivityPort`; no new operator use case is invented merely because the adapter becomes realistic;
+- **R3 — mandatory deterministic analysis:** first acceptance of requesting analysis and producing the mandatory structured risk level/findings/recommendations through the existing provider-neutral model port;
+- **R4 — MUST_HAVE closure:** activate multi-operator authentication/security, relevant-policy retrieval/RAG, completed-analysis persistence and history review. Optional live provider integration remains behind the existing ports;
+- **R5 — hardening/demo:** reliability, observability, NICE_TO_HAVE differentiation and demo polish without changing the established boundaries.
+
+`first_acceptance_ring` is a delivery projection, not a UML relationship. The completed-system use-case diagrams may therefore show a MUST_HAVE behavior as an `<<include>>` of a MANDATORY use case even though the mandatory requirement receives its first deterministic acceptance evidence in an inner ring. Structural elements such as `OperatorId`, ports, or adapter seams may likewise exist before their user-visible capability is activated.
+
+### Use-case package to delivery-ring allocation
+
+The SRS use-case Packages are the logical grouping authority for coherent operator capabilities. Requirements remain traceability metadata; they are not drawn as Requirement elements inside the UML use-case diagrams. This table projects those packaged capabilities onto the concentric delivery plan without changing UML ownership or `<<include>>`/`<<extend>>` semantics.
+
+| UML Package | Requirement-backed use-case capability | Delivery priority | First acceptance ring |
+| --- | --- | --- | --- |
+| Identity and customer selection | Search Customer by ID | MANDATORY | R1 |
+| Identity and customer selection | Authenticate Operator | MUST_HAVE | R4 |
+| Customer activity review | Review dashboard/activity and CARD/PAYMENT/CRYPTO specializations | MANDATORY | R1 |
+| Risk evidence review | Review source-derived risk evidence | MANDATORY | R1 |
+| AI-assisted customer analysis | Request AI analysis / produce structured risk analysis | MANDATORY | R3 |
+| AI-assisted customer analysis | Retrieve relevant policy knowledge | MUST_HAVE | R4 |
+| AI-assisted customer analysis | Persist completed analysis | MUST_HAVE | R4 |
+| Analysis history review | Review previous analyses | MUST_HAVE | R4 |
+
+A Package may span rings because UML packaging answers **which use cases belong together**, while the concentric projection answers **when each requirement-backed capability first becomes acceptable**. R0 and R2 intentionally have no new user-visible use-case acceptance: they establish structure and substitute infrastructure respectively.
 
 A later ring substitutes infrastructure behind stable seams. It does not introduce a second architecture merely because a more realistic adapter is available.
 

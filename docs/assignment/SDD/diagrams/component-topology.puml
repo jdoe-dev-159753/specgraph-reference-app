@@ -4,7 +4,7 @@ top to bottom direction
 skinparam componentStyle rectangle
 skinparam packageStyle rectangle
 skinparam linetype polyline
-skinparam nodesep 30
+skinparam nodesep 38
 skinparam ranksep 45
 
 actor "Customer Care\nOperator" as Operator
@@ -15,7 +15,7 @@ package "Web client" {
 }
 
 package "Spring Boot modular monolith" as Backend {
-  component "Spring Security Boundary\nADP-AUTH-SPRING-001" as Auth
+  component "Spring Security Boundary\nADP-AUTH-SPRING-001\nMUST_HAVE activation" as Auth
   component "HTTP Adapter\nADP-HTTP-001\n<<GoF Adapter>>" as Http
 
   component "Identity Module\nMOD-IDENTITY-001" as Identity
@@ -31,19 +31,21 @@ package "Spring Boot modular monolith" as Backend {
   Identity -[hidden]right-> Customer
   Customer -[hidden]right-> Risk
   Risk -[hidden]right-> Analysis
+
   ActivityPort -[hidden]right-> PolicyPort
-  PolicyPort -[hidden]right-> ModelPort
   ModelPort -[hidden]right-> HistoryPort
+  ActivityPort -[hidden]down-> ModelPort
+  PolicyPort -[hidden]down-> HistoryPort
 }
 
 package "Replaceable adapters" as Adapters {
   component "Synthetic Activity\nADP-ACT-SYN-001\nR0/R1\n<<GoF Adapter>>" as ActivitySynthetic
   component "JPA Activity\nADP-ACT-JPA-001\nR2\n<<GoF Adapter>>" as ActivityJpa
-  component "Static Policy\nADP-POL-STATIC-001\nR0\n<<GoF Adapter>>" as PolicyStatic
+  component "Static Policy\nADP-POL-STATIC-001\npre-R4 seam\n<<GoF Adapter>>" as PolicyStatic
   component "pgvector Policy\nADP-POL-PGV-001\nR4\n<<GoF Adapter>>" as PolicyPg
   component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3\n<<GoF Adapter>>" as ModelDet
   component "Spring AI Model\nADP-MODEL-AI-001\nR4 optional\n<<GoF Adapter>>" as ModelAi
-  component "JPA Analysis History\nADP-HIST-JPA-001\nR3\n<<GoF Adapter>>" as HistoryJpa
+  component "JPA Analysis History\nADP-HIST-JPA-001\nR4\n<<GoF Adapter>>" as HistoryJpa
 
   ActivitySynthetic -[hidden]right-> ActivityJpa
   ActivityJpa -[hidden]right-> PolicyStatic
@@ -58,7 +60,7 @@ component "External AI provider" as Provider <<external>>
 Operator --> UI
 UI --> WebApi : HTTP/JSON
 WebApi --> Http : provided by
-Auth --> Http : operator context
+Auth --> Http : operator context when R4 activated
 Auth --> Identity
 Http --> Customer
 Http --> Risk
@@ -88,7 +90,7 @@ note bottom of Backend
   UML Component diagram: components and provided/required interfaces show structural
   dependencies. GoF Adapter labels identify boundary translation roles; Strategy seams
   identify ports with interchangeable implementations; the analysis application service
-  acts as a Facade over orchestration. These patterns support the hexagonal style rather
-  than defining it. Transport is annotated only across real runtime boundaries.
+  acts as a Facade over orchestration. Structural presence does not imply first acceptance:
+  authentication is activated with the MUST_HAVE ring, not the mandatory R1 slice.
 end note
 @enduml
