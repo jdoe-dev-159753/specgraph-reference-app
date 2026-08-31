@@ -48,6 +48,7 @@ package "Replaceable adapters" as Adapters {
   ActivitySynthetic -[hidden]right-> ActivityJpa
   ActivityJpa -[hidden]right-> PolicyStatic
   PolicyStatic -[hidden]right-> PolicyPg
+  PolicyStatic -[hidden]down-> ModelDet
   ModelDet -[hidden]right-> ModelAi
   ModelAi -[hidden]right-> HistoryJpa
 }
