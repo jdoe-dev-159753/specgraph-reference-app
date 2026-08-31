@@ -1,136 +1,136 @@
-# SpecGraph Reference App
+# Customer Activity Analytics — SpecGraph Reference App
 
-**SpecGraph Reference App is a realistic consumer application used to demonstrate SpecGraph Harness end to end on a concrete software problem.**
+**A runnable reference application for specification-driven, AI-assisted software engineering.**
 
-The application owns the domain-specific requirements, invariants, acceptance criteria, design, implementation, tests, and evidence. SpecGraph Harness supplies the reusable engineering machinery around them: knowledge-graph construction, traceability, bounded agent context, provider-neutral AI execution, review orchestration, deterministic ratchets, and generated human-readable views.
+The application lets a Customer Care operator search a customer, inspect deterministic CARD, PAYMENT and CRYPTO activity, and review source-shaped risk evidence. Later delivery rings add relational persistence, deterministic structured analysis, policy retrieval, analysis history and multi-operator authentication behind the same project-owned ports.
 
-> SpecGraph Harness defines the engineering method. SpecGraph Reference App proves it on a real system.
+The point of this repository is not the framework stack. It is to demonstrate that requirements, design, implementation and verification can evolve as one traceable engineering system while AI assists the work without becoming the authority for mechanically decidable claims.
 
-## Purpose
+## Current runnable checkpoints
 
-This repository exists to answer a practical question:
+Two stable branches preserve the concentric J1 progression:
 
-> Can specification-driven AI-assisted development produce software that remains understandable, reviewable, auditable, maintainable, and transferable to humans?
+| Checkpoint | Branch | Meaning |
+| --- | --- | --- |
+| R0 | `demo/r0` | deployable hollow Java/Spring/React shell and architectural seams; no business-flow acceptance claim |
+| R1 | `demo/r1` | mandatory deterministic customer/activity/risk flow with browser-level executable evidence |
 
-The reference application is intentionally realistic enough to exercise the full method rather than acting as a toy wrapper around the harness.
+### Run R1 locally
 
-## Relationship to SpecGraph Harness
-
-```mermaid
-flowchart TD
-    H["specgraph-harness<br/>Reusable engineering method<br/>Knowledge graph<br/>Context derivation<br/>Provider abstractions<br/>Reviewers<br/>Ratchets<br/>Evidence and views"] --> A["specgraph-reference-app<br/>Domain requirements<br/>Invariants<br/>Acceptance criteria<br/>Design and ADRs<br/>Implementation<br/>Tests<br/>Domain evidence"]
+```bash
+git fetch origin
+git switch demo/r1
+docker compose up
 ```
 
-The dependency points in one direction: this application may consume the harness, but the harness must never learn employer-specific or domain-specific concepts from this repository.
+On Linux, use the host UID/GID so bind-mounted backend outputs remain owned by the invoking user:
 
-## What belongs here
-
-The reference application is the authoritative home for concrete problem knowledge such as:
-
-- domain requirements;
-- behavioural and internal invariants;
-- acceptance criteria;
-- assumptions and ambiguity resolutions;
-- application design;
-- domain ADRs;
-- UML or SysML behavioural/system models where useful;
-- source code;
-- unit, behavioural, integration, and acceptance tests;
-- challenge- or application-specific configuration and evidence.
-
-A specification may constrain internal behaviour, not only public interfaces. For example, a forbidden conjunction controlling a state-machine transition is a legitimate first-class invariant when it matters to correctness.
-
-## What does not belong here
-
-Reusable engineering infrastructure belongs in `specgraph-harness`, including:
-
-- generic knowledge-graph semantics;
-- code-graph adapters;
-- agent-provider ports;
-- reviewer-role abstractions;
-- GitHub review publication;
-- deterministic traceability/architecture ratchets;
-- generic documentation generation;
-- provider cost and usage accounting.
-
-If a mechanism is useful independently of this application's domain, it should normally move into the harness rather than becoming application-specific infrastructure.
-
-## Intended development flow
-
-The reference application is expected to exercise a workflow broadly shaped like this:
-
-```mermaid
-flowchart TD
-    P["Problem statement"] --> F["Facts / ambiguities / assumptions"]
-    F --> R["Requirements + invariants"]
-    R --> A["Acceptance criteria"]
-    A --> D["Design + ADRs + UML/SysML where useful"]
-    D --> V["Verification skeleton"]
-    V --> I["AI-assisted implementation"]
-    I --> PR["GitHub pull request"]
-    PR --> G["Deterministic gates"]
-    PR --> AR["Architecture review"]
-    PR --> ADV["Adversarial review"]
-    PR --> VR["Requirements / verification review"]
-    G --> H["Human decision"]
-    AR --> H
-    ADV --> H
-    VR --> H
-    H --> M["Merge + retained evidence"]
+```bash
+CI_HOST_UID="$(id -u)" CI_HOST_GID="$(id -g)" docker compose up
 ```
 
-The business solution should remain as simple as the problem permits. Methodological sophistication is valuable only when it improves correctness, traceability, maintainability, reviewability, or cost.
+Then open:
 
-## Knowledge and traceability
+- UI: <http://localhost:5173>
+- backend health: <http://localhost:8080/actuator/health>
 
-The application is expected to expose relationships such as:
+Use the deterministic seeded Customer ID:
 
-```mermaid
-flowchart LR
-    R["REQ-SM-017"] -->|refined by| D["Acceptance / design artefacts"]
-    R -->|constrains| S["State-transition behaviour"]
-    R -->|verified by| T["Deterministic tests / evidence"]
+```text
+11111111-1111-1111-1111-111111111111
 ```
 
-Generated matrices and diagrams are views over authoritative sources. They should not become manually maintained duplicate truths.
+The R1 UI exposes all three required activity families plus associated risk evidence. Searching an unknown UUID exercises the explicit not-found path.
 
-For simple flow, dependency, topology, and conceptual views, use GitHub-native Mermaid. For UML diagram families where UML semantics improve precision or readability, use PlantUML and keep the `.puml` source authoritative; rendered SVG/HTML/PDF artefacts remain generated views.
+Stop and remove the local topology with:
 
-The resulting evidence should make practical questions cheap to answer:
+```bash
+docker compose down -v --remove-orphans
+```
 
-- Why does this behaviour exist?
-- What requirement or invariant constrains it?
-- What changed?
-- What else can the change affect?
-- Which tests or analyses verify it?
-- Which architectural decision explains the design?
-- Who challenged the change?
-- What evidence justified acceptance?
+To inspect the pre-business R0 shell instead:
 
-## AI usage
+```bash
+git switch demo/r0
+docker compose up
+```
 
-This repository should demonstrate provider-neutral AI-assisted development rather than dependence on one vendor.
+R0 is intentionally hollow. Its value is demonstrating that the deployment and architectural seams existed before R1 added acceptance-bearing behaviour.
 
-Agent roles may include implementation, architecture review, adversarial review, and requirements/verification review. Providers can be selected or substituted based on capability, confidentiality, availability, and cost.
+## Executable verification evidence
 
-Mechanically checkable claims should remain deterministic. AI review supplies challenge and additional evidence, not final authority.
+J1 does not treat compilation as proof of deployment. Application CI starts the real Docker Compose topology, waits for backend and frontend health, then runs Playwright against the served browser UI. The browser test also inspects the corresponding API responses and asserts the seeded customer, CARD/PAYMENT/CRYPTO activity, risk evidence and 404 behaviour.
 
-## Privacy, hiring exercises, and sanitisation
+The accepted R1 head was `009b9b7337ced7632b91c0be7e6e9bd05614687b`, merged as `012d6663be8a6dc9edc6d2d2427f3d653de6bccb`. The exact successful Actions run and its evidence artefact are recorded in [`docs/assignment/VV/evidence/J1-R1.md`](docs/assignment/VV/evidence/J1-R1.md).
 
-The durable identity of this repository is independent from any employer or hiring exercise.
+That evidence is generated by CI rather than copied into a hand-maintained pass/fail matrix. [`verification.yaml`](docs/assignment/VV/verification.yaml) remains the stable machine-readable verification-obligation catalogue; [`VV.md`](docs/assignment/VV/VV.md) remains the canonical human-readable verification strategy.
 
-If the application is temporarily used to implement a private challenge:
+R1 deliberately has no database. It uses the deterministic synthetic activity adapter, so inventing database assertions here would prove fiction. Persistence evidence starts when a persistence-bearing ring activates PostgreSQL/JPA.
 
-- proprietary source documents should not be committed automatically;
-- employer names should not become package, namespace, or core domain identities unless genuinely required by the domain;
-- challenge-specific material should remain isolated and removable;
-- confidentiality and permitted AI-provider rules must be checked before external model use;
-- reusable mechanisms discovered during the exercise should be classified and moved to `specgraph-harness` through separate reviewable work.
+There is no permanent public HTTPS demo in J1. Deployment confidence at this ring comes from reproducible local Compose execution plus the exact clean-deployment/Playwright CI evidence above.
 
-A future portfolio version should be publishable as a generic reference application without rewriting the harness or depending on confidential history.
+## Canonical engineering evidence
 
-## Current status
+A reviewer should follow these controlled authorities rather than infer design from code alone:
 
-The repository is in bootstrap stage. Issue #1 defines the initial project-purpose and sanitisation boundary. Domain implementation will start only once a concrete problem statement exists and its confidentiality/usage constraints are understood.
+- [Inception](docs/assignment/Inception/Inception.md) — problem framing, delivery rings and functional use-case orientation
+- [SRS](docs/assignment/SRS/SRS.md) — normative requirements and acceptance semantics
+- [SDD](docs/assignment/SDD/SDD.md) — architecture, modules, ports/adapters and delivery projection
+- [ADRs](docs/assignment/ADR/) — durable architectural decisions
+- [V&V](docs/assignment/VV/VV.md) — verification strategy and evidence model
 
-Until then, the repository should avoid speculative application architecture. The reference system should be derived from an actual problem rather than reverse-engineering an impressive-looking solution in search of one.
+Machine-readable companions live beside those documents and are the source for mechanically generated traceability views.
+
+## Architecture
+
+The application is a modular monolith with hexagonal boundaries. Project-owned application/domain contracts sit inside the framework boundary; inbound HTTP/UI adapters and outbound activity, persistence, knowledge, model and history adapters remain replaceable behind stable ports.
+
+The current implementation uses Java 21, Spring Boot, React and TypeScript. PostgreSQL/pgvector are planned infrastructure choices for later rings, not prerequisites for R1. Provider-neutral analysis ports allow deterministic local behaviour to remain the mandatory path while live model integration stays optional and substitutable.
+
+The key R1 request path is intentionally:
+
+```text
+CustomerAnalysisHttpAdapter
+        -> CustomerReviewUseCase
+        -> CustomerReviewService
+        -> CustomerActivityPort
+        -> SyntheticActivityAdapter
+```
+
+An architecture test ratchets this boundary so the HTTP adapter cannot silently resume calling the outbound port directly.
+
+## Delivery rings
+
+The controlled SDD defines the authoritative ring allocation. In short:
+
+- **R0:** deployable hollow shell and stable seams;
+- **R1:** MANDATORY synthetic customer/activity/risk review;
+- **R2:** relational adapter substitution behind the existing activity port;
+- **R3:** MANDATORY deterministic structured analysis;
+- **R4:** MUST_HAVE authentication/security, policy retrieval, persistence/history and related evidence;
+- **R5:** hardening, demonstration quality and NICE_TO_HAVE differentiation.
+
+This ordering is deliberate. Authentication is not allowed to block the mandatory centre merely because an authentication seam already exists structurally.
+
+## Engineering method
+
+The repository is a concrete consumer of the wider SpecGraph engineering approach:
+
+```text
+problem evidence
+  -> requirements / invariants
+  -> acceptance criteria
+  -> design / ADRs
+  -> verification obligations
+  -> implementation PRs
+  -> deterministic gates + review
+  -> retained executable evidence
+```
+
+AI can assist implementation and review, but deterministic claims stay mechanically testable. GitHub-native issues, PR ownership, dependencies, lifecycle and Project metadata represent work state; prose documents do not duplicate those states.
+
+Generated diagrams and matrices are views over controlled semantic sources. PlantUML/DOT sources remain maintainable where UML or architecture semantics matter, while rendered SVGs are review views rather than a second authority.
+
+## Confidentiality and reuse
+
+The durable repository identity is generic. Proprietary assignment text and employer-specific naming are not required for the application architecture or the reusable engineering method. Mechanisms that are useful independently of this domain belong in the harness rather than being accumulated here as bespoke infrastructure.
