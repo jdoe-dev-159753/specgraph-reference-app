@@ -1,5 +1,5 @@
 @startuml
-title Figure 4a — Project-owned application contracts
+title Figure 4a — UML Class diagram — project-owned application contracts
 top to bottom direction
 skinparam classAttributeIconSize 0
 skinparam linetype polyline
@@ -79,7 +79,8 @@ package "Analysis and history contracts" {
 }
 
 note bottom
-  These are application-owned contracts. Persistence relations, Spring/JPA types,
-  and provider response types do not become members of this contract model.
+  UML Class diagram: these classifiers are application-owned contracts.
+  Persistence relations, Spring/JPA types, and provider response types do not become
+  members of this contract model.
 end note
 @enduml
