@@ -23,8 +23,8 @@ else authenticated
     Port -> Adapter : SyntheticActivityAdapter.loadSnapshot
     Adapter --> Port : CustomerSnapshot / not-found
   else R2+ relational adapter
-    Port -> Adapter : JpaCustomerActivityAdapter.loadSnapshot
-    Adapter -> DB : JDBC activity + risk queries
+    Port -> Adapter : JdbcCustomerActivityAdapter.loadSnapshot
+    Adapter -> DB : Spring JDBC activity + risk queries
     DB --> Adapter : source rows
     Adapter --> Port : CustomerSnapshot / not-found
   end
