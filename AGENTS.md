@@ -69,7 +69,7 @@ When work exposes another independently reviewable concern, reuse an existing ow
 - Target at most 400 changed lines. From 401-700 lines, actively consider splitting; above 700 lines, split unless atomicity is explicitly justified.
 - Intermediate stacked pull requests may target a non-default parent branch. When retargeted to `main`, establish the required native closing/Development ownership before merge.
 - Every open non-draft pull request targeting `main` must receive a Codex review before merge.
-- Codex review freshness is SHA-bound: GitHub's review `commit_id` must equal the current pull-request `head.sha`. If the head moves, invoke `@codex review` again and reconcile every material finding before merge.
+- Codex review freshness is SHA-bound. Finding-bearing reviews use native `PullRequestReview.commit_id == head.sha`; clean reviews emitted by the Codex GitHub App as bot comments must explicitly name the current reviewed commit. If the head moves, invoke `@codex review` again and reconcile every material finding before merge.
 - Never mutate `main` directly during ordinary work.
 
 ## Specification-driven development
