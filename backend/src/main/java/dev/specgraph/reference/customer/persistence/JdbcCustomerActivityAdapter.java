@@ -8,10 +8,11 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -76,9 +77,13 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
             """;
 
     private final JdbcClient jdbc;
+    private final ZoneId sourceTimeZone;
 
-    JdbcCustomerActivityAdapter(JdbcClient jdbc) {
+    JdbcCustomerActivityAdapter(
+            JdbcClient jdbc,
+            @Value("${specgraph.source-time-zone:UTC}") String sourceTimeZone) {
         this.jdbc = jdbc;
+        this.sourceTimeZone = ZoneId.of(sourceTimeZone);
     }
 
     @Override
@@ -95,17 +100,17 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
 
         List<Activity> activities = jdbc.sql(ACTIVITIES_SQL)
                 .param("customerId", customerId)
-                .query(JdbcCustomerActivityAdapter::mapActivity)
+                .query(this::mapActivity)
                 .list();
         List<RiskEvidence> riskEvidence = jdbc.sql(RISK_EVIDENCE_SQL)
                 .param("customerId", customerId)
-                .query(JdbcCustomerActivityAdapter::mapRiskEvidence)
+                .query(this::mapRiskEvidence)
                 .list();
 
         return Optional.of(new CustomerSnapshot(customerId, activities, riskEvidence));
     }
 
-    private static Activity mapActivity(ResultSet rs, int rowNum) throws SQLException {
+    private Activity mapActivity(ResultSet rs, int rowNum) throws SQLException {
         UUID transactionId = rs.getObject("transaction_id", UUID.class);
         Activity.ActivityType type;
         try {
@@ -161,17 +166,21 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
                 amount,
                 rs.getString("currency"),
                 rs.getString("status"),
-                rs.getObject("created_at", LocalDateTime.class).toInstant(ZoneOffset.UTC),
+                sourceInstant(rs, "created_at"),
                 details);
     }
 
-    private static RiskEvidence mapRiskEvidence(ResultSet rs, int rowNum) throws SQLException {
+    private RiskEvidence mapRiskEvidence(ResultSet rs, int rowNum) throws SQLException {
         return new RiskEvidence(
                 rs.getObject("transaction_id", UUID.class),
                 rs.getObject("rule_id", UUID.class).toString(),
                 rs.getString("rule_name"),
-                rs.getObject("triggered_at", LocalDateTime.class).toInstant(ZoneOffset.UTC),
+                sourceInstant(rs, "triggered_at"),
                 rs.getBigDecimal("score_contribution"));
+    }
+
+    private java.time.Instant sourceInstant(ResultSet rs, String column) throws SQLException {
+        return rs.getObject(column, LocalDateTime.class).atZone(sourceTimeZone).toInstant();
     }
 
     private static void requireSpecialization(UUID transactionId, boolean present, String type) {

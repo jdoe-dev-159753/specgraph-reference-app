@@ -8,6 +8,8 @@ spring:
   flyway:
     enabled: true
     validate-migration-naming: true
+specgraph:
+  source-time-zone: ${SPECGRAPH_SOURCE_TIME_ZONE:UTC}
 management:
   endpoints:
     web:
