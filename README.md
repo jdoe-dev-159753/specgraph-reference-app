@@ -77,10 +77,11 @@ Then open:
 R3: http://localhost:8083/
 ```
 
-Run only R2 instead:
+Run the accepted frozen R2 source checkpoint instead of rebuilding the current R3 checkout under the R2 service name:
 
 ```bash
-docker compose up --build -d --wait r2
+git worktree add --detach .checkpoints/r2 demo/r2
+R2_SOURCE_ROOT=.checkpoints/r2 docker compose up --build -d --wait r2
 ```
 
 Then open:
