@@ -50,12 +50,25 @@ public abstract class CustomerActivityPortContract {
             assertThat(activity.createdAt()).isNotNull();
 
             switch (activity.type()) {
-                case CARD -> assertThat(activity.details()).containsKeys(
-                        "cardPan", "cardType", "merchantName", "mccCode", "cardPresent", "authorizationCode");
-                case PAYMENT -> assertThat(activity.details()).containsKeys(
-                        "paymentMethod", "senderAccount", "receiverAccount", "receiverBankCountry");
-                case CRYPTO -> assertThat(activity.details()).containsKeys(
-                        "blockchain", "walletAddressFrom", "walletAddressTo", "txHash");
+                case CARD -> {
+                    assertThat(activity.details()).isInstanceOf(Activity.CardDetails.class);
+                    Activity.CardDetails details = (Activity.CardDetails) activity.details();
+                    assertThat(details.cardPan()).isNotBlank();
+                    assertThat(details.merchantName()).isNotBlank();
+                    assertThat(details.authorizationCode()).isNotBlank();
+                }
+                case PAYMENT -> {
+                    assertThat(activity.details()).isInstanceOf(Activity.PaymentDetails.class);
+                    Activity.PaymentDetails details = (Activity.PaymentDetails) activity.details();
+                    assertThat(details.paymentMethod()).isNotBlank();
+                    assertThat(details.receiverBankCountry()).isNotBlank();
+                }
+                case CRYPTO -> {
+                    assertThat(activity.details()).isInstanceOf(Activity.CryptoDetails.class);
+                    Activity.CryptoDetails details = (Activity.CryptoDetails) activity.details();
+                    assertThat(details.blockchain()).isNotBlank();
+                    assertThat(details.txHash()).isNotBlank();
+                }
             }
         }
 
