@@ -1,20 +1,22 @@
 package dev.specgraph.reference.analysis;
 
 import java.util.List;
-import java.util.Objects;
 
 public record AnalysisResult(RiskLevel riskLevel, String findingsSummary, List<String> recommendations) {
     public AnalysisResult {
-        Objects.requireNonNull(riskLevel, "riskLevel");
-        Objects.requireNonNull(findingsSummary, "findingsSummary");
-        Objects.requireNonNull(recommendations, "recommendations");
-        if (findingsSummary.isBlank()) {
-            throw new IllegalArgumentException("findings summary must not be blank");
+        if (riskLevel == null) {
+            throw new InvalidAnalysisResultException("risk level must not be null");
+        }
+        if (findingsSummary == null || findingsSummary.isBlank()) {
+            throw new InvalidAnalysisResultException("findings summary must not be blank");
+        }
+        if (recommendations == null
+                || recommendations.isEmpty()
+                || recommendations.stream().anyMatch(recommendation -> recommendation == null || recommendation.isBlank())) {
+            throw new InvalidAnalysisResultException(
+                    "analysis must contain one or more non-blank recommendations");
         }
         recommendations = List.copyOf(recommendations);
-        if (recommendations.isEmpty() || recommendations.stream().anyMatch(String::isBlank)) {
-            throw new IllegalArgumentException("analysis must contain one or more non-blank recommendations");
-        }
     }
 
     public enum RiskLevel { LOW, MEDIUM, HIGH }
