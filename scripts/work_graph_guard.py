@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Reject competing prose work-state and stale PR review requests."""
+"""Reject competing prose work-state and stale Codex review evidence."""
 
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import os
 import re
@@ -14,6 +13,8 @@ API = "https://api.github.com"
 REPO = os.environ.get("GITHUB_REPOSITORY", "jdoe-dev-159753/specgraph-reference-app")
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
 EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
+EVENT_NAME = os.environ.get("GITHUB_EVENT_NAME", "")
+CODEX_LOGIN_PREFIX = "chatgpt-codex-connector"
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -21,7 +22,6 @@ PREFIX = re.compile(
     re.IGNORECASE,
 )
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
-CODEX_REVIEW_REQUEST = re.compile(r"(?im)^\s*@codex\s+review\b")
 
 
 def api(path: str):
@@ -78,18 +78,11 @@ def scan_surface(kind: str, identifier: str, text: str, failures: list[str]) -> 
         failures.append(f"{kind} {identifier}: {finding}")
 
 
-def parse_time(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
 def event_pr_number_from_payload(event: dict) -> int | None:
     pull_request = event.get("pull_request")
-    if pull_request:
-        return pull_request.get("number") or event.get("number")
-    issue = event.get("issue") or {}
-    if issue.get("pull_request"):
-        return issue.get("number")
-    return None
+    if not pull_request:
+        return None
+    return pull_request.get("number") or event.get("number")
 
 
 def event_pr_number() -> int | None:
@@ -99,48 +92,55 @@ def event_pr_number() -> int | None:
         return event_pr_number_from_payload(json.load(handle))
 
 
-def has_fresh_codex_request(comments, head_time: datetime) -> bool:
+def is_codex_review(review: dict) -> bool:
+    login = ((review.get("user") or {}).get("login") or "").lower()
+    return login.startswith(CODEX_LOGIN_PREFIX)
+
+
+def has_current_head_codex_review(reviews, head_sha: str) -> bool:
     return any(
-        CODEX_REVIEW_REQUEST.search(comment.get("body") or "")
-        and parse_time(comment["created_at"]) >= head_time
-        for comment in comments
+        is_codex_review(review) and review.get("commit_id") == head_sha
+        for review in reviews
     )
 
 
-def require_current_head_codex_request(pr_number: int, failures: list[str]) -> None:
+def require_current_head_codex_review(pr_number: int, failures: list[str]) -> None:
     pr = api(f"/repos/{REPO}/pulls/{pr_number}")
     if pr.get("state") != "open" or pr.get("draft"):
         return
+    if (pr.get("base") or {}).get("ref") != "main":
+        return
 
     head_sha = pr["head"]["sha"]
-    commit = api(f"/repos/{REPO}/commits/{head_sha}")
-    head_time = parse_time(commit["commit"]["committer"]["date"])
-    comments = pages(f"/repos/{REPO}/issues/{pr_number}/comments")
-    if has_fresh_codex_request(comments, head_time):
-        print(f"pull request #{pr_number}: current-head Codex review explicitly requested")
+    reviews = pages(f"/repos/{REPO}/pulls/{pr_number}/reviews")
+    if has_current_head_codex_review(reviews, head_sha):
+        print(f"pull request #{pr_number}: Codex reviewed current head {head_sha[:12]}")
         return
 
     failures.append(
-        f"pull request #{pr_number}: no explicit @codex review request exists after current head {head_sha[:12]}"
+        f"pull request #{pr_number}: no Codex review is anchored to current head {head_sha[:12]}"
     )
 
 
 def main() -> int:
     failures: list[str] = []
-    for item in pages(f"/repos/{REPO}/issues?state=open"):
+    open_items = list(pages(f"/repos/{REPO}/issues?state=open"))
+    for item in open_items:
         number = item["number"]
         kind = "pull request" if "pull_request" in item else "issue"
         scan_surface(kind, f"#{number} title", item.get("title") or "", failures)
         scan_surface(kind, f"#{number} body", item.get("body") or "", failures)
 
     # Conversation and review comments are discussion, not controlled work-state
-    # descriptions. They may legitimately quote typed values while reviewing the
-    # mechanics. Treating third-party review prose as authoritative would make the
-    # ratchet both noisy and impossible for the repository owner to remediate.
-
+    # descriptions. Review freshness is anchored to GitHub's native review.commit_id
+    # and pull_request.head.sha identities rather than prose or commit timestamps.
     pr_number = event_pr_number()
     if pr_number is not None:
-        require_current_head_codex_request(pr_number, failures)
+        require_current_head_codex_review(pr_number, failures)
+    elif EVENT_NAME in {"schedule", "workflow_dispatch"}:
+        for item in open_items:
+            if "pull_request" in item:
+                require_current_head_codex_review(item["number"], failures)
 
     if failures:
         print("Work-graph/review guard failed:", file=sys.stderr)
@@ -148,7 +148,7 @@ def main() -> int:
             print(f"- {finding}", file=sys.stderr)
         return 1
 
-    print("controlled GitHub work descriptions and current-head review request are clean")
+    print("controlled GitHub work descriptions and exact-head Codex review evidence are clean")
     return 0
 
 
