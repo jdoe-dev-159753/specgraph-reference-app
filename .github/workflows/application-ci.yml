@@ -36,8 +36,10 @@ jobs:
       COMPOSE_PROJECT_NAME: specgraph-ci-${{ github.run_id }}
       R1_PORT: '8081'
       R2_PORT: '8082'
+      R3_PORT: '8083'
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       R1_CHECKPOINT_SHA: e2a41694290ef8b03e4485ca1a2fe2c5664d1941
+      R2_CHECKPOINT_SHA: 587027b7c80339998ab49e879afefcc692e6d052
     steps:
       - name: Clean container-owned outputs from previous runs
         run: |
@@ -60,6 +62,21 @@ jobs:
           echo "Expected source SHA: $SOURCE_SHA"
           echo "Checked-out SHA:     $checked_out_sha"
           test "$checked_out_sha" = "$SOURCE_SHA"
+
+      - name: Checkout immutable R2 checkpoint for compatibility evidence
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.R2_CHECKPOINT_SHA }}
+          path: .checkpoints/r2
+          persist-credentials: false
+
+      - name: Assert exact R2 checkpoint revision
+        working-directory: .checkpoints/r2
+        run: |
+          checked_out_sha="$(git rev-parse HEAD)"
+          echo "Expected R2 checkpoint SHA: $R2_CHECKPOINT_SHA"
+          echo "Checked-out R2 SHA:         $checked_out_sha"
+          test "$checked_out_sha" = "$R2_CHECKPOINT_SHA"
 
       - name: Checkout immutable R1 checkpoint for compatibility evidence
         uses: actions/checkout@v7
@@ -107,12 +124,15 @@ jobs:
           npm install
           npm run build
 
-      - name: Build exact-head R2 and archived R1 compatibility images
+      - name: Build exact-head R3 and archived R2/R1 compatibility images
         run: |
-          r2_image="specgraph-reference-app:r2-ci-${SOURCE_SHA}"
+          r3_image="specgraph-reference-app:r3-ci-${SOURCE_SHA}"
+          r2_image="specgraph-reference-app:r2-compat-${R2_CHECKPOINT_SHA}"
           r1_image="specgraph-reference-app:r1-compat-${R1_CHECKPOINT_SHA}"
-          docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$r2_image" .
+          docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$r3_image" .
+          docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=.checkpoints/r2 -t "$r2_image" .
           docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=.checkpoints/r1 -t "$r1_image" .
+          echo "APP_R3_IMAGE=$r3_image" >> "$GITHUB_ENV"
           echo "APP_R2_IMAGE=$r2_image" >> "$GITHUB_ENV"
           echo "APP_R1_IMAGE=$r1_image" >> "$GITHUB_ENV"
 
@@ -121,16 +141,16 @@ jobs:
           docker compose config --quiet
           docker compose -f compose.oci.yaml config --quiet
 
-      - name: Start exact-head R2 topology
+      - name: Start archived R2 checkpoint for compatibility evidence
         run: docker compose up -d --no-build r2
 
-      - name: Wait for packaged R2 application health
+      - name: Wait for archived R2 application health
         run: |
           app_id="$(docker compose ps -q r2)"
           for attempt in $(seq 1 90); do
             health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$app_id" 2>/dev/null || true)"
             if [ "$health" = healthy ]; then
-              echo "Packaged R2 application healthy after ${attempt} attempts"
+              echo "Archived R2 application healthy after ${attempt} attempts"
               exit 0
             fi
             sleep 2
@@ -139,26 +159,13 @@ jobs:
           docker compose logs --no-color r2 postgres
           exit 1
 
-      - name: Assert deployed R2 PostgreSQL fixture contract
+      - name: Assert archived R2 PostgreSQL fixture contract
         run: |
           amount_currency="$(docker compose exec -T postgres psql -U specgraph -d specgraph -Atc \
             "SELECT amount::text || '|' || currency FROM transactions WHERE transaction_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'")"
           test "$amount_currency" = '248.50|CHF'
 
-          seeded_assessments="$(docker compose exec -T postgres psql -U specgraph -d specgraph -Atc \
-            "SELECT string_agg(ra.assessment_id::text, ',' ORDER BY ra.assessment_id) FROM risk_assessments ra JOIN transactions t USING (transaction_id) WHERE t.customer_id = '11111111-1111-1111-1111-111111111111'")"
-          test "$seeded_assessments" = '20000000-0000-0000-0000-000000000001,20000000-0000-0000-0000-000000000002'
-
-          growing_assessments="$(docker compose exec -T postgres psql -U specgraph -d specgraph -Atc \
-            "SELECT string_agg(ra.assessment_id::text, ',' ORDER BY ra.assessment_id) FROM risk_assessments ra JOIN transactions t USING (transaction_id) WHERE t.customer_id = '33333333-3333-3333-3333-333333333333'")"
-          test "$growing_assessments" = '20000000-0000-0000-0000-000000000003,20000000-0000-0000-0000-000000000004,20000000-0000-0000-0000-000000000005'
-
-      - name: Verify Spring Boot serves the built R2 React UI
-        run: |
-          curl -fsS http://127.0.0.1:8082/ | grep -F '<div id="root"></div>'
-          curl -fsS http://127.0.0.1:8082/actuator/health | grep -F '"status":"UP"'
-
-      - name: VFY-CUSTOMER-READ-001 — Verify deployed R2 DB-to-browser path
+      - name: Verify archived R2 checkpoint with its ring-specific Playwright contract
         run: |
           docker run --rm --network host --ipc=host \
             --user "$(id -u):$(id -g)" \
@@ -169,6 +176,47 @@ jobs:
             -v "$PWD/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r2-customer-review.spec.ts'
+
+      - name: Start exact-head R3 topology
+        run: docker compose up -d --no-build r3
+
+      - name: Wait for packaged R3 application health
+        run: |
+          app_id="$(docker compose ps -q r3)"
+          for attempt in $(seq 1 90); do
+            health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$app_id" 2>/dev/null || true)"
+            if [ "$health" = healthy ]; then
+              echo "Packaged R3 application healthy after ${attempt} attempts"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs --no-color r3 postgres
+          exit 1
+
+      - name: Assert deployed R3 analysis-history schema
+        run: |
+          analysis_table="$(docker compose exec -T postgres psql -U specgraph -d specgraph -Atc \
+            "SELECT to_regclass('public.analysis_history')::text")"
+          test "$analysis_table" = 'analysis_history'
+
+      - name: Verify Spring Boot serves the built R3 React UI
+        run: |
+          curl -fsS http://127.0.0.1:8083/ | grep -F '<div id="root"></div>'
+          curl -fsS http://127.0.0.1:8083/actuator/health | grep -F '"status":"UP"'
+
+      - name: VFY-ANALYSIS-001 — Verify deployed R3 analysis and persistent-history path
+        run: |
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL=http://127.0.0.1:8083 \
+            -e EVIDENCE_NAME=r3 \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r3-analysis-history.spec.ts'
 
       - name: Start archived R1 checkpoint for compatibility evidence
         run: docker compose up -d --no-build r1
@@ -204,16 +252,16 @@ jobs:
         if: always()
         run: |
           mkdir -p e2e/test-results
-          printf 'r2_source_sha=%s\nr1_checkpoint_sha=%s\n' "$SOURCE_SHA" "$R1_CHECKPOINT_SHA" > e2e/test-results/provenance.txt
+          printf 'r3_source_sha=%s\nr2_checkpoint_sha=%s\nr1_checkpoint_sha=%s\n' "$SOURCE_SHA" "$R2_CHECKPOINT_SHA" "$R1_CHECKPOINT_SHA" > e2e/test-results/provenance.txt
           docker compose ps > e2e/test-results/compose-ps.txt 2>&1 || true
-          docker compose logs --no-color r2 postgres > e2e/test-results/r2-compose.log 2>&1 || true
+          docker compose logs --no-color r3 r2 postgres > e2e/test-results/r3-r2-compose.log 2>&1 || true
           docker compose logs --no-color r1 > e2e/test-results/r1-compose.log 2>&1 || true
 
       - name: Upload executable evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r2-${{ env.SOURCE_SHA }}-r1-${{ env.R1_CHECKPOINT_SHA }}-evidence
+          name: r3-${{ env.SOURCE_SHA }}-r2-${{ env.R2_CHECKPOINT_SHA }}-r1-${{ env.R1_CHECKPOINT_SHA }}-evidence
           path: |
             backend/target/surefire-reports
             e2e/playwright-report
