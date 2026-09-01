@@ -203,9 +203,9 @@ infrastructure:
     publication_semantics: demo is last-known-good and advances only after remote-pull verification
     distribution: GHCR Compose OCI artifact with published checkpoint images and PostgreSQL resolved to exact digests
     runtime_platforms: [linux/amd64, linux/arm64]
-    published_j2_services: [r0, r1, postgres, r2]
+    published_j2_services: [r0, r1, postgres, r2, r3]
     source_j2_services: [r0, r1, postgres, r2, r3]
-    checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080, R2 host 8082 to container 8080, R3 source host 8083 to container 8080]
+    checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080, R2 host 8082 to container 8080, R3 host 8083 to container 8080]
     operating_modes: [side_by_side_default, direct_checkpoint_debug, detached_persistent]
     adrs: [ADR-004, ADR-005, ADR-006]
   CMP-UI-001:
