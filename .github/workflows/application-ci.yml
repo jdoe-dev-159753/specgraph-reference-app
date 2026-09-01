@@ -57,7 +57,7 @@ jobs:
           -v "$PWD/backend:/workspace"
           -w /workspace
           maven:3.9-eclipse-temurin-21
-          mvn -B verify
+          mvn -B -q verify
 
       - uses: actions/setup-node@v7
         with:
