@@ -3,12 +3,13 @@
 from datetime import datetime, timezone
 import unittest
 
-import work_graph_guard as guard
+from scripts import work_graph_guard as guard
 
 
 class ReviewFreshnessTests(unittest.TestCase):
     def test_pull_request_event_resolves_pr_number(self):
-        self.assertEqual(42, guard.event_pr_number_from_payload({"number": 42, "pull_request": {}}))
+        event = {"number": 42, "pull_request": {"number": 42}}
+        self.assertEqual(42, guard.event_pr_number_from_payload(event))
 
     def test_issue_comment_event_on_pr_resolves_pr_number(self):
         self.assertEqual(
