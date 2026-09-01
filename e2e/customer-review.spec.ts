@@ -90,7 +90,7 @@ test('VFY-CUSTOMER-READ-001 deployed R2 relational customer review', async ({ pa
   await page.getByRole('button', { name: 'Search' }).click()
   expect((await scenarioPromise).status()).toBe(200)
   await expect(page.getByTestId('customer-activity').getByText('EUR').first()).toBeVisible()
-  await expect(page.getByTestId('customer-activity').getByText('ETH')).toBeVisible()
+  await expect(page.getByTestId('activity-crypto-currency')).toHaveText('ETH')
   await expect(page.getByTestId('risk-evidence')).toContainText('Growing cross-border payment activity')
   await expect(page.getByTestId('risk-evidence')).toContainText('New crypto destination')
 
