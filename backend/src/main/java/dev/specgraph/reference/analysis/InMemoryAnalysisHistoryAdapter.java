@@ -2,6 +2,7 @@ package dev.specgraph.reference.analysis;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -25,5 +26,12 @@ class InMemoryAnalysisHistoryAdapter implements AnalysisHistoryPort {
     @Override
     public synchronized List<AnalysisHistoryEntry> listByCustomer(UUID customerId) {
         return analyses.stream().filter(a -> a.customerId().equals(customerId)).toList();
+    }
+
+    @Override
+    public synchronized Optional<AnalysisHistoryEntry> findByCustomerAndId(UUID customerId, UUID analysisId) {
+        return analyses.stream()
+                .filter(a -> a.customerId().equals(customerId) && a.analysisId().equals(analysisId))
+                .findFirst();
     }
 }
