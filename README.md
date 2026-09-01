@@ -48,13 +48,7 @@ Use this deterministic seeded Customer ID in R1 or R2:
 11111111-1111-1111-1111-111111111111
 ```
 
-R2 should expose CARD, PAYMENT and CRYPTO activity, exact decimal monetary strings, stable source `assessmentId` values and source timestamps converted from the explicitly configured source timezone. The published topology starts PostgreSQL as an internal dependency and waits for it to become healthy before R2 starts.
-
-The source timezone defaults to `UTC`. Override it when the source database wall-clock timestamps use another zone, for example:
-
-```bash
-SPECGRAPH_SOURCE_TIME_ZONE=Europe/Zurich docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait
-```
+R2 should expose CARD, PAYMENT and CRYPTO activity, exact decimal monetary strings, stable source `assessmentId` values and source timestamps converted from the explicit source timezone. The published reviewer checkpoint uses the deterministic fixture timezone `UTC`; the published topology starts PostgreSQL as an internal dependency and waits for it to become healthy before R2 starts.
 
 Stop the published deployment with:
 
@@ -70,6 +64,12 @@ The repository also keeps a source-build path for development and exact-head ver
 
 ```bash
 docker compose up --build -d --wait r2 && H="$(hostname -I | awk '{print $1}')" && printf '\nR2: http://%s:8082/\n' "$H"
+```
+
+The source-build path keeps `SPECGRAPH_SOURCE_TIME_ZONE` configurable. For a source database whose timezone-free wall-clock timestamps are Europe/Zurich values:
+
+```bash
+SPECGRAPH_SOURCE_TIME_ZONE=Europe/Zurich docker compose up --build -d --wait r2
 ```
 
 Stop the local topology with:
@@ -141,7 +141,7 @@ CustomerReviewHttpAdapter
 
 Flyway is the schema/migration authority. Spring JDBC is the bounded R2 relational access baseline. Multi-query `CustomerSnapshot` reads use one PostgreSQL `REPEATABLE READ` snapshot so activities and risk evidence cannot be assembled from different committed database states.
 
-Source `TIMESTAMP` columns are wall-clock values without timezone metadata. The application therefore does not guess from the host JVM or operating system. `specgraph.source-time-zone` is explicit configuration, exposed operationally as `SPECGRAPH_SOURCE_TIME_ZONE`, with deterministic fixture default `UTC`.
+Source `TIMESTAMP` columns are wall-clock values without timezone metadata. The application therefore does not guess from the host JVM or operating system. `specgraph.source-time-zone` is explicit configuration, exposed operationally as `SPECGRAPH_SOURCE_TIME_ZONE` for source deployments, with deterministic fixture default `UTC`; the published reviewer checkpoint deliberately fixes that fixture semantics to UTC.
 
 ## Delivery rings
 
