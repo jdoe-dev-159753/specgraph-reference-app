@@ -80,10 +80,10 @@ jobs:
           docker compose config --quiet
           docker compose -f compose.oci.yaml config --quiet
 
-      - name: VFY-REPRODUCIBILITY-001 — Start exact-head checkpoint through Compose
+      - name: Start exact-head R1 checkpoint through Compose
         run: docker compose up -d --no-build r1
 
-      - name: VFY-REPRODUCIBILITY-001 — Wait for packaged application readiness
+      - name: Wait for packaged R1 application readiness
         run: |
           app_id="$(docker compose ps -q r1)"
           for attempt in $(seq 1 90); do
@@ -98,7 +98,7 @@ jobs:
           docker compose logs --no-color r1
           exit 1
 
-      - name: VFY-REPRODUCIBILITY-001 — Smoke packaged UI and health boundary
+      - name: Smoke packaged R1 UI and health boundary
         run: |
           curl -fsS http://127.0.0.1:8081/ | grep -F '<div id="root"></div>'
           curl -fsS http://127.0.0.1:8081/actuator/health | grep -F '"status":"UP"'
