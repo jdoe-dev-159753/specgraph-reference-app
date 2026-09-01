@@ -24,6 +24,7 @@ jobs:
       COMPOSE_PACKAGE: ghcr.io/${{ github.repository_owner }}/specgraph-reference-app-compose
       R0_PORT: '8080'
       R1_PORT: '8081'
+      R2_PORT: '8082'
     steps:
       - name: Checkout packaging authority
         uses: actions/checkout@v7
@@ -45,6 +46,13 @@ jobs:
           path: packaging/checkpoints/r1
           persist-credentials: false
 
+      - name: Checkout R2 source checkpoint
+        uses: actions/checkout@v7
+        with:
+          ref: demo/r2
+          path: packaging/checkpoints/r2
+          persist-credentials: false
+
       - name: Confirm OCI-capable Docker tooling
         working-directory: packaging
         run: |
@@ -58,15 +66,19 @@ jobs:
         run: |
           r0_sha="$(git -C checkpoints/r0 rev-parse HEAD)"
           r1_sha="$(git -C checkpoints/r1 rev-parse HEAD)"
+          r2_sha="$(git -C checkpoints/r2 rev-parse HEAD)"
           packaging_short="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
           r0_short="$(printf '%s' "$r0_sha" | cut -c1-12)"
           r1_short="$(printf '%s' "$r1_sha" | cut -c1-12)"
+          r2_short="$(printf '%s' "$r2_sha" | cut -c1-12)"
 
           echo "R0_SHA=$r0_sha" >> "$GITHUB_ENV"
           echo "R1_SHA=$r1_sha" >> "$GITHUB_ENV"
+          echo "R2_SHA=$r2_sha" >> "$GITHUB_ENV"
           echo "R0_IMMUTABLE=r0-${r0_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
           echo "R1_IMMUTABLE=r1-${r1_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
-          echo "COMPOSE_IMMUTABLE=demo-r0-${r0_short}-r1-${r1_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
+          echo "R2_IMMUTABLE=r2-${r2_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
+          echo "COMPOSE_IMMUTABLE=demo-r0-${r0_short}-r1-${r1_short}-r2-${r2_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
           echo "BUILDER_NAME=specgraph-multiarch-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
 
           docker build -f docker/app.Dockerfile \
@@ -81,22 +93,31 @@ jobs:
             --label "dev.specgraph.checkpoint.revision=$r1_sha" \
             --label "dev.specgraph.packaging.revision=$GITHUB_SHA" \
             -t specgraph-reference-app:r1 .
+          docker build -f docker/app.Dockerfile \
+            --build-arg SOURCE_ROOT=checkpoints/r2 \
+            --label "org.opencontainers.image.revision=$r2_sha" \
+            --label "dev.specgraph.checkpoint.revision=$r2_sha" \
+            --label "dev.specgraph.packaging.revision=$GITHUB_SHA" \
+            -t specgraph-reference-app:r2 .
 
-      - name: Verify R0 and R1 side by side before publication
+      - name: Verify R0, R1 and PostgreSQL-backed R2 side by side before publication
         working-directory: packaging
         env:
           APP_R0_IMAGE: specgraph-reference-app:r0
           APP_R1_IMAGE: specgraph-reference-app:r1
+          APP_R2_IMAGE: specgraph-reference-app:r2
           COMPOSE_PROJECT_NAME: specgraph-prepublish-${{ github.run_id }}
         run: |
-          docker compose up -d --no-build r0 r1
+          docker compose up -d --no-build r0 r1 postgres r2
 
           r0_id="$(docker compose ps -q r0)"
           r1_id="$(docker compose ps -q r1)"
+          r2_id="$(docker compose ps -q r2)"
           for attempt in $(seq 1 90); do
             r0_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$r0_id" 2>/dev/null || true)"
             r1_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$r1_id" 2>/dev/null || true)"
-            if [ "$r0_health" = healthy ] && [ "$r1_health" = healthy ]; then
+            r2_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$r2_id" 2>/dev/null || true)"
+            if [ "$r0_health" = healthy ] && [ "$r1_health" = healthy ] && [ "$r2_health" = healthy ]; then
               break
             fi
             if [ "$attempt" -eq 90 ]; then
@@ -109,6 +130,7 @@ jobs:
 
           curl -fsS http://127.0.0.1:8080/ >/dev/null
           curl -fsS http://127.0.0.1:8081/ >/dev/null
+          curl -fsS http://127.0.0.1:8082/ >/dev/null
 
           docker run --rm --network host --ipc=host \
             --user "$(id -u):$(id -g)" \
@@ -118,6 +140,15 @@ jobs:
             -v "$PWD/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r1-customer-review.spec.ts'
+
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL=http://127.0.0.1:8082 \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r2-customer-review.spec.ts'
 
           docker compose down --remove-orphans
 
@@ -154,24 +185,42 @@ jobs:
             -t "$APP_PACKAGE:$R1_IMMUTABLE" \
             --push .
 
+          docker buildx build --builder "$BUILDER_NAME" \
+            --platform linux/amd64,linux/arm64 \
+            -f docker/app.Dockerfile \
+            --build-arg SOURCE_ROOT=checkpoints/r2 \
+            --label "org.opencontainers.image.revision=$R2_SHA" \
+            --label "dev.specgraph.checkpoint.revision=$R2_SHA" \
+            --label "dev.specgraph.packaging.revision=$GITHUB_SHA" \
+            -t "$APP_PACKAGE:r2" \
+            -t "$APP_PACKAGE:$R2_IMMUTABLE" \
+            --push .
+
       - name: Verify published multi-platform manifests
         run: |
           r0_inspect="$(docker buildx imagetools inspect "$APP_PACKAGE:$R0_IMMUTABLE")"
           r1_inspect="$(docker buildx imagetools inspect "$APP_PACKAGE:$R1_IMMUTABLE")"
+          r2_inspect="$(docker buildx imagetools inspect "$APP_PACKAGE:$R2_IMMUTABLE")"
           printf '%s\n' "$r0_inspect"
           printf '%s\n' "$r1_inspect"
+          printf '%s\n' "$r2_inspect"
 
           printf '%s\n' "$r0_inspect" | grep -E 'Platform:[[:space:]]+linux/amd64'
           printf '%s\n' "$r0_inspect" | grep -E 'Platform:[[:space:]]+linux/arm64'
           printf '%s\n' "$r1_inspect" | grep -E 'Platform:[[:space:]]+linux/amd64'
           printf '%s\n' "$r1_inspect" | grep -E 'Platform:[[:space:]]+linux/arm64'
+          printf '%s\n' "$r2_inspect" | grep -E 'Platform:[[:space:]]+linux/amd64'
+          printf '%s\n' "$r2_inspect" | grep -E 'Platform:[[:space:]]+linux/arm64'
 
           r0_digest="$(printf '%s\n' "$r0_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
           r1_digest="$(printf '%s\n' "$r1_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
+          r2_digest="$(printf '%s\n' "$r2_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
           test -n "$r0_digest"
           test -n "$r1_digest"
+          test -n "$r2_digest"
           echo "R0_DIGEST=$r0_digest" >> "$GITHUB_ENV"
           echo "R1_DIGEST=$r1_digest" >> "$GITHUB_ENV"
+          echo "R2_DIGEST=$r2_digest" >> "$GITHUB_ENV"
 
       - name: Publish runtime Compose application as OCI artifact
         working-directory: packaging
@@ -184,12 +233,13 @@ jobs:
         working-directory: packaging
         run: |
           COMPOSE_PROJECT_NAME="specgraph-prepublish-${GITHUB_RUN_ID}" docker compose down --remove-orphans || true
-          docker image rm -f specgraph-reference-app:r0 specgraph-reference-app:r1 || true
+          docker image rm -f specgraph-reference-app:r0 specgraph-reference-app:r1 specgraph-reference-app:r2 || true
 
           docker compose -f "oci://$COMPOSE_PACKAGE:demo" up -d --wait
 
           curl -fsS http://127.0.0.1:8080/ >/dev/null
           curl -fsS http://127.0.0.1:8081/ >/dev/null
+          curl -fsS http://127.0.0.1:8082/ >/dev/null
 
           docker run --rm --network host --ipc=host \
             --user "$(id -u):$(id -g)" \
@@ -200,6 +250,15 @@ jobs:
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r1-customer-review.spec.ts'
 
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL=http://127.0.0.1:8082 \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r2-customer-review.spec.ts'
+
           docker compose -f "oci://$COMPOSE_PACKAGE:demo" ps
 
           {
@@ -209,9 +268,10 @@ jobs:
             echo '| --- | --- | --- | --- |'
             printf '| R0 image | `%s` | `%s` | `%s` |\n' "$R0_SHA" "$GITHUB_SHA" "$R0_DIGEST"
             printf '| R1 image | `%s` | `%s` | `%s` |\n' "$R1_SHA" "$GITHUB_SHA" "$R1_DIGEST"
-            printf '| Compose OCI | R0 + R1 | `%s` | `%s:%s` |\n' "$GITHUB_SHA" "$COMPOSE_PACKAGE" "$COMPOSE_IMMUTABLE"
+            printf '| R2 image | `%s` | `%s` | `%s` |\n' "$R2_SHA" "$GITHUB_SHA" "$R2_DIGEST"
+            printf '| Compose OCI | R0 + R1 + R2 + PostgreSQL | `%s` | `%s:%s` |\n' "$GITHUB_SHA" "$COMPOSE_PACKAGE" "$COMPOSE_IMMUTABLE"
             echo
-            echo 'Published image manifests contain both `linux/amd64` and `linux/arm64`.'
+            echo 'Published application image manifests contain both `linux/amd64` and `linux/arm64`; the Compose OCI artifact resolves runtime image digests.'
             echo
             printf 'Reviewer command: `docker compose -f oci://%s:demo up -d --wait`\n' "$COMPOSE_PACKAGE"
           } >> "$GITHUB_STEP_SUMMARY"
