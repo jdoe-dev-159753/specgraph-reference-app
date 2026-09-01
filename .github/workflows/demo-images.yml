@@ -75,6 +75,10 @@ jobs:
           r0_short="$(printf '%s' "$r0_sha" | cut -c1-12)"
           r1_short="$(printf '%s' "$r1_sha" | cut -c1-12)"
           r2_short="$(printf '%s' "$r2_sha" | cut -c1-12)"
+          compose_packaging_short="$(printf '%s' "$GITHUB_SHA" | cut -c1-9)"
+          compose_r0_short="$(printf '%s' "$r0_sha" | cut -c1-9)"
+          compose_r1_short="$(printf '%s' "$r1_sha" | cut -c1-9)"
+          compose_r2_short="$(printf '%s' "$r2_sha" | cut -c1-9)"
 
           echo "R0_SHA=$r0_sha" >> "$GITHUB_ENV"
           echo "R1_SHA=$r1_sha" >> "$GITHUB_ENV"
@@ -82,7 +86,7 @@ jobs:
           echo "R0_IMMUTABLE=r0-${r0_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
           echo "R1_IMMUTABLE=r1-${r1_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
           echo "R2_IMMUTABLE=r2-${r2_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
-          echo "COMPOSE_IMMUTABLE=demo-r0-${r0_short}-r1-${r1_short}-r2-${r2_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
+          echo "COMPOSE_IDENTITY_PREFIX=demo-r0-${compose_r0_short}-r1-${compose_r1_short}-r2-${compose_r2_short}-pkg-${compose_packaging_short}" >> "$GITHUB_ENV"
           echo "BUILDER_NAME=specgraph-multiarch-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
 
           docker build -f docker/app.Dockerfile \
@@ -226,10 +230,13 @@ jobs:
           test -n "$r1_digest"
           test -n "$r2_digest"
           test -n "$postgres_digest"
+          printf '%s\n' "$postgres_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          postgres_hex="${postgres_digest#sha256:}"
           echo "R0_DIGEST=$r0_digest" >> "$GITHUB_ENV"
           echo "R1_DIGEST=$r1_digest" >> "$GITHUB_ENV"
           echo "R2_DIGEST=$r2_digest" >> "$GITHUB_ENV"
           echo "POSTGRES_DIGEST=$postgres_digest" >> "$GITHUB_ENV"
+          echo "COMPOSE_IMMUTABLE=${COMPOSE_IDENTITY_PREFIX}-pg-${postgres_hex}" >> "$GITHUB_ENV"
 
       - name: Publish runtime Compose application from immutable checkpoint images
         working-directory: packaging
