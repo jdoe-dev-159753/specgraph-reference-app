@@ -252,7 +252,11 @@ export default function App() {
 
             <Paper data-testid="analysis-workspace" sx={{ overflow: 'hidden' }}>
               <Box sx={{ px: 3, py: 2.5, borderBottom: 1, borderColor: 'divider' }}>
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ md: 'center' }}>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={2}
+                  sx={{ justifyContent: 'space-between', alignItems: { md: 'center' } }}
+                >
                   <Box>
                     <Typography variant="h5">Deterministic analysis</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -273,7 +277,7 @@ export default function App() {
               {analysis.error && <Alert severity="error" sx={{ m: 2 }}>{analysis.error.message}</Alert>}
               {analysis.data && (
                 <Box data-testid="analysis-result" sx={{ px: 3, py: 2.5, borderBottom: 1, borderColor: 'divider' }}>
-                  <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+                  <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, alignItems: 'center' }}>
                     <Typography variant="h6">Completed analysis</Typography>
                     <RiskLevelChip level={analysis.data.riskLevel} />
                   </Stack>
@@ -305,7 +309,7 @@ export default function App() {
                       divider
                       sx={{ px: 0, py: 2, display: 'block' }}
                     >
-                      <Stack direction="row" spacing={1.5} alignItems="center">
+                      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
                         <RiskLevelChip level={entry.riskLevel} />
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>{entry.operatorId}</Typography>
                         <Typography variant="caption" color="text.secondary">{new Date(entry.generatedAt).toLocaleString()}</Typography>
