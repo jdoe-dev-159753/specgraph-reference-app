@@ -72,7 +72,7 @@ class OpenApiContractTests {
         assertThat(inline.getRequired()).contains("type", "details");
 
         Schema<?> type = inline.getProperties().get("type");
-        assertThat(type.getEnum()).containsExactly(expectedType);
+        assertThat(type.getEnum().stream().map(String::valueOf).toList()).containsExactly(expectedType);
         Schema<?> details = inline.getProperties().get("details");
         assertThat(details.get$ref()).isEqualTo("#/components/schemas/" + detailsSchema);
     }
