@@ -14,16 +14,14 @@ permissions:
   issues: write
   pull-requests: read
 
+concurrency:
+  group: project-v2-reconcile
+  cancel-in-progress: true
+
 jobs:
   reconcile:
-    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci]
+    runs-on: ubuntu-latest
     steps:
-      - name: Prepare isolated trusted checkout
-        run: |
-          trusted="$GITHUB_WORKSPACE/.workgraph-trusted"
-          if [ -e "$trusted" ] && ! git -C "$trusted" rev-parse --git-dir >/dev/null 2>&1; then
-            rm -rf "$trusted"
-          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
