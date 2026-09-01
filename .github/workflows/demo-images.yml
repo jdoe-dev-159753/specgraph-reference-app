@@ -119,13 +119,13 @@ jobs:
             ring_upper="$(printf '%s' "$ring" | tr '[:lower:]' '[:upper:]')"
             ring_sha="$(eval "printf '%s' \"\$${ring}_sha\"")"
             ring_short="$(printf '%s' "$ring_sha" | cut -c1-12)"
-            compose_short="$(printf '%s' "$ring_sha" | cut -c1-9)"
             echo "${ring_upper}_SHA=$ring_sha" >> "$GITHUB_ENV"
             echo "${ring_upper}_IMMUTABLE=${ring}-${ring_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
-            eval "compose_${ring}_short=$compose_short"
           done
 
-          echo "COMPOSE_IDENTITY_PREFIX=demo-r0-${compose_r0_short}-r1-${compose_r1_short}-r2-${compose_r2_short}-r3-${compose_r3_short}-pkg-${compose_packaging_short}" >> "$GITHUB_ENV"
+          # Full checkpoint identities remain in environment/labels/evidence. The complete
+          # five-manifest set hash below is the compact immutable binding for the Compose tag.
+          echo "COMPOSE_IDENTITY_PREFIX=demo-pkg-${compose_packaging_short}" >> "$GITHUB_ENV"
           echo "BUILDER_NAME=specgraph-multiarch-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
 
       - name: Build native checkpoint images for pre-publication verification
