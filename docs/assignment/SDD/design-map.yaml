@@ -192,13 +192,14 @@ infrastructure:
   INF-COMPOSE-001:
     name: ComposeCheckpointTopology
     activation_ring: R0
-    responsibility: one prebuilt Spring Boot executable-JAR shape instantiated as simultaneous R0 and R1 checkpoints and distributed as a Compose OCI artifact
+    responsibility: one prebuilt Spring Boot executable-JAR shape instantiated as simultaneous R0, R1 and R2 checkpoints, with PostgreSQL backing R2, and distributed as a Compose OCI artifact
     runtime_boundary: Java 21 JRE with embedded Tomcat serving built React assets and Spring MVC API from one origin
     canonical_operator_entrypoint: docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait
     source_checkout_entrypoint: ./scripts/demo-up.sh
-    distribution: GHCR Compose OCI artifact with image references resolved to exact digests
+    distribution: GHCR Compose OCI artifact with the complete R0/R1/R2/PostgreSQL image set resolved to exact digests
     runtime_platforms: [linux/amd64, linux/arm64]
-    checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080]
+    services: [r0, r1, postgres, r2]
+    checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080, R2 host 8082 to container 8080]
     operating_modes: [side_by_side_default, direct_checkpoint_debug, detached_persistent]
     adrs: [ADR-004, ADR-005, ADR-006]
   CMP-UI-001:

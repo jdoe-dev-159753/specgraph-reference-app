@@ -10,49 +10,9 @@ The current application lets a Customer Care operator inspect deterministic CARD
 
 Runtime stack: Java 21, Spring Boot 4.1.1, Spring Modulith 2.1.1, React 19.2.8, TypeScript 7.0.2 and PostgreSQL 17 for R2.
 
-## Run the current R2 from source
+## Run the published R0/R1/R2 reviewer demo
 
-This is the shortest current path for exercising the PostgreSQL-backed R2 implementation before its separate OCI publication work is completed.
-
-From the repository root, copy/paste:
-
-```bash
-docker compose up --build -d --wait r2 && H="$(hostname -I | awk '{print $1}')" && printf '\nR2: http://%s:8082/\n' "$H"
-```
-
-`docker compose` starts R2 and its PostgreSQL dependency, builds the current checkout, waits for health checks, and exposes the application on host port `8082`.
-
-Open:
-
-```text
-http://<docker-host>:8082/
-```
-
-Use the deterministic seeded Customer ID:
-
-```text
-11111111-1111-1111-1111-111111111111
-```
-
-R2 should show the same application-owned customer/activity/risk contract as R1, now loaded from PostgreSQL through Spring JDBC. Monetary values remain exact decimal strings, source risk assessments preserve their own `assessmentId`, and activity/risk timestamps are converted from the explicitly configured source timezone.
-
-The source timezone defaults to `UTC`. Override it for the R2 container when the source database wall-clock timestamps use another zone, for example:
-
-```bash
-SPECGRAPH_SOURCE_TIME_ZONE=Europe/Zurich docker compose up --build -d --wait r2
-```
-
-Stop the local R2 topology with:
-
-```bash
-docker compose down
-```
-
-`docker compose down` removes the PostgreSQL container as well, so the next launch starts again from the deterministic Flyway seed state.
-
-## Published R0/R1 reviewer demo
-
-R0 and R1 are already published as self-contained OCI checkpoints. Their remote Compose deployment does not require a source checkout, Maven, Node, or a local build.
+The durable reviewer path is one remote Compose OCI command. It does not require a source checkout, Maven, Node or a local application build.
 
 Requires Docker Compose **2.34+**. The GHCR packages are private, so authenticate Docker once with a GitHub personal access token (classic) carrying `read:packages`:
 
@@ -60,16 +20,16 @@ Requires Docker Compose **2.34+**. The GHCR packages are private, so authenticat
 docker login ghcr.io -u jdoe-dev-159753
 ```
 
-Then launch the published checkpoints directly from GHCR:
+Then launch all accepted checkpoints directly from GHCR:
 
 ```bash
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait
 ```
 
-For a one-line launch that prints browser addresses:
+For a one-line launch that also prints the browser addresses:
 
 ```bash
-docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait && H="$(hostname -I | awk '{print $1}')" && printf '\nR0: http://%s:8080/\nR1: http://%s:8081/\n' "$H" "$H"
+docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait && H="$(hostname -I | awk '{print $1}')" && printf '\nR0: http://%s:8080/\nR1: http://%s:8081/\nR2: http://%s:8082/\n' "$H" "$H" "$H"
 ```
 
 The published endpoints are:
@@ -77,9 +37,18 @@ The published endpoints are:
 ```text
 R0: http://<docker-host>:8080/
 R1: http://<docker-host>:8081/
+R2: http://<docker-host>:8082/
 ```
 
-R0 is the intentionally hollow deployable shell. R1 is the first MANDATORY synthetic customer/activity/risk slice.
+R0 is the intentionally hollow deployable shell. R1 is the first MANDATORY synthetic customer/activity/risk slice. R2 preserves that application-owned contract while loading customer activity and source risk evidence from PostgreSQL through Spring JDBC.
+
+Use this deterministic seeded Customer ID in R1 or R2:
+
+```text
+11111111-1111-1111-1111-111111111111
+```
+
+R2 should expose CARD, PAYMENT and CRYPTO activity, exact decimal monetary strings, stable source `assessmentId` values and source timestamps converted from the explicit source timezone. The published reviewer checkpoint uses the deterministic fixture timezone `UTC`; the published topology starts PostgreSQL as an internal dependency and waits for it to become healthy before R2 starts.
 
 Stop the published deployment with:
 
@@ -87,7 +56,27 @@ Stop the published deployment with:
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo down
 ```
 
-The remote Compose command is the durable reviewer contract. Issue #139 owns promotion of the accepted PostgreSQL-backed R2 checkpoint into this same OCI application after the remaining R2 scenario and operational prerequisites are green. Until then, use the source-checkout R2 command above rather than assuming `ghcr.io/...:r2` is published.
+`docker compose ... down` removes the PostgreSQL container as well, so the next R2 launch starts again from the deterministic Flyway seed state.
+
+## Run the current checkout from source
+
+The repository also keeps a source-build path for development and exact-head verification. From the repository root:
+
+```bash
+docker compose up --build -d --wait r2 && H="$(hostname -I | awk '{print $1}')" && printf '\nR2: http://%s:8082/\n' "$H"
+```
+
+The source-build path keeps `SPECGRAPH_SOURCE_TIME_ZONE` configurable. For a source database whose timezone-free wall-clock timestamps are Europe/Zurich values:
+
+```bash
+SPECGRAPH_SOURCE_TIME_ZONE=Europe/Zurich docker compose up --build -d --wait r2
+```
+
+Stop the local topology with:
+
+```bash
+docker compose down
+```
 
 ## Fresh source checkout
 
@@ -113,8 +102,6 @@ For R0/R1 local script operation, the existing project-owned launchers remain av
 ./scripts/demo-down.sh
 ```
 
-Those scripts intentionally remain the published R0/R1 operator path until #139 extends the canonical OCI checkpoint set to R2.
-
 ## Runtime packaging
 
 React is compiled at build time and embedded in the Spring Boot executable JAR. Each application checkpoint therefore runs as one Java 21 + embedded Tomcat container. R2 adds PostgreSQL as an external service while preserving the same HTTP/UI application boundary.
@@ -135,7 +122,7 @@ R2 topology
   browser -> R2 application :8082 -> PostgreSQL :5432
 ```
 
-The local `compose.yaml` contains R0, R1 and R2. R2 depends on PostgreSQL health before application start. The published `compose.oci.yaml` currently contains the accepted R0/R1 checkpoint set; #139 owns adding published R2 without rewriting earlier checkpoint history.
+The local `compose.yaml` and the published `compose.oci.yaml` both contain R0, R1 and R2. The published reviewer artifact preserves the accepted `demo/r0`, `demo/r1` and `demo/r2` source checkpoints side by side. R2 depends on PostgreSQL health before application start.
 
 ## Architecture
 
@@ -154,7 +141,7 @@ CustomerReviewHttpAdapter
 
 Flyway is the schema/migration authority. Spring JDBC is the bounded R2 relational access baseline. Multi-query `CustomerSnapshot` reads use one PostgreSQL `REPEATABLE READ` snapshot so activities and risk evidence cannot be assembled from different committed database states.
 
-Source `TIMESTAMP` columns are wall-clock values without timezone metadata. The application therefore does not guess from the host JVM or operating system. `specgraph.source-time-zone` is explicit configuration, exposed operationally as `SPECGRAPH_SOURCE_TIME_ZONE`, with deterministic fixture default `UTC`.
+Source `TIMESTAMP` columns are wall-clock values without timezone metadata. The application therefore does not guess from the host JVM or operating system. `specgraph.source-time-zone` is explicit configuration, exposed operationally as `SPECGRAPH_SOURCE_TIME_ZONE` for source deployments, with deterministic fixture default `UTC`; the published reviewer checkpoint deliberately fixes that fixture semantics to UTC.
 
 ## Delivery rings
 
