@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Reject controlled GitHub descriptions that compete with native work metadata."""
+"""Reject competing prose work-state and stale PR review requests."""
 
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import os
 import re
@@ -12,6 +13,7 @@ from urllib import error, request
 API = "https://api.github.com"
 REPO = os.environ.get("GITHUB_REPOSITORY", "jdoe-dev-159753/specgraph-reference-app")
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
+EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -19,6 +21,7 @@ PREFIX = re.compile(
     re.IGNORECASE,
 )
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
+CODEX_REVIEW_REQUEST = re.compile(r"(?im)^\s*@codex\s+review\b")
 
 
 def api(path: str):
@@ -75,6 +78,45 @@ def scan_surface(kind: str, identifier: str, text: str, failures: list[str]) -> 
         failures.append(f"{kind} {identifier}: {finding}")
 
 
+def parse_time(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def event_pr_number() -> int | None:
+    if not EVENT_PATH or not os.path.exists(EVENT_PATH):
+        return None
+    with open(EVENT_PATH, encoding="utf-8") as handle:
+        event = json.load(handle)
+    pull_request = event.get("pull_request")
+    if pull_request:
+        return pull_request.get("number") or event.get("number")
+    issue = event.get("issue") or {}
+    if issue.get("pull_request"):
+        return issue.get("number")
+    return None
+
+
+def require_current_head_codex_request(pr_number: int, failures: list[str]) -> None:
+    pr = api(f"/repos/{REPO}/pulls/{pr_number}")
+    if pr.get("state") != "open" or pr.get("draft"):
+        return
+
+    head_sha = pr["head"]["sha"]
+    commit = api(f"/repos/{REPO}/commits/{head_sha}")
+    head_time = parse_time(commit["commit"]["committer"]["date"])
+
+    for comment in pages(f"/repos/{REPO}/issues/{pr_number}/comments"):
+        if not CODEX_REVIEW_REQUEST.search(comment.get("body") or ""):
+            continue
+        if parse_time(comment["created_at"]) >= head_time:
+            print(f"pull request #{pr_number}: current-head Codex review explicitly requested")
+            return
+
+    failures.append(
+        f"pull request #{pr_number}: no explicit @codex review request exists after current head {head_sha[:12]}"
+    )
+
+
 def main() -> int:
     failures: list[str] = []
     for item in pages(f"/repos/{REPO}/issues?state=open"):
@@ -88,13 +130,17 @@ def main() -> int:
     # mechanics. Treating third-party review prose as authoritative would make the
     # ratchet both noisy and impossible for the repository owner to remediate.
 
+    pr_number = event_pr_number()
+    if pr_number is not None:
+        require_current_head_codex_request(pr_number, failures)
+
     if failures:
-        print("Competing prose work-state detected:", file=sys.stderr)
+        print("Work-graph/review guard failed:", file=sys.stderr)
         for finding in failures:
             print(f"- {finding}", file=sys.stderr)
         return 1
 
-    print("controlled GitHub work descriptions are clean")
+    print("controlled GitHub work descriptions and current-head review request are clean")
     return 0
 
 
