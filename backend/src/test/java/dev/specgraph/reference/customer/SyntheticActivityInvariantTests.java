@@ -1,14 +1,16 @@
 package dev.specgraph.reference.customer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-CUSTOMER-READ-001")
-@Tag("VFY-REPRODUCIBILITY-001")
 @Tag("unit_property")
 final class SyntheticActivityInvariantTests {
     @Test
@@ -27,22 +29,37 @@ final class SyntheticActivityInvariantTests {
                 .orElseThrow();
 
         for (Activity activity : snapshot.activities()) {
-            Set<String> detailKeys = activity.details().keySet();
             switch (activity.type()) {
-                case CARD -> {
-                    assertThat(detailKeys).contains("cardPan", "merchantName", "cardPresent");
-                    assertThat(detailKeys).doesNotContain("paymentMethod", "blockchain");
-                }
-                case PAYMENT -> {
-                    assertThat(detailKeys).contains("paymentMethod", "receiverBankCountry");
-                    assertThat(detailKeys).doesNotContain("cardPan", "blockchain");
-                }
-                case CRYPTO -> {
-                    assertThat(detailKeys).contains("blockchain", "walletAddressFrom", "walletAddressTo", "txHash");
-                    assertThat(detailKeys).doesNotContain("cardPan", "paymentMethod");
-                }
+                case CARD -> assertThat(activity.details()).isInstanceOf(Activity.CardDetails.class);
+                case PAYMENT -> assertThat(activity.details()).isInstanceOf(Activity.PaymentDetails.class);
+                case CRYPTO -> assertThat(activity.details()).isInstanceOf(Activity.CryptoDetails.class);
             }
         }
+
+        assertThatThrownBy(() -> new Activity(
+                UUID.randomUUID(),
+                Activity.ActivityType.CARD,
+                BigDecimal.ONE,
+                "CHF",
+                "Completed",
+                Instant.EPOCH,
+                new Activity.PaymentDetails("BANK_TRANSFER", "sender", "receiver", "CH")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("details must match activity type");
+    }
+
+    @Test
+    void cardPresentRemainsABooleanApplicationValue() {
+        CustomerSnapshot snapshot = new SyntheticActivityAdapter()
+                .loadSnapshot(SyntheticActivityAdapter.SEEDED_CUSTOMER_ID)
+                .orElseThrow();
+        Activity card = snapshot.activities().stream()
+                .filter(activity -> activity.type() == Activity.ActivityType.CARD)
+                .findFirst()
+                .orElseThrow();
+
+        Activity.CardDetails details = (Activity.CardDetails) card.details();
+        assertThat(details.cardPresent()).isFalse();
     }
 
     @Test
