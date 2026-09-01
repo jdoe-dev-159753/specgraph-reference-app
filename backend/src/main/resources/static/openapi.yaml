@@ -1,20 +1,15 @@
 openapi: 3.0.3
 info:
   title: Customer Activity Analytics API
-  version: r2
-  description: Reviewer-facing contract for the R2 PostgreSQL-backed customer activity and source-risk read slice.
+  version: r3
+  description: Reviewer-facing contract for the R3 deterministic offline analysis and persistent-history slice, retaining the R2 PostgreSQL-backed customer read contract.
 paths:
   /api/customers/{customerId}:
     get:
       operationId: getCustomerSnapshot
       summary: Read one customer activity and risk snapshot
       parameters:
-        - name: customerId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: '#/components/parameters/CustomerId'
       responses:
         '200':
           description: Existing customer snapshot
@@ -24,7 +19,87 @@ paths:
                 $ref: '#/components/schemas/CustomerSnapshot'
         '404':
           description: Customer ID is unknown; no customer is fabricated.
+  /api/customers/{customerId}/analyses:
+    post:
+      operationId: runCustomerAnalysis
+      summary: Run the deterministic offline analysis and persist the completed result
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '201':
+          description: Validated analysis completed and persisted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analysis'
+        '404':
+          description: Customer ID is unknown.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalysisProblem'
+        '422':
+          description: Relevant policy grounding is unavailable; no completed analysis is created.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalysisProblem'
+        '502':
+          description: Grounding/model execution or structured-result validation failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalysisProblem'
+        '503':
+          description: A completed result could not be persisted and is not represented as retained.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalysisProblem'
+    get:
+      operationId: listCustomerAnalyses
+      summary: List persisted prior analyses for one customer
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: Persisted analysis history, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Analysis'
+  /api/customers/{customerId}/analyses/{analysisId}:
+    get:
+      operationId: getCustomerAnalysis
+      summary: Inspect one persisted analysis
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Persisted analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analysis'
+        '404':
+          description: No matching persisted analysis exists for this customer.
 components:
+  parameters:
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   schemas:
     CustomerSnapshot:
       type: object
@@ -155,3 +230,60 @@ components:
           format: date-time
         scoreContribution:
           type: number
+    PolicyEvidence:
+      type: object
+      required: [sourceIdentity, content, retrievalMetadata]
+      properties:
+        sourceIdentity:
+          type: string
+        content:
+          type: string
+        retrievalMetadata:
+          type: object
+          additionalProperties:
+            type: string
+    Analysis:
+      type: object
+      required: [analysisId, customerId, operatorId, generatedAt, riskLevel, findingsSummary, recommendations, evidenceProvenance]
+      properties:
+        analysisId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        operatorId:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        riskLevel:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        findingsSummary:
+          type: string
+          minLength: 1
+        recommendations:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+        evidenceProvenance:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PolicyEvidence'
+    AnalysisProblem:
+      type: object
+      required: [status, title, detail, reason]
+      properties:
+        status:
+          type: integer
+        title:
+          type: string
+        detail:
+          type: string
+        reason:
+          type: string
+          enum: [CUSTOMER_NOT_FOUND, INSUFFICIENT_GROUNDING, GROUNDING_FAILURE, MODEL_FAILURE, INVALID_RESULT, PERSISTENCE_FAILURE]

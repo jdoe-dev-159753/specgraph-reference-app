@@ -8,7 +8,7 @@ graph DeliveryRings {
     margin=0.08,
     pad=0.25,
     labelloc=t,
-    label="Figure 11 — Concentric delivery rings",
+    label="Figure 11 - Concentric delivery rings",
     fontsize=18,
     fontname="Arial"
   ];
@@ -41,8 +41,8 @@ graph DeliveryRings {
   t0 [label=<<B>R0</B><BR/>Deployable hollow shell>, pos="0,0!"];
   t1 [label=<<B>R1</B>  Mandatory synthetic customer review>, pos="0,1.15!"];
   t2 [label=<<B>R2</B>  Relational substitution>, pos="0,1.90!"];
-  t3 [label=<<B>R3</B>  Mandatory deterministic analysis>, pos="0,2.65!"];
-  t4 [label=<<B>R4</B>  MUST_HAVE closure>, pos="0,3.40!"];
+  t3 [label=<<B>R3</B>  Mandatory analysis + history>, pos="0,2.65!"];
+  t4 [label=<<B>R4</B>  MUST_HAVE auth + RAG closure>, pos="0,3.40!"];
   t5 [label=<<B>R5</B>  Hardening + demo>, pos="0,4.20!"];
 
   invariant [
@@ -55,8 +55,8 @@ graph DeliveryRings {
   legend_r0 [label=<<B>R0</B>  Java/Spring/React shell; project-owned contracts and ports>, pos="6.35,3.30!"];
   legend_r1 [label=<<B>R1</B>  MANDATORY customer search + activity + risk on synthetic data>, pos="6.35,2.70!"];
   legend_r2 [label=<<B>R2</B>  Spring JDBC/PostgreSQL/Flyway/Testcontainers behind CustomerActivityPort>, pos="6.35,2.10!"];
-  legend_r3 [label=<<B>R3</B>  MANDATORY structured AI analysis through deterministic adapter>, pos="6.35,1.50!"];
-  legend_r4 [label=<<B>R4</B>  MUST_HAVE authentication + RAG + persistent analysis/history>, pos="6.35,0.90!"];
+  legend_r3 [label=<<B>R3</B>  MANDATORY structured analysis + persistent reviewable history>, pos="6.35,1.50!"];
+  legend_r4 [label=<<B>R4</B>  MUST_HAVE authentication + RAG + trust boundaries>, pos="6.35,0.90!"];
   legend_r5 [label=<<B>R5</B>  Reliability, observability, NICE_TO_HAVE and demo polish>, pos="6.35,0.30!"];
 
   reading_1 [label="Requirement priority determines first acceptance; structural seams may exist earlier.", pos="6.35,-0.75!"];

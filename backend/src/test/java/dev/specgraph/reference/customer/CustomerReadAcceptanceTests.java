@@ -38,8 +38,9 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class CustomerReadAcceptanceTests extends PostgresIntegrationTestSupport {
     private static final UUID SEEDED_CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
-    private static final UUID GROWING_CROSS_BORDER_CUSTOMER = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final UUID STABLE_CUSTOMER = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    private static final UUID GROWING_CROSS_BORDER_CUSTOMER = UUID.fromString("33333333-3333-3333-3333-333333333333");
+    private static final UUID MIXED_RISK_CUSTOMER = UUID.fromString("44444444-4444-4444-4444-444444444444");
     private static final UUID CARD_RULE_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
     private static final UUID CONCURRENT_TRANSACTION_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa91");
     private static final UUID CONCURRENT_ASSESSMENT_ID = UUID.fromString("20000000-0000-0000-0000-000000000091");
@@ -72,6 +73,44 @@ class CustomerReadAcceptanceTests extends PostgresIntegrationTestSupport {
                 .andExpect(jsonPath("$.riskEvidence[0].triggeredAt").value("2026-08-28T09:15:01Z"))
                 .andExpect(jsonPath("$.riskEvidence[0].scoreContribution").exists())
                 .andExpect(jsonPath("$.riskEvidence[1].ruleName").value("New crypto destination"));
+    }
+
+    @Test
+    void flywaySchemaMatchesTheExplicitJdbcAdapterContract() {
+        Map<String, Object> amount = jdbc.queryForMap("""
+                SELECT data_type, numeric_precision, numeric_scale, is_nullable
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'transactions' AND column_name = 'amount'
+                """);
+        assertEquals("numeric", amount.get("data_type"));
+        assertEquals(18, ((Number) amount.get("numeric_precision")).intValue());
+        assertEquals(2, ((Number) amount.get("numeric_scale")).intValue());
+        assertEquals("NO", amount.get("is_nullable"));
+
+        Map<String, Object> currency = jdbc.queryForMap("""
+                SELECT data_type, character_maximum_length, is_nullable
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'transactions' AND column_name = 'currency'
+                """);
+        assertEquals("character varying", currency.get("data_type"));
+        assertEquals(10, ((Number) currency.get("character_maximum_length")).intValue());
+        assertEquals("NO", currency.get("is_nullable"));
+
+        Map<String, Object> createdAt = jdbc.queryForMap("""
+                SELECT data_type, is_nullable
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'transactions' AND column_name = 'created_at'
+                """);
+        assertEquals("timestamp without time zone", createdAt.get("data_type"));
+        assertEquals("NO", createdAt.get("is_nullable"));
+
+        Integer specializationTables = jdbc.queryForObject("""
+                SELECT count(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN ('card_activity', 'payment_activity', 'crypto_activity', 'risk_assessments', 'risk_rules')
+                """, Integer.class);
+        assertEquals(5, specializationTables);
     }
 
     @Test
@@ -185,6 +224,15 @@ class CustomerReadAcceptanceTests extends PostgresIntegrationTestSupport {
                 .andExpect(jsonPath("$.activities[*].currency", hasItems("CHF", "EUR", "ETH")))
                 .andExpect(jsonPath("$.riskEvidence[*].ruleName", hasItems(
                         "Growing cross-border payment activity", "New crypto destination")));
+
+        mvc.perform(get("/api/customers/{id}", MIXED_RISK_CUSTOMER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activities[*].type", hasItems("CARD", "PAYMENT", "CRYPTO")))
+                .andExpect(jsonPath("$.riskEvidence[*].ruleName", hasItems(
+                        "Repeated card failures",
+                        "High-value transfer anomaly",
+                        "Rapid movement across counterparties",
+                        "New crypto destination")));
     }
 
     @Test

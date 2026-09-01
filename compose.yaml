@@ -67,3 +67,29 @@ services:
       timeout: 2s
       retries: 45
       start_period: 5s
+
+  r3:
+    image: "${APP_R3_IMAGE:-specgraph-reference-app:r3}"
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      args:
+        SOURCE_ROOT: "${R3_SOURCE_ROOT:-.}"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/specgraph
+      SPRING_DATASOURCE_USERNAME: specgraph
+      SPRING_DATASOURCE_PASSWORD: specgraph
+      SPECGRAPH_SOURCE_TIME_ZONE: "${SPECGRAPH_SOURCE_TIME_ZONE:-UTC}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      r2:
+        condition: service_healthy
+    ports:
+      - "${R3_PORT:-8083}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/actuator/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 45
+      start_period: 5s

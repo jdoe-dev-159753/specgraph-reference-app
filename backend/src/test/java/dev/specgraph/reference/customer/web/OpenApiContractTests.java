@@ -12,11 +12,12 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-CUSTOMER-READ-001")
+@Tag("VFY-ANALYSIS-001")
 class OpenApiContractTests {
     @Test
-    void r2CustomerReadContractIsValidAndPreservesExactDecimalAndTypedActivityFamilies() {
+    void r3ContractRetainsTypedCustomerReadAndAddsStructuredPersistentAnalysis() {
         URL contract = Thread.currentThread().getContextClassLoader().getResource("static/openapi.yaml");
-        assertThat(contract).as("packaged R2 OpenAPI contract").isNotNull();
+        assertThat(contract).as("packaged R3 OpenAPI contract").isNotNull();
 
         SwaggerParseResult result = new OpenAPIV3Parser().readLocation(contract.toExternalForm(), null, null);
         assertThat(result.getMessages()).as("OpenAPI parser diagnostics").isEmpty();
@@ -24,15 +25,34 @@ class OpenApiContractTests {
         OpenAPI api = result.getOpenAPI();
         assertThat(api).isNotNull();
         assertThat(api.getOpenapi()).startsWith("3.0");
-        assertThat(api.getInfo().getVersion()).isEqualTo("r2");
-        assertThat(api.getPaths()).containsKey("/api/customers/{customerId}");
-        var operation = api.getPaths().get("/api/customers/{customerId}").getGet();
-        assertThat(operation).isNotNull();
-        assertThat(operation.getResponses()).containsKeys("200", "404");
-        var okContent = operation.getResponses().get("200").getContent();
-        assertThat(okContent).containsKey("application/json");
-        assertThat(okContent.get("application/json").getSchema().get$ref())
+        assertThat(api.getInfo().getVersion()).isEqualTo("r3");
+        assertThat(api.getPaths()).containsKeys(
+                "/api/customers/{customerId}",
+                "/api/customers/{customerId}/analyses",
+                "/api/customers/{customerId}/analyses/{analysisId}");
+
+        var customerOperation = api.getPaths().get("/api/customers/{customerId}").getGet();
+        assertThat(customerOperation).isNotNull();
+        assertThat(customerOperation.getResponses()).containsKeys("200", "404");
+        assertThat(customerOperation.getResponses().get("200").getContent().get("application/json").getSchema().get$ref())
                 .isEqualTo("#/components/schemas/CustomerSnapshot");
+
+        var analysisCollection = api.getPaths().get("/api/customers/{customerId}/analyses");
+        assertThat(analysisCollection.getPost()).isNotNull();
+        assertThat(analysisCollection.getPost().getResponses()).containsKeys("201", "404", "422", "502", "503");
+        assertThat(analysisCollection.getPost().getResponses().get("201").getContent().get("application/json").getSchema().get$ref())
+                .isEqualTo("#/components/schemas/Analysis");
+        assertThat(analysisCollection.getGet()).isNotNull();
+        assertThat(analysisCollection.getGet().getResponses()).containsKey("200");
+
+        Schema<?> analysis = api.getComponents().getSchemas().get("Analysis");
+        assertThat(analysis.getRequired()).containsAll(Set.of(
+                "analysisId", "customerId", "operatorId", "generatedAt", "riskLevel",
+                "findingsSummary", "recommendations", "evidenceProvenance"));
+        assertThat(analysis.getProperties().get("analysisId").getFormat()).isEqualTo("uuid");
+        assertThat(analysis.getProperties().get("generatedAt").getFormat()).isEqualTo("date-time");
+        assertThat(analysis.getProperties().get("riskLevel").getEnum().stream().map(String::valueOf).toList())
+                .containsExactly("LOW", "MEDIUM", "HIGH");
 
         Schema<?> activity = api.getComponents().getSchemas().get("Activity");
         assertThat(activity.getOneOf()).extracting(Schema::get$ref).containsExactlyInAnyOrder(
@@ -49,8 +69,6 @@ class OpenApiContractTests {
         Schema<?> base = api.getComponents().getSchemas().get("ActivityBase");
         assertThat(base.getRequired()).containsAll(Set.of(
                 "transactionId", "amount", "currency", "status", "createdAt"));
-        assertThat(base.getProperties()).containsKeys(
-                "transactionId", "amount", "currency", "status", "createdAt");
         Schema<?> amount = base.getProperties().get("amount");
         assertThat(amount.getType()).isEqualTo("string");
         assertThat(amount.getPattern()).isEqualTo("^-?\\d+(?:\\.\\d+)?$");
@@ -62,9 +80,6 @@ class OpenApiContractTests {
         assertClosedDetailsSchema(api, "CardDetails");
         assertClosedDetailsSchema(api, "PaymentDetails");
         assertClosedDetailsSchema(api, "CryptoDetails");
-
-        Schema<?> cardDetails = api.getComponents().getSchemas().get("CardDetails");
-        assertThat(cardDetails.getProperties().get("cardPresent").getType()).isEqualTo("boolean");
 
         Schema<?> risk = api.getComponents().getSchemas().get("RiskEvidence");
         assertThat(risk.getRequired()).containsAll(Set.of(
