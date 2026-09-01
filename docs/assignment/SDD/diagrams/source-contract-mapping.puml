@@ -62,7 +62,7 @@ RiskRule ..> RiskEvidence : rule identity / name
 
 note bottom
   UML Class diagram used as a mapping view. Mapping occurs inside activity persistence
-  adapters. Source/JPA relation types stop at the adapter boundary; CustomerSnapshot
-  receives only project-owned projections.
+  adapters. Source/persistence row types stop at the Spring JDBC adapter boundary;
+  CustomerSnapshot receives only project-owned projections.
 end note
 @enduml
