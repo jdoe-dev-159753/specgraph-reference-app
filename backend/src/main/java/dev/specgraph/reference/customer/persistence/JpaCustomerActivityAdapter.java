@@ -19,6 +19,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -194,6 +196,7 @@ class TransactionEntity {
     UUID customerId;
     @Column(name = "activity_type", nullable = false)
     String activityType;
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     @Column(name = "amount", precision = 18, scale = 2, nullable = false)
     BigDecimal amount;
     @Column(name = "currency", length = 10, nullable = false)
@@ -281,6 +284,7 @@ class RiskRuleEntity {
     String appliesTo;
     @Column(name = "threshold_logic", nullable = false)
     String thresholdLogic;
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     @Column(name = "weight", precision = 5, scale = 2, nullable = false)
     BigDecimal weight;
 }
@@ -297,6 +301,7 @@ class RiskAssessmentEntity {
     UUID ruleId;
     @Column(name = "triggered_at", nullable = false)
     LocalDateTime triggeredAt;
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     @Column(name = "score_contribution", precision = 5, scale = 2, nullable = false)
     BigDecimal scoreContribution;
 }
