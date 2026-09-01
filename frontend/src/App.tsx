@@ -12,7 +12,7 @@ type Activity = {
   currency: string
   status: string
   createdAt: string
-  details: Record<string, string>
+  details: Record<string, string | boolean | null>
 }
 
 type RiskEvidence = {
@@ -110,7 +110,14 @@ export default function App() {
                       const activityKey = activity.type.toLowerCase()
                       return (
                         <TableRow key={activity.transactionId} hover data-testid={`activity-${activityKey}`}>
-                          <TableCell><Chip label={activity.type} size="small" variant="outlined" /></TableCell>
+                          <TableCell>
+                            <Chip
+                              label={activity.type}
+                              size="small"
+                              variant="outlined"
+                              data-testid={`activity-${activityKey}-type`}
+                            />
+                          </TableCell>
                           <TableCell
                             data-testid={`activity-${activityKey}-transaction`}
                             sx={{ whiteSpace: 'nowrap', fontFamily: 'monospace' }}
@@ -138,7 +145,12 @@ export default function App() {
                           >
                             {new Date(activity.createdAt).toLocaleString()}
                           </TableCell>
-                          <TableCell>{Object.entries(activity.details).map(([key, value]) => `${key}: ${value}`).join(' · ')}</TableCell>
+                          <TableCell>
+                            {Object.entries(activity.details)
+                              .filter(([, value]) => value !== null)
+                              .map(([key, value]) => `${key}: ${String(value)}`)
+                              .join(' · ')}
+                          </TableCell>
                         </TableRow>
                       )
                     })}
