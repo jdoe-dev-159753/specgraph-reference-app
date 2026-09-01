@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -59,6 +60,32 @@ final class AnalysisServiceTests {
                         assertThat(exception.reason())
                                 .isEqualTo(AnalysisFailureException.Reason.INSUFFICIENT_GROUNDING));
         assertThat(history.listByCustomer(CUSTOMER_ID)).isEmpty();
+    }
+
+    @Test
+    void structurallyEmptyGroundingDoesNotInvokeModelOrCreateHistory() {
+        var history = new InMemoryAnalysisHistoryAdapter();
+        var modelCalls = new AtomicInteger();
+        var service = service(
+                customer -> Optional.of(SNAPSHOT),
+                snapshot -> List.of(new PolicyEvidence("   ", "Synthetic test policy evidence.", Map.of())),
+                (snapshot, evidence) -> {
+                    modelCalls.incrementAndGet();
+                    return RESULT;
+                },
+                history);
+
+        assertThatThrownBy(() -> service.analyze(CUSTOMER_ID, OPERATOR_ID))
+                .isInstanceOfSatisfying(AnalysisFailureException.class, exception -> {
+                    assertThat(exception.reason()).isEqualTo(AnalysisFailureException.Reason.GROUNDING_FAILURE);
+                    assertThat(exception.getCause()).isInstanceOf(IllegalArgumentException.class);
+                });
+        assertThat(modelCalls).hasValue(0);
+        assertThat(history.listByCustomer(CUSTOMER_ID)).isEmpty();
+
+        assertThatThrownBy(() -> new PolicyEvidence("synthetic-policy:test", "   ", Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("content");
     }
 
     @Test
