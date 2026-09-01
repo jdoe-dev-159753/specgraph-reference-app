@@ -82,11 +82,7 @@ def parse_time(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def event_pr_number() -> int | None:
-    if not EVENT_PATH or not os.path.exists(EVENT_PATH):
-        return None
-    with open(EVENT_PATH, encoding="utf-8") as handle:
-        event = json.load(handle)
+def event_pr_number_from_payload(event: dict) -> int | None:
     pull_request = event.get("pull_request")
     if pull_request:
         return pull_request.get("number") or event.get("number")
@@ -94,6 +90,21 @@ def event_pr_number() -> int | None:
     if issue.get("pull_request"):
         return issue.get("number")
     return None
+
+
+def event_pr_number() -> int | None:
+    if not EVENT_PATH or not os.path.exists(EVENT_PATH):
+        return None
+    with open(EVENT_PATH, encoding="utf-8") as handle:
+        return event_pr_number_from_payload(json.load(handle))
+
+
+def has_fresh_codex_request(comments, head_time: datetime) -> bool:
+    return any(
+        CODEX_REVIEW_REQUEST.search(comment.get("body") or "")
+        and parse_time(comment["created_at"]) >= head_time
+        for comment in comments
+    )
 
 
 def require_current_head_codex_request(pr_number: int, failures: list[str]) -> None:
@@ -104,13 +115,10 @@ def require_current_head_codex_request(pr_number: int, failures: list[str]) -> N
     head_sha = pr["head"]["sha"]
     commit = api(f"/repos/{REPO}/commits/{head_sha}")
     head_time = parse_time(commit["commit"]["committer"]["date"])
-
-    for comment in pages(f"/repos/{REPO}/issues/{pr_number}/comments"):
-        if not CODEX_REVIEW_REQUEST.search(comment.get("body") or ""):
-            continue
-        if parse_time(comment["created_at"]) >= head_time:
-            print(f"pull request #{pr_number}: current-head Codex review explicitly requested")
-            return
+    comments = pages(f"/repos/{REPO}/issues/{pr_number}/comments")
+    if has_fresh_codex_request(comments, head_time):
+        print(f"pull request #{pr_number}: current-head Codex review explicitly requested")
+        return
 
     failures.append(
         f"pull request #{pr_number}: no explicit @codex review request exists after current head {head_sha[:12]}"
