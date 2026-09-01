@@ -26,7 +26,7 @@ Analysis -> Policy : PolicyKnowledgePort.retrieveRelevant
 alt offline baseline
   Policy --> Analysis : StaticPolicyAdapter → PolicyEvidence[]
 else R4 vector retrieval
-  Policy -> DB : pgvector query
+  Policy -> DB : pgvector retrieval through selected adapter technology
   DB --> Policy : corpus evidence
   Policy --> Analysis : PgVectorPolicyAdapter → PolicyEvidence[]
 end
