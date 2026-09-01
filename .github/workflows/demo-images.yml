@@ -151,8 +151,9 @@ jobs:
           APP_R3_IMAGE: specgraph-reference-app:r3
           COMPOSE_PROJECT_NAME: specgraph-prepublish-${{ github.run_id }}
         run: |
-          # OCI services intentionally say pull_policy: always for the reviewer path.
-          # This pre-publication gate must exercise the locally built candidate images.
+          # The application checkpoints must come from the native builds above. PostgreSQL is
+          # an upstream runtime dependency, so provision it explicitly before forbidding pulls.
+          docker pull postgres:17-alpine
           docker compose -f compose.oci.yaml up -d --no-build --pull never r0 r1 postgres r2 r3
 
           for service in r0 r1 r2 r3; do
