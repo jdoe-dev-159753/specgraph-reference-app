@@ -3,16 +3,24 @@
 [![application-ci](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
 [![demo-images](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
 [![work-graph-guard](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml)
+![Java 21](https://img.shields.io/badge/Java-21-informational)
+![Spring Boot 4.1.1](https://img.shields.io/badge/Spring_Boot-4.1.1-informational)
+![Spring Modulith 2.1.1](https://img.shields.io/badge/Spring_Modulith-2.1.1-informational)
+![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-informational)
+![Node 24](https://img.shields.io/badge/Node-24_build--time-informational)
+![React 19.2.8](https://img.shields.io/badge/React-19.2.8-informational)
+![TypeScript 7.0.2](https://img.shields.io/badge/TypeScript-7.0.2-informational)
+![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0_build--time-informational)
 
 **A runnable reference application for specification-driven, AI-assisted software engineering.**
 
-The current application lets a Customer Care operator inspect deterministic CARD, PAYMENT and CRYPTO activity plus source-shaped risk evidence. R2 replaces the synthetic activity adapter with PostgreSQL/Flyway persistence behind the same project-owned `CustomerActivityPort`; later rings add deterministic structured analysis/history, grounded retrieval, real multi-operator security and optional live-model differentiation.
+The application lets a Customer Care operator inspect deterministic CARD, PAYMENT and CRYPTO activity plus source-shaped risk evidence. R2 replaces the synthetic activity adapter with PostgreSQL/Flyway persistence behind the same project-owned `CustomerActivityPort`. R3 adds deterministic structured analysis and persistent reviewable analysis history behind provider-neutral ports. R4 later adds real policy retrieval/grounding and multi-operator authentication/authorization.
 
-Runtime stack: Java 21, Spring Boot 4.1.1, Spring Modulith 2.1.1, React 19.2.8, TypeScript 7.0.2 and PostgreSQL 17 for R2.
+## Published reviewer demo
 
-## Run the published R0/R1/R2 reviewer demo
+The GHCR Compose tag `demo` is deliberately a **last-known-good publication**, not an alias for whatever happens to be on `main`. It advances only after `demo-images` has built the checkpoint images, resolved immutable digests, pulled the remote Compose artifact again and passed browser verification.
 
-The durable reviewer path is one remote Compose OCI command. It does not require a source checkout, Maven, Node or a local application build.
+This matters when a publication run fails. The repository may already describe a newer publication contract while `:demo` still resolves to the previous accepted artifact. In that case missing checkpoint containers are expected and the failed publication issue remains open rather than mutating the last-known-good tag.
 
 Requires Docker Compose **2.34+**. The GHCR packages are private, so authenticate Docker once with a GitHub personal access token (classic) carrying `read:packages`:
 
@@ -20,19 +28,19 @@ Requires Docker Compose **2.34+**. The GHCR packages are private, so authenticat
 docker login ghcr.io -u jdoe-dev-159753
 ```
 
-Then launch all accepted checkpoints directly from GHCR:
+Launch the last successfully published checkpoint set directly from GHCR:
 
 ```bash
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait
 ```
 
-For a one-line launch that also prints the browser addresses:
+Inspect what that published artifact actually contains before assuming a ring is present:
 
 ```bash
-docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait && H="$(hostname -I | awk '{print $1}')" && printf '\nR0: http://%s:8080/\nR1: http://%s:8081/\nR2: http://%s:8082/\n' "$H" "$H" "$H"
+docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo config --services
 ```
 
-The published endpoints are:
+The J2 publication contract adds PostgreSQL-backed R2 on port `8082` while retaining R0 and R1. When the corresponding `demo-images` run is green, the expected endpoints are:
 
 ```text
 R0: http://<docker-host>:8080/
@@ -42,41 +50,67 @@ R2: http://<docker-host>:8082/
 
 R0 is the intentionally hollow deployable shell. R1 is the first MANDATORY synthetic customer/activity/risk slice. R2 preserves that application-owned contract while loading customer activity and source risk evidence from PostgreSQL through Spring JDBC.
 
-Use this deterministic seeded Customer ID in R1 or R2:
-
-```text
-11111111-1111-1111-1111-111111111111
-```
-
-R2 should expose CARD, PAYMENT and CRYPTO activity, exact decimal monetary strings, stable source `assessmentId` values and source timestamps converted from the explicit source timezone. The published reviewer checkpoint uses the deterministic fixture timezone `UTC`; the published topology starts PostgreSQL as an internal dependency and waits for it to become healthy before R2 starts.
-
 Stop the published deployment with:
 
 ```bash
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo down
 ```
 
-`docker compose ... down` removes the PostgreSQL container as well, so the next R2 launch starts again from the deterministic Flyway seed state.
+The published topology uses an ephemeral PostgreSQL container for the deterministic reviewer dataset. Removing the deployment therefore resets the J2 fixture state for the next launch.
 
 ## Run the current checkout from source
 
-The repository also keeps a source-build path for development and exact-head verification. From the repository root:
+The source path is independent of GHCR publication and is the authoritative way to exercise an unmerged candidate.
+
+Run the current R3 candidate:
 
 ```bash
-docker compose up --build -d --wait r2 && H="$(hostname -I | awk '{print $1}')" && printf '\nR2: http://%s:8082/\n' "$H"
+docker compose up --build -d --wait r3
+```
+
+Then open:
+
+```text
+R3: http://localhost:8083/
+```
+
+Run only the accepted relational R2 slice instead:
+
+```bash
+docker compose up --build -d --wait r2
+```
+
+Then open:
+
+```text
+R2: http://localhost:8082/
 ```
 
 The source-build path keeps `SPECGRAPH_SOURCE_TIME_ZONE` configurable. For a source database whose timezone-free wall-clock timestamps are Europe/Zurich values:
 
 ```bash
-SPECGRAPH_SOURCE_TIME_ZONE=Europe/Zurich docker compose up --build -d --wait r2
+SPECGRAPH_SOURCE_TIME_ZONE=Europe/Zurich docker compose up --build -d --wait r3
 ```
 
-Stop the local topology with:
+A deterministic clean reset requires no hand-edited SQL because the source Compose topology does not persist PostgreSQL in a named volume:
 
 ```bash
-docker compose down
+docker compose down --remove-orphans
+docker compose up --build -d --wait r3
 ```
+
+## Deterministic J2 scenario catalogue
+
+The PostgreSQL fixture is a small set of coherent reviewer stories, not random transaction noise. Risk assessments are explicit synthetic source evidence; the application never turns these scenarios into a claim that a customer committed wrongdoing.
+
+| Customer ID | Reviewer story |
+| --- | --- |
+| `11111111-1111-1111-1111-111111111111` | R1-compatible CARD + PAYMENT + CRYPTO story with persisted source risk evidence |
+| `22222222-2222-2222-2222-222222222222` | stable local CHF baseline with no risk assessments |
+| `33333333-3333-3333-3333-333333333333` | conventional baseline followed by growing cross-border payments and new crypto activity |
+| `44444444-4444-4444-4444-444444444444` | mixed anomaly story with repeated card declines, high-value cross-border movement and crypto evidence |
+
+R3 uses the same source evidence and adds a deterministic structured analysis result (`LOW | MEDIUM | HIGH`), policy-evidence provenance, operator attribution and persistent history. A reload can therefore review the previously persisted analysis instead of manufacturing a second transient answer.
 
 ## Fresh source checkout
 
@@ -95,16 +129,9 @@ git clone https://github.com/jdoe-dev-159753/specgraph-reference-app.git
 cd specgraph-reference-app
 ```
 
-For R0/R1 local script operation, the existing project-owned launchers remain available:
-
-```bash
-./scripts/demo-up.sh
-./scripts/demo-down.sh
-```
-
 ## Runtime packaging
 
-React is compiled at build time and embedded in the Spring Boot executable JAR. Each application checkpoint therefore runs as one Java 21 + embedded Tomcat container. R2 adds PostgreSQL as an external service while preserving the same HTTP/UI application boundary.
+React is compiled at build time and embedded in the Spring Boot executable JAR. Maven, Node and Vite are build tools, not reviewer runtime services. Each application checkpoint therefore runs as one Java 21 + embedded Tomcat container.
 
 ```text
 build time
@@ -118,13 +145,11 @@ runtime  embedded Tomcat :8080
           /              \
        React UI          /api/*
 
-R2 topology
-  browser -> R2 application :8082 -> PostgreSQL :5432
+R2/R3 persistence topology
+  browser -> application -> PostgreSQL :5432
+             :8082 R2
+             :8083 R3 source candidate
 ```
-
-The local `compose.yaml` and the published `compose.oci.yaml` both contain R0, R1 and R2. The published reviewer artifact preserves the accepted `demo/r0`, `demo/r1` and `demo/r2` source checkpoints side by side. R2 depends on PostgreSQL health before application start.
-
-## Architecture
 
 The application is a modular monolith with hexagonal boundaries. Project-owned application/domain contracts remain inside the framework boundary; HTTP/UI and persistence/model/knowledge/history implementations are adapters behind those contracts.
 
@@ -139,9 +164,23 @@ CustomerReviewHttpAdapter
         -> PostgreSQL
 ```
 
-Flyway is the schema/migration authority. Spring JDBC is the bounded R2 relational access baseline. Multi-query `CustomerSnapshot` reads use one PostgreSQL `REPEATABLE READ` snapshot so activities and risk evidence cannot be assembled from different committed database states.
+The R3 analysis path extends the same architecture:
 
-Source `TIMESTAMP` columns are wall-clock values without timezone metadata. The application therefore does not guess from the host JVM or operating system. `specgraph.source-time-zone` is explicit configuration, exposed operationally as `SPECGRAPH_SOURCE_TIME_ZONE` for source deployments, with deterministic fixture default `UTC`; the published reviewer checkpoint deliberately fixes that fixture semantics to UTC.
+```text
+AnalysisHttpAdapter
+        -> AnalysisUseCase
+        -> AnalysisService
+        -> CustomerActivityPort
+        -> PolicyKnowledgePort
+        -> AnalysisModelPort
+        -> structured-result validation
+        -> AnalysisHistoryPort
+        -> PostgreSQL
+```
+
+Flyway is the schema/migration authority. Spring JDBC is the bounded relational access baseline. Multi-query `CustomerSnapshot` reads use one PostgreSQL `REPEATABLE READ` snapshot so activities and risk evidence cannot be assembled from different committed database states.
+
+Source `TIMESTAMP` columns are wall-clock values without timezone metadata. The application therefore does not guess from the host JVM or operating system. `specgraph.source-time-zone` is explicit configuration, exposed operationally as `SPECGRAPH_SOURCE_TIME_ZONE`, with deterministic fixture default `UTC`.
 
 ## Delivery rings
 
