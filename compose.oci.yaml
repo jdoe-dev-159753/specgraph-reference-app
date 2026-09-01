@@ -28,7 +28,7 @@ services:
       start_period: 5s
 
   postgres:
-    image: postgres:17-alpine
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
     pull_policy: always
     restart: unless-stopped
     environment:
