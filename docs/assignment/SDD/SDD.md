@@ -253,7 +253,7 @@ GitHub milestones `J1..J5` are the orthogonal delivery-timebox dimension. A day 
 | Review activity and CARD/PAYMENT/CRYPTO specialization | MANDATORY | R1 |
 | Review source-derived risk evidence | MANDATORY | R1 |
 | Request structured deterministic analysis | MANDATORY | R3 |
-| Persist and inspect deterministic analysis history with operator attribution | R3 delivery core | R3 |
+| Persist and inspect deterministic analysis history with operator attribution | MUST_HAVE | R3 |
 | Retrieve real relevant policy knowledge / RAG | MUST_HAVE | R4 |
 | Authenticate/authorize real operators | MUST_HAVE | R4 |
 
