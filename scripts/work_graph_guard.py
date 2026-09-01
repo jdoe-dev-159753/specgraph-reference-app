@@ -15,6 +15,8 @@ TOKEN = os.environ.get("GITHUB_TOKEN", "")
 EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
 EVENT_NAME = os.environ.get("GITHUB_EVENT_NAME", "")
 CODEX_USER_ID = 199175422
+CODEX_APP_ID = 1144995
+MIN_REVIEWED_SHA_PREFIX = 10
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -22,6 +24,8 @@ PREFIX = re.compile(
     re.IGNORECASE,
 )
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
+CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
+REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
 
 
 def api(path: str):
@@ -80,9 +84,12 @@ def scan_surface(kind: str, identifier: str, text: str, failures: list[str]) -> 
 
 def event_pr_number_from_payload(event: dict) -> int | None:
     pull_request = event.get("pull_request")
-    if not pull_request:
-        return None
-    return pull_request.get("number") or event.get("number")
+    if pull_request:
+        return pull_request.get("number") or event.get("number")
+    issue = event.get("issue") or {}
+    if issue.get("pull_request"):
+        return issue.get("number")
+    return None
 
 
 def event_pr_number() -> int | None:
@@ -103,6 +110,30 @@ def has_current_head_codex_review(reviews, head_sha: str) -> bool:
     )
 
 
+def clean_codex_reviewed_prefix(comment: dict) -> str | None:
+    if (comment.get("user") or {}).get("id") != CODEX_USER_ID:
+        return None
+    if (comment.get("performed_via_github_app") or {}).get("id") != CODEX_APP_ID:
+        return None
+    body = comment.get("body") or ""
+    if not CLEAN_CODEX_REVIEW.search(body):
+        return None
+    match = REVIEWED_COMMIT.search(body)
+    if not match:
+        return None
+    prefix = match.group(1).lower()
+    return prefix if len(prefix) >= MIN_REVIEWED_SHA_PREFIX else None
+
+
+def has_current_head_clean_codex_result(comments, head_sha: str) -> bool:
+    normalized = head_sha.lower()
+    return any(
+        (prefix := clean_codex_reviewed_prefix(comment)) is not None
+        and normalized.startswith(prefix)
+        for comment in comments
+    )
+
+
 def require_current_head_codex_review(pr_number: int, failures: list[str]) -> None:
     pr = api(f"/repos/{REPO}/pulls/{pr_number}")
     if pr.get("state") != "open" or pr.get("draft"):
@@ -113,11 +144,16 @@ def require_current_head_codex_review(pr_number: int, failures: list[str]) -> No
     head_sha = pr["head"]["sha"]
     reviews = pages(f"/repos/{REPO}/pulls/{pr_number}/reviews")
     if has_current_head_codex_review(reviews, head_sha):
-        print(f"pull request #{pr_number}: Codex reviewed current head {head_sha[:12]}")
+        print(f"pull request #{pr_number}: Codex review object covers current head {head_sha[:12]}")
+        return
+
+    comments = pages(f"/repos/{REPO}/issues/{pr_number}/comments")
+    if has_current_head_clean_codex_result(comments, head_sha):
+        print(f"pull request #{pr_number}: clean Codex result covers current head {head_sha[:12]}")
         return
 
     failures.append(
-        f"pull request #{pr_number}: no Codex review is anchored to current head {head_sha[:12]}"
+        f"pull request #{pr_number}: no Codex review evidence is anchored to current head {head_sha[:12]}"
     )
 
 
@@ -131,9 +167,10 @@ def main() -> int:
         scan_surface(kind, f"#{number} body", item.get("body") or "", failures)
 
     # Conversation and review comments are discussion, not controlled work-state
-    # descriptions. Review freshness is anchored to GitHub's native review.commit_id,
-    # immutable Codex bot user id, and pull_request.head.sha identities rather than
-    # prose, mutable account names, or commit timestamps.
+    # descriptions. Review freshness uses immutable Codex bot/App identity and the
+    # SHA GitHub/Codex records for the reviewed head. Finding-bearing reviews expose
+    # PullRequestReview.commit_id; clean Codex reviews are emitted as bot comments
+    # that explicitly name the reviewed commit prefix.
     pr_number = event_pr_number()
     if pr_number is not None:
         require_current_head_codex_review(pr_number, failures)
@@ -148,7 +185,7 @@ def main() -> int:
             print(f"- {finding}", file=sys.stderr)
         return 1
 
-    print("controlled GitHub work descriptions and exact-head Codex review evidence are clean")
+    print("controlled GitHub work descriptions and current-head Codex review evidence are clean")
     return 0
 
 
