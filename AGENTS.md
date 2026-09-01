@@ -72,6 +72,30 @@ When work exposes another independently reviewable concern, reuse an existing ow
 - Codex review freshness is SHA-bound. Finding-bearing reviews use native `PullRequestReview.commit_id == head.sha`; clean reviews emitted by the Codex GitHub App as bot comments must explicitly name the current reviewed commit. If the head moves, invoke `@codex review` again and reconcile every material finding before merge.
 - Never mutate `main` directly during ordinary work.
 
+### Freeze, validation, review, and merge sequencing
+
+Exact-head evidence is useful only when the order of operations is disciplined. Do not turn freshness checks into a loop of overlapping CI runs and stale reviews.
+
+Use this sequence for every merge candidate:
+
+1. **Complete the mutable work first.** Finish implementation, tests, controlled-document reconciliation, issue/discovery ownership, scope review, and any other known canonicality audit before declaring a candidate head.
+2. **Freeze one candidate head SHA.** Once frozen, do not push opportunistic cleanup while deterministic checks or Codex review are in flight.
+3. **Run the deterministic checks applicable to the change class.** Fix deterministic failures before requesting the final Codex review. A fix creates a new candidate head and restarts this sequence.
+4. **Request exactly one Codex review for the frozen head after applicable deterministic checks are green.** Do not queue another `@codex review` while an earlier request for the same PR is still being processed.
+5. **If the head moved while an older Codex review was in flight, treat that review as stale.** Let the existing request finish or otherwise become settled before requesting exactly one fresh review for the new frozen head. Never create a procession of concurrent review requests for successive SHAs.
+6. **Reconcile findings and review threads.** A material finding becomes a GitHub discovery when required. If correcting it changes source, return to step 2 with the new head.
+7. **Merge only the reviewed frozen head.** Recheck mergeability, applicable green checks, unresolved review threads, work-graph ownership/disposition, and exact-head Codex evidence, then merge with `expected_head_sha`.
+
+Evidence invalidation is change-class aware:
+
+- application code, tests, build/deployment configuration, or CI/workflow source changes require fresh applicable executable CI on the resulting head;
+- documentation-only source changes require their applicable documentation/consistency checks but do **not** automatically require an expensive application CI replay when executable/package behavior and the validation workflow are unchanged;
+- any source commit, including documentation, moves the Git head and therefore makes a prior Codex review stale for merge;
+- PR body edits, comments, issue fields/relations, Project fields, and other GitHub metadata do not move the Git head and therefore do not invalidate SHA-bound CI or Codex evidence;
+- when a documentation-only commit follows a green executable commit, record that relationship explicitly rather than pretending an older executable artifact was produced from the newer source SHA.
+
+The final canonicality/scope audit belongs **before** the freeze and final review. Do not conduct a broad new audit after Codex has approved a merge candidate unless a concrete new signal requires it.
+
 ## Specification-driven development
 
 The consumer application owns its problem statement, SRS, functional and non-functional requirements, assumptions, acceptance criteria, SDD, ADRs, UML sources, tests, implementation, and evidence. Implementation proceeds through progressively real vertical slices rather than a document phase followed by a code phase.
