@@ -147,11 +147,12 @@ adapters:
     activation_ring: R2
     adrs: [ADR-003, ADR-004, ADR-007]
   ADP-MODEL-DET-001:
-    name: DeterministicAnalysisStub
+    name: DeterministicAnalysisAdapter
     kind: outbound
     owner: MOD-ANALYSIS-001
     implements: PRT-MODEL-001
     activation_ring: R0
+    acceptance_ring: R3
     adrs: [ADR-002]
   ADP-MODEL-AI-001:
     name: SpringAiAnalysisAdapter
@@ -166,6 +167,7 @@ adapters:
     owner: MOD-ANALYSIS-001
     implements: PRT-POLICY-001
     activation_ring: R0
+    acceptance_ring: R3
     adrs: [ADR-002]
   ADP-POL-PGV-001:
     name: PgVectorPolicyAdapter
@@ -178,9 +180,10 @@ adapters:
     name: JdbcAnalysisHistoryAdapter
     kind: outbound
     owner: MOD-ANALYSIS-001
+    package: dev.specgraph.reference.analysis.persistence
     technology: Spring JDBC JdbcClient
     implements: PRT-HISTORY-001
-    activation_ring: R4
+    activation_ring: R3
     adrs: [ADR-003, ADR-004, ADR-007]
 
 infrastructure:
@@ -192,14 +195,16 @@ infrastructure:
   INF-COMPOSE-001:
     name: ComposeCheckpointTopology
     activation_ring: R0
-    responsibility: one prebuilt Spring Boot executable-JAR shape instantiated as simultaneous R0, R1 and R2 checkpoints, with PostgreSQL backing R2, and distributed as a Compose OCI artifact
+    responsibility: one prebuilt Spring Boot executable-JAR shape instantiated as concentric reviewer checkpoints, with PostgreSQL backing persistence-bearing rings, and distributed as a Compose OCI artifact
     runtime_boundary: Java 21 JRE with embedded Tomcat serving built React assets and Spring MVC API from one origin
     canonical_operator_entrypoint: docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait
-    source_checkout_entrypoint: ./scripts/demo-up.sh
-    distribution: GHCR Compose OCI artifact with the complete R0/R1/R2/PostgreSQL image set resolved to exact digests
+    source_checkout_entrypoint: docker compose up --build -d --wait r3
+    publication_semantics: demo is last-known-good and advances only after remote-pull verification
+    distribution: GHCR Compose OCI artifact with published checkpoint images and PostgreSQL resolved to exact digests
     runtime_platforms: [linux/amd64, linux/arm64]
-    services: [r0, r1, postgres, r2]
-    checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080, R2 host 8082 to container 8080]
+    published_j2_services: [r0, r1, postgres, r2]
+    source_j2_services: [r0, r1, postgres, r2, r3]
+    checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080, R2 host 8082 to container 8080, R3 source host 8083 to container 8080]
     operating_modes: [side_by_side_default, direct_checkpoint_debug, detached_persistent]
     adrs: [ADR-004, ADR-005, ADR-006]
   CMP-UI-001:
@@ -245,11 +250,11 @@ requirement_design:
   FR-HIST-001:
     elements: [MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, INF-DB-001, CTR-ANALYSIS-HISTORY-CREATE-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
-    first_acceptance_ring: R4
+    first_acceptance_ring: R3
   FR-HIST-002:
     elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-ANALYSIS-HISTORY-ENTRY-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
-    first_acceptance_ring: R4
+    first_acceptance_ring: R3
   NFR-REP-001:
     elements: [INF-COMPOSE-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
     adrs: [ADR-002, ADR-004, ADR-005, ADR-006]
@@ -258,10 +263,18 @@ requirement_design:
     elements: [PRT-ACTIVITY-001, PRT-MODEL-001, PRT-POLICY-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
     adrs: [ADR-001, ADR-002, ADR-004, ADR-007]
     first_acceptance_ring: R3
+  NFR-RES-001:
+    elements: [MOD-ANALYSIS-001, PRT-POLICY-001, PRT-MODEL-001, PRT-HISTORY-001, ADP-POL-STATIC-001, ADP-MODEL-DET-001, ADP-HIST-JDBC-001]
+    adrs: [ADR-002, ADR-003, ADR-007]
+    first_acceptance_ring: R3
   NFR-SEC-001:
     elements: [ADP-AUTH-SPRING-001, MOD-IDENTITY-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
     adrs: [ADR-001, ADR-004]
     first_acceptance_ring: R4
+  CON-AI-002:
+    elements: [MOD-ANALYSIS-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
+    adrs: [ADR-002, ADR-004]
+    first_acceptance_ring: R3
 
 first_vertical_slice:
   rings: [R0, R1]
@@ -275,10 +288,6 @@ first_vertical_slice:
     - requiring PostgreSQL or an external LLM for R1 acceptance
 
 design_gaps:
-  GAP-HIST-001:
-    source_ambiguity: AMB-HIST-001
-    needed_by_ring: R4
-    question: exact relational fields and evidence provenance for persisted analyses
   GAP-AUTH-001:
     source_ambiguity: AMB-AUTH-001
     needed_by_ring: R4
