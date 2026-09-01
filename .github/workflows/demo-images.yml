@@ -294,7 +294,7 @@ jobs:
             printf '| R2 image | `%s` | `%s` | `%s` |\n' "$R2_SHA" "$GITHUB_SHA" "$R2_DIGEST"
             printf '| Compose OCI | R0 + R1 + R2 + PostgreSQL | `%s` | `%s:%s` |\n' "$GITHUB_SHA" "$COMPOSE_PACKAGE" "$COMPOSE_IMMUTABLE"
             echo
-            echo 'Published application image manifests contain both `linux/amd64` and `linux/arm64`; both Compose OCI tags are mechanically checked against this run\'s application-image digests.'
+            echo "Published application image manifests contain both \`linux/amd64\` and \`linux/arm64\`; both Compose OCI tags are mechanically checked against this run's application-image digests."
             echo
             printf 'Reviewer command: `docker compose -f oci://%s:demo up -d --wait`\n' "$COMPOSE_PACKAGE"
           } >> "$GITHUB_STEP_SUMMARY"
