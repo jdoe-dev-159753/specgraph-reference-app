@@ -1,93 +1,97 @@
-# Customer Activity Analytics — SpecGraph Reference App
+# Customer Activity Analytics - SpecGraph Reference App
 
 [![application-ci](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
 [![demo-images](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
 [![work-graph-guard](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml)
-![Java 21](https://img.shields.io/badge/Java-21-informational)
-![Spring Boot 4.1.1](https://img.shields.io/badge/Spring_Boot-4.1.1-informational)
-![Spring Modulith 2.1.1](https://img.shields.io/badge/Spring_Modulith-2.1.1-informational)
-![Node 24](https://img.shields.io/badge/Node-24_build--time-informational)
-![React 19.2.8](https://img.shields.io/badge/React-19.2.8-informational)
-![TypeScript 7.0.2](https://img.shields.io/badge/TypeScript-7.0.2-informational)
-![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0_build--time-informational)
-![Platforms](https://img.shields.io/badge/runtime-linux%2Famd64%20%7C%20linux%2Farm64-informational)
 
 **A runnable reference application for specification-driven, AI-assisted software engineering.**
 
-The application lets a Customer Care operator search a customer, inspect deterministic CARD, PAYMENT and CRYPTO activity, and review source-shaped risk evidence. Later delivery rings add relational persistence, deterministic structured analysis, policy retrieval, analysis history and multi-operator authentication behind the same project-owned ports.
+The current application lets a Customer Care operator inspect deterministic CARD, PAYMENT and CRYPTO activity plus source-shaped risk evidence. R2 replaces the synthetic activity adapter with PostgreSQL/Flyway persistence behind the same project-owned `CustomerActivityPort`; later rings add deterministic structured analysis/history, grounded retrieval, real multi-operator security and optional live-model differentiation.
 
-## Fast reviewer demo
+Runtime stack: Java 21, Spring Boot 4.1.1, Spring Modulith 2.1.1, React 19.2.8, TypeScript 7.0.2 and PostgreSQL 17 for R2.
 
-The published R0/R1 checkpoint images and the deployment manifest are self-contained OCI artifacts. **Viewing the application does not require cloning the private source repository, creating an SSH key, installing Maven/Node, or building anything.**
+## Run the current R2 from source
 
-Both checkpoints use the same runtime boundary: React is compiled ahead of time and embedded in the Spring Boot executable JAR; the running container is Java 21 + Spring Boot + embedded Tomcat. The published image references contain both `linux/amd64` and `linux/arm64`; Docker selects the appropriate runtime automatically.
+This is the shortest current path for exercising the PostgreSQL-backed R2 implementation before its separate OCI publication work is completed.
 
-### Canonical path: one remote Docker Compose deployment
+From the repository root, copy/paste:
 
-Requires Docker Compose **2.34+**, which supports Compose applications published as OCI artifacts.
+```bash
+docker compose up --build -d --wait r2 && H="$(hostname -I | awk '{print $1}')" && printf '\nR2: http://%s:8082/\n' "$H"
+```
 
-The GHCR packages are currently private, so authenticate Docker once. The value entered at the `Password` prompt is a **GitHub personal access token (classic) with `read:packages`**, not the GitHub account password:
+`docker compose` starts R2 and its PostgreSQL dependency, builds the current checkout, waits for health checks, and exposes the application on host port `8082`.
+
+Open:
+
+```text
+http://<docker-host>:8082/
+```
+
+Use the deterministic seeded Customer ID:
+
+```text
+11111111-1111-1111-1111-111111111111
+```
+
+R2 should show the same application-owned customer/activity/risk contract as R1, now loaded from PostgreSQL through Spring JDBC. Monetary values remain exact decimal strings, source risk assessments preserve their own `assessmentId`, and activity/risk timestamps are converted from the explicitly configured source timezone.
+
+The source timezone defaults to `UTC`. Override it for the R2 container when the source database wall-clock timestamps use another zone, for example:
+
+```bash
+SPECGRAPH_SOURCE_TIME_ZONE=Europe/Zurich docker compose up --build -d --wait r2
+```
+
+Stop the local R2 topology with:
+
+```bash
+docker compose down
+```
+
+`docker compose down` removes the PostgreSQL container as well, so the next launch starts again from the deterministic Flyway seed state.
+
+## Published R0/R1 reviewer demo
+
+R0 and R1 are already published as self-contained OCI checkpoints. Their remote Compose deployment does not require a source checkout, Maven, Node, or a local build.
+
+Requires Docker Compose **2.34+**. The GHCR packages are private, so authenticate Docker once with a GitHub personal access token (classic) carrying `read:packages`:
 
 ```bash
 docker login ghcr.io -u jdoe-dev-159753
 ```
 
-Then, from any directory on the Docker host, start the complete published reviewer deployment directly from GHCR:
+Then launch the published checkpoints directly from GHCR:
 
 ```bash
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait
 ```
 
-No local Compose file or Git checkout is involved. The OCI Compose artifact pins the exact published R0/R1 image digests.
-
-For a copy/paste demo line that also prints browser-clickable addresses using the host's first advertised IP:
+For a one-line launch that prints browser addresses:
 
 ```bash
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait && H="$(hostname -I | awk '{print $1}')" && printf '\nR0: http://%s:8080/\nR1: http://%s:8081/\n' "$H" "$H"
 ```
 
-Then open both checkpoints side by side:
+The published endpoints are:
 
 ```text
 R0: http://<docker-host>:8080/
 R1: http://<docker-host>:8081/
 ```
 
-R0 is the intentionally hollow deployable shell. R1 is the first MANDATORY customer/activity/risk slice. Use the deterministic seeded Customer ID in R1:
+R0 is the intentionally hollow deployable shell. R1 is the first MANDATORY synthetic customer/activity/risk slice.
 
-```text
-11111111-1111-1111-1111-111111111111
-```
-
-Stop and remove the published deployment with:
+Stop the published deployment with:
 
 ```bash
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo down
 ```
 
-This Compose command is the durable operator contract. When R2+ adds PostgreSQL or other mandatory services, the deployment artifact can grow while the command used by the reviewer stays the same.
+The remote Compose command is the durable reviewer contract. Issue #139 owns promotion of the accepted PostgreSQL-backed R2 checkpoint into this same OCI application after the remaining R2 scenario and operational prerequisites are green. Until then, use the source-checkout R2 command above rather than assuming `ghcr.io/...:r2` is published.
 
-If the OCI packages are deliberately made public later, GHCR allows anonymous pulls and the one-time `docker login` disappears; the Compose command remains unchanged. Package visibility is an explicit publication decision and is not changed implicitly by this repository.
+## Fresh source checkout
 
-### Direct checkpoint shortcut with `docker run`
-
-R1 can still be launched directly when only one checkpoint is wanted:
-
-```bash
-docker run --rm --pull=always -p 8081:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r1
-```
-
-R0 likewise:
-
-```bash
-docker run --rm --pull=always -p 8080:8080 ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0
-```
-
-`docker run` is useful for image/debug inspection, but Compose is the canonical system deployment abstraction because later rings are multi-service.
-
-### Source checkout from a fresh host
-
-Clone the repository only when source inspection, development, local build work or project-owned scripts are wanted. A fresh host does **not** need an SSH keypair: prefer GitHub CLI browser authentication over HTTPS.
+A fresh host can authenticate through GitHub CLI and clone over HTTPS without creating an SSH keypair:
 
 ```bash
 gh auth login --web --git-protocol https
@@ -95,111 +99,88 @@ gh repo clone jdoe-dev-159753/specgraph-reference-app
 cd specgraph-reference-app
 ```
 
-The plain HTTPS clone URL is also:
+Plain HTTPS is also valid when Git credentials are already configured:
 
 ```bash
 git clone https://github.com/jdoe-dev-159753/specgraph-reference-app.git
 cd specgraph-reference-app
 ```
 
-Because the repository is private, plain `git clone` still requires a GitHub credential; `gh auth login --web` is the preferred route when avoiding SSH key management.
-
-With source checked out, the local configurable Compose/script path remains available:
+For R0/R1 local script operation, the existing project-owned launchers remain available:
 
 ```bash
 ./scripts/demo-up.sh
-```
-
-and:
-
-```bash
 ./scripts/demo-down.sh
 ```
 
-The preserved source branches `demo/r0` and `demo/r1` remain available for code inspection. Operational comparison uses prebuilt images and does not require rebuilding or switching the working tree.
+Those scripts intentionally remain the published R0/R1 operator path until #139 extends the canonical OCI checkpoint set to R2.
 
-## Runtime packaging and distribution
+## Runtime packaging
 
-Each checkpoint is the same application shape, mapped to a different host port for side-by-side demonstration:
-
-```text
-build time on BUILDPLATFORM
-  Node/Vite -> React static assets
-                  |
-                  v
-            Maven/Spring Boot
-                  |
-                  v
-runtime      executable JAR
-                  |
-          embedded Tomcat :8080
-             /          /api/*
-          React UI    Spring MVC
-
-OCI image manifest
-  linux/amd64
-  linux/arm64
-
-side-by-side Compose deployment
-  R0 container :8080 -> container :8080
-  R1 container :8081 -> container :8080
-```
-
-[`ADR-005`](docs/assignment/ADR/ADR-005-prebuilt-demo-container-packaging.md) records the single-JAR checkpoint packaging. [`ADR-006`](docs/assignment/ADR/ADR-006-compose-oci-multi-platform-distribution.md) records Compose-as-OCI distribution and multi-platform Buildx publication.
-
-Trusted `demo-images` automation builds the current packaging definition against the preserved `demo/r0` and `demo/r1` source checkpoints. It first proves both checkpoints natively, then publishes each checkpoint as one OCI manifest containing `linux/amd64` and `linux/arm64` variants. Moving convenience tags remain `r0` and `r1`; reproducible evidence uses compound immutable tags such as `r1-<checkpoint-sha>-pkg-<packaging-sha>` plus the OCI digest.
-
-The workflow then publishes `compose.oci.yaml` itself with Docker Compose `publish --resolve-image-digests`. The moving deployment artifact is:
+React is compiled at build time and embedded in the Spring Boot executable JAR. Each application checkpoint therefore runs as one Java 21 + embedded Tomcat container. R2 adds PostgreSQL as an external service while preserving the same HTTP/UI application boundary.
 
 ```text
-ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo
+build time
+  React / TypeScript / Vite
+            |
+            v
+      Spring Boot JAR
+            |
+            v
+runtime  embedded Tomcat :8080
+          /              \
+       React UI          /api/*
+
+R2 topology
+  browser -> R2 application :8082 -> PostgreSQL :5432
 ```
 
-An immutable Compose artifact tag also contains both checkpoint revisions and the packaging revision. After publication, CI removes its locally built checkpoint images and starts the system through the remote `oci://...:demo` artifact, then re-runs R1 Playwright. That gate proves the advertised reviewer deployment comes back from the registry rather than succeeding from the build cache.
-
-The multi-platform Dockerfile deliberately runs Node/Vite and Maven on `BUILDPLATFORM`. Their outputs are architecture-neutral. Only the final Java 21 JRE layer varies by target platform, so ARM64 publication does not require emulating the complete build. This makes an ARM64 Docker host such as a Brume technically compatible with the same `r0`/`r1` references; resource sizing remains a separate deployment concern.
-
-## Canonical engineering evidence
-
-A reviewer should follow these controlled authorities rather than infer design from code alone:
-
-- [Inception](docs/assignment/Inception/Inception.md) — problem framing, delivery rings and functional use-case orientation
-- [SRS](docs/assignment/SRS/SRS.md) — normative requirements and acceptance semantics
-- [SDD](docs/assignment/SDD/SDD.md) — architecture, modules, ports/adapters and delivery projection
-- [ADRs](docs/assignment/ADR/) — durable architectural and deployment decisions
-- [V&V](docs/assignment/VV/VV.md) — verification strategy and evidence model
-- [R1 OpenAPI](backend/src/main/resources/static/openapi.yaml) — minimal deployed HTTP contract, also served by the application at `/openapi.yaml`
-
-Machine-readable companions live beside those documents and remain the authority for mechanically generated traceability views.
+The local `compose.yaml` contains R0, R1 and R2. R2 depends on PostgreSQL health before application start. The published `compose.oci.yaml` currently contains the accepted R0/R1 checkpoint set; #139 owns adding published R2 without rewriting earlier checkpoint history.
 
 ## Architecture
 
-The application is a modular monolith with hexagonal boundaries. Project-owned application/domain contracts sit inside the framework boundary; inbound HTTP/UI adapters and outbound activity, persistence, knowledge, model and history adapters remain replaceable behind stable ports.
+The application is a modular monolith with hexagonal boundaries. Project-owned application/domain contracts remain inside the framework boundary; HTTP/UI and persistence/model/knowledge/history implementations are adapters behind those contracts.
 
-The implementation uses Java 21, Spring Boot 4.1.1, Spring Modulith 2.1.1, React 19.2.8 and TypeScript 7.0.2. React/TypeScript/Vite are frontend build technologies; persistent execution is one Spring Boot executable JAR on embedded Tomcat per checkpoint.
-
-The key R1 request path is intentionally:
+The R2 customer-read path is:
 
 ```text
 CustomerAnalysisHttpAdapter
         -> CustomerReviewUseCase
         -> CustomerReviewService
         -> CustomerActivityPort
-        -> SyntheticActivityAdapter
+        -> JdbcCustomerActivityAdapter
+        -> PostgreSQL
 ```
 
-An architecture test ratchets this boundary so the HTTP adapter cannot silently resume calling the outbound port directly. Spring Modulith independently verifies modular-monolith boundaries in executable tests.
+Flyway is the schema/migration authority. Spring JDBC is the bounded R2 relational access baseline. Multi-query `CustomerSnapshot` reads use one PostgreSQL `REPEATABLE READ` snapshot so activities and risk evidence cannot be assembled from different committed database states.
+
+Source `TIMESTAMP` columns are wall-clock values without timezone metadata. The application therefore does not guess from the host JVM or operating system. `specgraph.source-time-zone` is explicit configuration, exposed operationally as `SPECGRAPH_SOURCE_TIME_ZONE`, with deterministic fixture default `UTC`.
 
 ## Delivery rings
 
-- **R0:** deployable hollow shell and stable seams;
-- **R1:** MANDATORY synthetic customer/activity/risk review;
-- **R2:** relational adapter substitution behind the existing activity port;
-- **R3:** MANDATORY deterministic structured analysis;
-- **R4:** MUST_HAVE authentication/security, policy retrieval, persistence/history and related evidence;
-- **R5:** hardening, demonstration quality and NICE_TO_HAVE differentiation.
+The delivery rings describe capability maturity, not calendar days. GitHub milestones `J1` through `J5` are the separate delivery timeboxes, so one day may contain more than one ring.
+
+- **R0:** deployable hollow shell and stable seams.
+- **R1:** MANDATORY synthetic customer/activity/risk review.
+- **R2:** PostgreSQL/Flyway relational substitution behind the stable customer activity port.
+- **R3:** MANDATORY deterministic structured analysis plus persistent reviewable analysis history.
+- **R4:** MUST_HAVE real policy retrieval/grounding, multi-operator authentication/authorization and related trust boundaries.
+- **R5:** hardening, reviewer/demo quality and NICE_TO_HAVE differentiation.
 
 Authentication is deliberately not allowed to block the mandatory centre merely because its structural seam exists earlier.
+
+## Canonical engineering evidence
+
+Review the controlled documents in this order rather than inferring the system from implementation details alone:
+
+- [Inception](docs/assignment/Inception/Inception.md) - problem framing, concentric delivery model and delivery strategy.
+- [SRS](docs/assignment/SRS/SRS.md) - normative requirements and acceptance semantics.
+- [SDD](docs/assignment/SDD/SDD.md) - architecture, modules, ports/adapters and delivery projection.
+- [ADRs](docs/assignment/ADR/) - durable architecture and deployment decisions.
+- [V&V](docs/assignment/VV/VV.md) - verification strategy, catalogue and evidence model.
+- [OpenAPI](backend/src/main/resources/static/openapi.yaml) - deployed HTTP contract, also served at `/openapi.yaml`.
+
+Machine-readable companions live beside the controlled human documents and support mechanically generated traceability.
 
 ## Engineering method
 
@@ -214,8 +195,8 @@ problem evidence
   -> retained executable evidence
 ```
 
-AI can assist implementation and review, but deterministic claims stay mechanically testable. GitHub-native issues, PR ownership, dependencies, lifecycle and Project metadata represent work state; prose documents do not duplicate those states.
+AI can assist implementation and review, but deterministic claims remain mechanically testable. GitHub-native issue hierarchy, dependencies, PR ownership, lifecycle and typed Project metadata represent work state instead of prose surrogates.
 
 ## Confidentiality and reuse
 
-The durable repository identity is generic. Proprietary assignment text and employer-specific naming are not required for the application architecture or the reusable engineering method. Mechanisms that are useful independently of this domain belong in the harness rather than being accumulated here as bespoke infrastructure.
+The durable repository identity is generic. Proprietary assignment text and employer-specific naming are not required for the application architecture or reusable engineering method. Reusable mechanisms belong in the harness rather than being accumulated here as bespoke application infrastructure.

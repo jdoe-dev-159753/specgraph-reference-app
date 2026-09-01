@@ -55,6 +55,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/specgraph
       SPRING_DATASOURCE_USERNAME: specgraph
       SPRING_DATASOURCE_PASSWORD: specgraph
+      SPECGRAPH_SOURCE_TIME_ZONE: "${SPECGRAPH_SOURCE_TIME_ZONE:-UTC}"
     depends_on:
       postgres:
         condition: service_healthy
