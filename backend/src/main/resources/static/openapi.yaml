@@ -1,0 +1,151 @@
+openapi: 3.0.3
+info:
+  title: Customer Activity Analytics API
+  version: r1
+  description: Minimal reviewer-facing contract for the R1 customer activity and source-risk read slice.
+paths:
+  /api/customers/{customerId}:
+    get:
+      operationId: getCustomerSnapshot
+      summary: Read one customer activity and risk snapshot
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Existing customer snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerSnapshot'
+        '404':
+          description: Customer ID is unknown; no customer is fabricated.
+components:
+  schemas:
+    CustomerSnapshot:
+      type: object
+      required: [customerId, activities, riskEvidence]
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        riskEvidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskEvidence'
+    Activity:
+      oneOf:
+        - $ref: '#/components/schemas/CardActivity'
+        - $ref: '#/components/schemas/PaymentActivity'
+        - $ref: '#/components/schemas/CryptoActivity'
+      discriminator:
+        propertyName: type
+        mapping:
+          CARD: '#/components/schemas/CardActivity'
+          PAYMENT: '#/components/schemas/PaymentActivity'
+          CRYPTO: '#/components/schemas/CryptoActivity'
+    ActivityBase:
+      type: object
+      required: [transactionId, amount, currency, status, createdAt]
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          description: Decimal monetary or asset amount. Currency/asset unit is carried separately.
+        currency:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CardActivity:
+      allOf:
+        - $ref: '#/components/schemas/ActivityBase'
+        - type: object
+          required: [type, details]
+          properties:
+            type:
+              type: string
+              enum: [CARD]
+            details:
+              $ref: '#/components/schemas/CardDetails'
+    PaymentActivity:
+      allOf:
+        - $ref: '#/components/schemas/ActivityBase'
+        - type: object
+          required: [type, details]
+          properties:
+            type:
+              type: string
+              enum: [PAYMENT]
+            details:
+              $ref: '#/components/schemas/PaymentDetails'
+    CryptoActivity:
+      allOf:
+        - $ref: '#/components/schemas/ActivityBase'
+        - type: object
+          required: [type, details]
+          properties:
+            type:
+              type: string
+              enum: [CRYPTO]
+            details:
+              $ref: '#/components/schemas/CryptoDetails'
+    CardDetails:
+      type: object
+      additionalProperties: false
+      required: [cardPan, cardType, merchantName, mccCode, cardPresent, authorizationCode]
+      properties:
+        cardPan: { type: string }
+        cardType: { type: string }
+        merchantName: { type: string }
+        mccCode: { type: string }
+        cardPresent: { type: boolean }
+        authorizationCode: { type: string }
+        declineReason: { type: string, nullable: true }
+    PaymentDetails:
+      type: object
+      additionalProperties: false
+      required: [paymentMethod, senderAccount, receiverAccount, receiverBankCountry]
+      properties:
+        paymentMethod: { type: string }
+        senderAccount: { type: string }
+        receiverAccount: { type: string }
+        receiverBankCountry: { type: string }
+    CryptoDetails:
+      type: object
+      additionalProperties: false
+      required: [blockchain, walletAddressFrom, walletAddressTo, txHash]
+      properties:
+        blockchain: { type: string }
+        walletAddressFrom: { type: string }
+        walletAddressTo: { type: string }
+        txHash: { type: string }
+        exchangeName: { type: string, nullable: true }
+    RiskEvidence:
+      type: object
+      required: [transactionId, ruleId, ruleName, triggeredAt, scoreContribution]
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+        ruleName:
+          type: string
+        triggeredAt:
+          type: string
+          format: date-time
+        scoreContribution:
+          type: number

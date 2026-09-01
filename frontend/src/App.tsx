@@ -12,7 +12,7 @@ type Activity = {
   currency: string
   status: string
   createdAt: string
-  details: Record<string, string>
+  details: Record<string, string | boolean | null>
 }
 
 type RiskEvidence = {
@@ -98,6 +98,7 @@ export default function App() {
                 <Table size="small" aria-label="Customer activity">
                   <TableHead><TableRow>
                     <TableCell>Type</TableCell>
+                    <TableCell>Transaction</TableCell>
                     <TableCell align="right">Amount</TableCell>
                     <TableCell>Currency</TableCell>
                     <TableCell>Status</TableCell>
@@ -109,7 +110,20 @@ export default function App() {
                       const activityKey = activity.type.toLowerCase()
                       return (
                         <TableRow key={activity.transactionId} hover data-testid={`activity-${activityKey}`}>
-                          <TableCell><Chip label={activity.type} size="small" variant="outlined" /></TableCell>
+                          <TableCell>
+                            <Chip
+                              label={activity.type}
+                              size="small"
+                              variant="outlined"
+                              data-testid={`activity-${activityKey}-type`}
+                            />
+                          </TableCell>
+                          <TableCell
+                            data-testid={`activity-${activityKey}-transaction`}
+                            sx={{ whiteSpace: 'nowrap', fontFamily: 'monospace' }}
+                          >
+                            {activity.transactionId}
+                          </TableCell>
                           <TableCell
                             align="right"
                             data-testid={`activity-${activityKey}-amount`}
@@ -121,9 +135,22 @@ export default function App() {
                           <TableCell data-testid={`activity-${activityKey}-currency`} sx={{ fontWeight: 600 }}>
                             {activity.currency}
                           </TableCell>
-                          <TableCell><Chip label={activity.status} size="small" /></TableCell>
-                          <TableCell sx={{ whiteSpace: 'nowrap' }}>{new Date(activity.createdAt).toLocaleString()}</TableCell>
-                          <TableCell>{Object.entries(activity.details).map(([key, value]) => `${key}: ${value}`).join(' · ')}</TableCell>
+                          <TableCell data-testid={`activity-${activityKey}-status`}>
+                            <Chip label={activity.status} size="small" />
+                          </TableCell>
+                          <TableCell
+                            data-testid={`activity-${activityKey}-time`}
+                            data-created-at={activity.createdAt}
+                            sx={{ whiteSpace: 'nowrap' }}
+                          >
+                            {new Date(activity.createdAt).toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            {Object.entries(activity.details)
+                              .filter(([, value]) => value !== null)
+                              .map(([key, value]) => `${key}: ${String(value)}`)
+                              .join(' · ')}
+                          </TableCell>
                         </TableRow>
                       )
                     })}
@@ -143,13 +170,19 @@ export default function App() {
                 {customer.data.riskEvidence.map(evidence => (
                   <ListItem
                     key={`${evidence.transactionId}-${evidence.ruleId}`}
+                    data-testid={`risk-evidence-${evidence.transactionId}-${evidence.ruleId}`}
                     divider
                     sx={{ px: 3, py: 1.5, display: 'flex', justifyContent: 'space-between', gap: 2 }}
                   >
                     <Box>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{evidence.ruleName}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {evidence.ruleId} · {new Date(evidence.triggeredAt).toLocaleString()}
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        data-testid={`risk-evidence-${evidence.transactionId}-${evidence.ruleId}-time`}
+                        data-triggered-at={evidence.triggeredAt}
+                      >
+                        {evidence.ruleId} · transaction {evidence.transactionId} · {new Date(evidence.triggeredAt).toLocaleString()}
                       </Typography>
                     </Box>
                     <Chip label={`+${evidence.scoreContribution}`} size="small" color="primary" variant="outlined" />
