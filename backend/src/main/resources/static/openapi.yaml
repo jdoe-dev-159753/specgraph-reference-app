@@ -104,17 +104,19 @@ components:
               $ref: '#/components/schemas/CryptoDetails'
     CardDetails:
       type: object
+      additionalProperties: false
       required: [cardPan, cardType, merchantName, mccCode, cardPresent, authorizationCode]
       properties:
         cardPan: { type: string }
         cardType: { type: string }
         merchantName: { type: string }
         mccCode: { type: string }
-        cardPresent: { type: string }
+        cardPresent: { type: boolean }
         authorizationCode: { type: string }
-        declineReason: { type: string }
+        declineReason: { type: string, nullable: true }
     PaymentDetails:
       type: object
+      additionalProperties: false
       required: [paymentMethod, senderAccount, receiverAccount, receiverBankCountry]
       properties:
         paymentMethod: { type: string }
@@ -123,13 +125,14 @@ components:
         receiverBankCountry: { type: string }
     CryptoDetails:
       type: object
+      additionalProperties: false
       required: [blockchain, walletAddressFrom, walletAddressTo, txHash]
       properties:
         blockchain: { type: string }
         walletAddressFrom: { type: string }
         walletAddressTo: { type: string }
         txHash: { type: string }
-        exchangeName: { type: string }
+        exchangeName: { type: string, nullable: true }
     RiskEvidence:
       type: object
       required: [transactionId, ruleId, ruleName, triggeredAt, scoreContribution]
