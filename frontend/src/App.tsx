@@ -16,6 +16,7 @@ type Activity = {
 }
 
 type RiskEvidence = {
+  assessmentId: string
   transactionId: string
   ruleId: string
   ruleName: string
@@ -173,8 +174,8 @@ export default function App() {
               <List dense disablePadding>
                 {customer.data.riskEvidence.map(evidence => (
                   <ListItem
-                    key={`${evidence.transactionId}-${evidence.ruleId}`}
-                    data-testid={`risk-evidence-${evidence.transactionId}-${evidence.ruleId}`}
+                    key={evidence.assessmentId}
+                    data-testid={`risk-evidence-${evidence.assessmentId}`}
                     divider
                     sx={{ px: 3, py: 1.5, display: 'flex', justifyContent: 'space-between', gap: 2 }}
                   >
@@ -183,7 +184,7 @@ export default function App() {
                       <Typography
                         variant="caption"
                         color="text.secondary"
-                        data-testid={`risk-evidence-${evidence.transactionId}-${evidence.ruleId}-time`}
+                        data-testid={`risk-evidence-${evidence.assessmentId}-time`}
                         data-triggered-at={evidence.triggeredAt}
                       >
                         {evidence.ruleId} · transaction {evidence.transactionId} · {new Date(evidence.triggeredAt).toLocaleString()}

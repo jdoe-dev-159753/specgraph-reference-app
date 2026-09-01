@@ -15,6 +15,7 @@ type Activity = {
 }
 
 type RiskEvidence = {
+  assessmentId: string
   transactionId: string
   ruleId: string
   ruleName: string
@@ -42,6 +43,8 @@ test('VFY-CUSTOMER-READ-001 deployed R2 relational customer review', async ({ pa
     expect.arrayContaining(['CARD', 'PAYMENT', 'CRYPTO']))
   expect(snapshot.riskEvidence.map((evidence: RiskEvidence) => evidence.ruleName)).toEqual(
     expect.arrayContaining(['Card not present high value', 'New crypto destination']))
+  expect(new Set(snapshot.riskEvidence.map((evidence: RiskEvidence) => evidence.assessmentId)).size)
+    .toBe(snapshot.riskEvidence.length)
 
   await expect(page.getByRole('columnheader', { name: 'Transaction' })).toBeVisible()
   await expect(page.getByRole('columnheader', { name: 'Amount' })).toBeVisible()
@@ -72,13 +75,13 @@ test('VFY-CUSTOMER-READ-001 deployed R2 relational customer review', async ({ pa
   await expect(page.getByTestId('activity-crypto')).toContainText('blockchain: Bitcoin')
 
   for (const evidence of snapshot.riskEvidence as RiskEvidence[]) {
-    const item = page.getByTestId(`risk-evidence-${evidence.transactionId}-${evidence.ruleId}`)
+    const item = page.getByTestId(`risk-evidence-${evidence.assessmentId}`)
     await expect(item).toBeVisible()
     await expect(item).toContainText(evidence.ruleName)
     await expect(item).toContainText(evidence.ruleId)
     await expect(item).toContainText(evidence.transactionId)
     await expect(item).toContainText(`+${evidence.scoreContribution}`)
-    await expect(page.getByTestId(`risk-evidence-${evidence.transactionId}-${evidence.ruleId}-time`))
+    await expect(page.getByTestId(`risk-evidence-${evidence.assessmentId}-time`))
       .toHaveAttribute('data-triggered-at', evidence.triggeredAt)
   }
 
@@ -100,4 +103,48 @@ test('VFY-CUSTOMER-READ-001 deployed R2 relational customer review', async ({ pa
   await page.getByRole('button', { name: 'Search' }).click()
   expect((await notFoundPromise).status()).toBe(404)
   await expect(page.getByRole('alert')).toContainText('Customer not found')
+})
+
+test('R2 renders repeated transaction-rule assessments by stable assessment identity', async ({ page }) => {
+  const transactionId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'
+  const ruleId = '10000000-0000-0000-0000-000000000001'
+  const firstAssessment = '20000000-0000-0000-0000-000000000001'
+  const secondAssessment = '20000000-0000-0000-0000-000000000011'
+
+  await page.route(`**/api/customers/${seededCustomer}`, async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        customerId: seededCustomer,
+        activities: [],
+        riskEvidence: [
+          {
+            assessmentId: firstAssessment,
+            transactionId,
+            ruleId,
+            ruleName: 'Card not present high value',
+            triggeredAt: '2026-08-28T09:15:01Z',
+            scoreContribution: 12.5,
+          },
+          {
+            assessmentId: secondAssessment,
+            transactionId,
+            ruleId,
+            ruleName: 'Card not present high value',
+            triggeredAt: '2026-08-28T09:16:01Z',
+            scoreContribution: 7.5,
+          },
+        ],
+      }),
+    })
+  })
+
+  await page.goto('/')
+  await page.getByLabel('Customer ID').fill(seededCustomer)
+  await page.getByRole('button', { name: 'Search' }).click()
+
+  await expect(page.getByTestId(`risk-evidence-${firstAssessment}`)).toBeVisible()
+  await expect(page.getByTestId(`risk-evidence-${secondAssessment}`)).toBeVisible()
+  await expect(page.getByTestId('risk-evidence').getByText('Card not present high value')).toHaveCount(2)
 })

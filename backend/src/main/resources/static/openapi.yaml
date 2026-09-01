@@ -137,8 +137,12 @@ components:
         exchangeName: { type: string, nullable: true }
     RiskEvidence:
       type: object
-      required: [transactionId, ruleId, ruleName, triggeredAt, scoreContribution]
+      required: [assessmentId, transactionId, ruleId, ruleName, triggeredAt, scoreContribution]
       properties:
+        assessmentId:
+          type: string
+          format: uuid
+          description: Stable identity of the persisted source risk assessment.
         transactionId:
           type: string
           format: uuid

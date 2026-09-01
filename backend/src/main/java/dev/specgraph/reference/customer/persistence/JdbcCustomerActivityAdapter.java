@@ -64,6 +64,7 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
 
     private static final String RISK_EVIDENCE_SQL = """
             SELECT
+                ra.assessment_id,
                 ra.transaction_id,
                 rr.rule_id,
                 rr.rule_name,
@@ -172,6 +173,7 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
 
     private RiskEvidence mapRiskEvidence(ResultSet rs, int rowNum) throws SQLException {
         return new RiskEvidence(
+                rs.getObject("assessment_id", UUID.class),
                 rs.getObject("transaction_id", UUID.class),
                 rs.getObject("rule_id", UUID.class).toString(),
                 rs.getString("rule_name"),

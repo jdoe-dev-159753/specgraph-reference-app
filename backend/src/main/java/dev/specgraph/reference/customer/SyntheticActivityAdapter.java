@@ -15,6 +15,8 @@ class SyntheticActivityAdapter implements CustomerActivityPort {
     private static final UUID CARD_TX = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
     private static final UUID PAYMENT_TX = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2");
     private static final UUID CRYPTO_TX = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3");
+    private static final UUID CARD_RISK = UUID.fromString("20000000-0000-0000-0000-000000000001");
+    private static final UUID CRYPTO_RISK = UUID.fromString("20000000-0000-0000-0000-000000000002");
 
     private final CustomerSnapshot seeded = new CustomerSnapshot(
             SEEDED_CUSTOMER_ID,
@@ -32,9 +34,9 @@ class SyntheticActivityAdapter implements CustomerActivityPort {
                             new Activity.CryptoDetails(
                                     "Bitcoin", "bc1q-demo-from", "bc1q-demo-to", "synthetic-tx-hash", "Demo Exchange"))),
             List.of(
-                    new RiskEvidence(CARD_TX, "RULE-CARD-01", "Card not present high value",
+                    new RiskEvidence(CARD_RISK, CARD_TX, "RULE-CARD-01", "Card not present high value",
                             Instant.parse("2026-08-28T09:15:01Z"), new BigDecimal("12.5")),
-                    new RiskEvidence(CRYPTO_TX, "RULE-CRYPTO-01", "New crypto destination",
+                    new RiskEvidence(CRYPTO_RISK, CRYPTO_TX, "RULE-CRYPTO-01", "New crypto destination",
                             Instant.parse("2026-08-30T14:05:01Z"), new BigDecimal("18.0"))));
 
     @Override

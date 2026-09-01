@@ -68,7 +68,8 @@ class OpenApiContractTests {
 
         Schema<?> risk = api.getComponents().getSchemas().get("RiskEvidence");
         assertThat(risk.getRequired()).containsAll(Set.of(
-                "transactionId", "ruleId", "ruleName", "triggeredAt", "scoreContribution"));
+                "assessmentId", "transactionId", "ruleId", "ruleName", "triggeredAt", "scoreContribution"));
+        assertThat(risk.getProperties().get("assessmentId").getFormat()).isEqualTo("uuid");
     }
 
     private static void assertActivityVariant(OpenAPI api, String schemaName, String expectedType, String detailsSchema) {

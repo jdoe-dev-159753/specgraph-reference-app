@@ -73,7 +73,12 @@ public abstract class CustomerActivityPortContract {
         }
 
         assertThat(snapshot.riskEvidence()).isNotEmpty();
+        Set<UUID> assessmentIds = new HashSet<>();
         for (RiskEvidence evidence : snapshot.riskEvidence()) {
+            assertThat(evidence.assessmentId()).isNotNull();
+            assertThat(assessmentIds.add(evidence.assessmentId()))
+                    .as("risk assessment identity must be unique inside one customer snapshot")
+                    .isTrue();
             assertThat(transactionIds)
                     .as("persisted/source risk evidence must remain attached to a displayed transaction")
                     .contains(evidence.transactionId());
