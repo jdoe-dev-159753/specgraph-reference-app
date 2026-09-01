@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
@@ -88,7 +89,7 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Optional<CustomerSnapshot> loadSnapshot(UUID customerId) {
         boolean customerExists = !jdbc.sql(CUSTOMER_EXISTS_SQL)
                 .param("customerId", customerId)
