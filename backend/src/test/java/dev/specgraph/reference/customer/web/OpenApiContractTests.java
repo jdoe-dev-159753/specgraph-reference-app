@@ -1,4 +1,4 @@
-package dev.specgraph.reference.web;
+package dev.specgraph.reference.customer.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

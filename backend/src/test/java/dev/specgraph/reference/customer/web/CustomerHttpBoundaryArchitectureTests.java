@@ -1,4 +1,4 @@
-package dev.specgraph.reference.web;
+package dev.specgraph.reference.customer.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -13,11 +13,11 @@ import org.junit.jupiter.api.Test;
 class CustomerHttpBoundaryArchitectureTests {
     @Test
     void httpAdapterDependsOnInboundUseCaseAndNeverOnOutboundActivityPort() {
-        var constructors = CustomerAnalysisHttpAdapter.class.getDeclaredConstructors();
+        var constructors = CustomerReviewHttpAdapter.class.getDeclaredConstructors();
         assertThat(constructors).hasSize(1);
         assertThat(constructors[0].getParameterTypes()).containsExactly(CustomerReviewUseCase.class);
 
-        var fieldTypes = Arrays.stream(CustomerAnalysisHttpAdapter.class.getDeclaredFields())
+        var fieldTypes = Arrays.stream(CustomerReviewHttpAdapter.class.getDeclaredFields())
                 .map(Field::getType)
                 .toList();
         assertThat(fieldTypes).doesNotContain(CustomerActivityPort.class);

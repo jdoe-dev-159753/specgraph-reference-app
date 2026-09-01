@@ -1,4 +1,4 @@
-package dev.specgraph.reference.web;
+package dev.specgraph.reference.customer.web;
 
 import dev.specgraph.reference.customer.Activity;
 import dev.specgraph.reference.customer.CustomerReviewUseCase;
@@ -15,10 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/customers")
-final class CustomerAnalysisHttpAdapter {
+final class CustomerReviewHttpAdapter {
     private final CustomerReviewUseCase customerReview;
 
-    CustomerAnalysisHttpAdapter(CustomerReviewUseCase customerReview) {
+    CustomerReviewHttpAdapter(CustomerReviewUseCase customerReview) {
         this.customerReview = customerReview;
     }
 
