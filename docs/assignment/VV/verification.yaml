@@ -33,7 +33,7 @@ obligations:
     covers: [FR-HIST-001, FR-HIST-002, INV-HIST-001]
     acceptance: [AC-HIST-001, AC-HIST-002]
     methods: [port_contract, database_integration, api_acceptance, ui_e2e]
-    design: [PRT-HISTORY-001, ADP-HIST-JPA-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
+    design: [PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
     executable_evidence: discovered_by_markers
   VFY-REPRODUCIBILITY-001:
     covers: [NFR-REP-001, CON-DATA-001]
