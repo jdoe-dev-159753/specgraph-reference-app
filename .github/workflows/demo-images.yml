@@ -226,17 +226,17 @@ jobs:
           r1_digest="$(printf '%s\n' "$r1_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
           r2_digest="$(printf '%s\n' "$r2_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
           postgres_digest="$(printf '%s\n' "$postgres_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
-          test -n "$r0_digest"
-          test -n "$r1_digest"
-          test -n "$r2_digest"
-          test -n "$postgres_digest"
-          printf '%s\n' "$postgres_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
-          postgres_hex="${postgres_digest#sha256:}"
+          for digest in "$r0_digest" "$r1_digest" "$r2_digest" "$postgres_digest"; do
+            printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          done
+          image_set_hex="$(printf '%s\n' "$r0_digest" "$r1_digest" "$r2_digest" "$postgres_digest" | sha256sum | awk '{print $1}')"
+          compose_immutable="${COMPOSE_IDENTITY_PREFIX}-set-${image_set_hex}"
+          test "${#compose_immutable}" -le 128
           echo "R0_DIGEST=$r0_digest" >> "$GITHUB_ENV"
           echo "R1_DIGEST=$r1_digest" >> "$GITHUB_ENV"
           echo "R2_DIGEST=$r2_digest" >> "$GITHUB_ENV"
           echo "POSTGRES_DIGEST=$postgres_digest" >> "$GITHUB_ENV"
-          echo "COMPOSE_IMMUTABLE=${COMPOSE_IDENTITY_PREFIX}-pg-${postgres_hex}" >> "$GITHUB_ENV"
+          echo "COMPOSE_IMMUTABLE=$compose_immutable" >> "$GITHUB_ENV"
 
       - name: Publish runtime Compose application from immutable checkpoint images
         working-directory: packaging
