@@ -5,12 +5,10 @@ on:
     types: [opened, edited, reopened]
   pull_request_target:
     types: [opened, edited, synchronize, reopened, ready_for_review]
-  issue_comment:
-    types: [created, edited]
   pull_request_review:
-    types: [submitted, edited]
-  pull_request_review_comment:
-    types: [created, edited]
+    types: [submitted]
+  issue_comment:
+    types: [created]
   schedule:
     - cron: '17 4 * * *'
   workflow_dispatch:
@@ -20,22 +18,26 @@ permissions:
   issues: read
   pull-requests: read
 
+concurrency:
+  # GitHub cannot filter issue_comment by sender in `on`. Give ignored comments a
+  # unique group so their skipped runs cannot cancel a real per-PR guard run.
+  group: work-graph-guard-${{ github.event_name == 'issue_comment' && github.event.comment.user.id != 199175422 && github.run_id || github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   guard:
-    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci]
+    if: ${{ github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422 }}
+    runs-on: ubuntu-latest
     steps:
-      - name: Prepare isolated trusted checkout
-        run: |
-          trusted="$GITHUB_WORKSPACE/.workgraph-trusted"
-          if [ -e "$trusted" ] && ! git -C "$trusted" rev-parse --git-dir >/dev/null 2>&1; then
-            rm -rf "$trusted"
-          fi
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.workflow_sha }}
           path: .workgraph-trusted
           persist-credentials: false
-      - name: Reject competing prose work-state
+      - name: Verify guard semantics
+        working-directory: .workgraph-trusted
+        run: python3 -m unittest scripts/test_work_graph_guard.py
+      - name: Reject competing prose work-state or stale review evidence
         working-directory: .workgraph-trusted
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

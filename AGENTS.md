@@ -68,6 +68,8 @@ When work exposes another independently reviewable concern, reuse an existing ow
 - Tests required to prove a change belong in the same pull request.
 - Target at most 400 changed lines. From 401-700 lines, actively consider splitting; above 700 lines, split unless atomicity is explicitly justified.
 - Intermediate stacked pull requests may target a non-default parent branch. When retargeted to `main`, establish the required native closing/Development ownership before merge.
+- Every open non-draft pull request targeting `main` must receive a Codex review before merge.
+- Codex review freshness is SHA-bound. Finding-bearing reviews use native `PullRequestReview.commit_id == head.sha`; clean reviews emitted by the Codex GitHub App as bot comments must explicitly name the current reviewed commit. If the head moves, invoke `@codex review` again and reconcile every material finding before merge.
 - Never mutate `main` directly during ordinary work.
 
 ## Specification-driven development
@@ -99,4 +101,4 @@ Each meaningful increment must remain demonstrable and deployable. Deployment an
 
 Mechanically decidable properties belong in deterministic checks. AI review focuses on ambiguity, architecture, counterexamples, failure paths, missing assumptions, and verification gaps rather than formatting or lint already owned by tooling.
 
-Before merge, verify the exact PR head, applicable checks, unresolved review threads, work-graph metadata, scope size, and the evidence required by the owning issue.
+Before merge, verify the exact PR head, applicable checks, unresolved review threads, work-graph metadata, scope size, current-head Codex review evidence, and the evidence required by the owning issue.

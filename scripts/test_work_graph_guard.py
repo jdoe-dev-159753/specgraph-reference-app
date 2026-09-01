@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+
+import unittest
+
+from scripts import work_graph_guard as guard
+
+
+class ReviewFreshnessTests(unittest.TestCase):
+    def test_pull_request_event_resolves_pr_number(self):
+        event = {"number": 42, "pull_request": {"number": 42}}
+        self.assertEqual(42, guard.event_pr_number_from_payload(event))
+
+    def test_bot_issue_comment_on_pull_request_resolves_pr_number(self):
+        event = {"issue": {"number": 43, "pull_request": {"url": "pr"}}}
+        self.assertEqual(43, guard.event_pr_number_from_payload(event))
+
+    def test_plain_issue_event_has_no_pr_number(self):
+        self.assertIsNone(guard.event_pr_number_from_payload({"issue": {"number": 44}}))
+
+    def test_current_head_codex_review_is_accepted(self):
+        reviews = [
+            {
+                "commit_id": "abc123",
+                "user": {"id": guard.CODEX_USER_ID, "login": "chatgpt-codex-connector[bot]"},
+            }
+        ]
+        self.assertTrue(guard.has_current_head_codex_review(reviews, "abc123"))
+
+    def test_superseded_codex_review_is_rejected(self):
+        reviews = [
+            {
+                "commit_id": "old123",
+                "user": {"id": guard.CODEX_USER_ID, "login": "chatgpt-codex-connector[bot]"},
+            }
+        ]
+        self.assertFalse(guard.has_current_head_codex_review(reviews, "new456"))
+
+    def test_prefix_collision_reviewer_is_rejected(self):
+        reviews = [
+            {
+                "commit_id": "abc123",
+                "user": {"id": 123456, "login": "chatgpt-codex-connector-fake"},
+            }
+        ]
+        self.assertFalse(guard.has_current_head_codex_review(reviews, "abc123"))
+
+    def test_human_review_on_current_head_does_not_substitute_for_codex(self):
+        reviews = [
+            {
+                "commit_id": "abc123",
+                "user": {"id": 9963055, "login": "repository-owner"},
+            }
+        ]
+        self.assertFalse(guard.has_current_head_codex_review(reviews, "abc123"))
+
+    def test_clean_codex_comment_on_current_head_is_accepted(self):
+        head = "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
+        comments = [{
+            "user": {"id": guard.CODEX_USER_ID},
+            "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+            "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e8`",
+        }]
+        self.assertTrue(guard.has_current_head_clean_codex_result(comments, head))
+
+    def test_clean_codex_comment_on_superseded_head_is_rejected(self):
+        comments = [{
+            "user": {"id": guard.CODEX_USER_ID},
+            "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+            "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e8`",
+        }]
+        self.assertFalse(
+            guard.has_current_head_clean_codex_result(
+                comments, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            )
+        )
+
+    def test_clean_result_from_wrong_app_is_rejected(self):
+        comments = [{
+            "user": {"id": guard.CODEX_USER_ID},
+            "performed_via_github_app": {"id": 1},
+            "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e8`",
+        }]
+        self.assertFalse(
+            guard.has_current_head_clean_codex_result(
+                comments, "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
+            )
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

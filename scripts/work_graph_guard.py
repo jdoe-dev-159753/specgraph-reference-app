@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject controlled GitHub descriptions that compete with native work metadata."""
+"""Reject competing prose work-state and stale Codex review evidence."""
 
 from __future__ import annotations
 
@@ -12,6 +12,11 @@ from urllib import error, request
 API = "https://api.github.com"
 REPO = os.environ.get("GITHUB_REPOSITORY", "jdoe-dev-159753/specgraph-reference-app")
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
+EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
+EVENT_NAME = os.environ.get("GITHUB_EVENT_NAME", "")
+CODEX_USER_ID = 199175422
+CODEX_APP_ID = 1144995
+MIN_REVIEWED_SHA_PREFIX = 10
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -19,6 +24,8 @@ PREFIX = re.compile(
     re.IGNORECASE,
 )
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
+CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
+REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
 
 
 def api(path: str):
@@ -75,26 +82,110 @@ def scan_surface(kind: str, identifier: str, text: str, failures: list[str]) -> 
         failures.append(f"{kind} {identifier}: {finding}")
 
 
+def event_pr_number_from_payload(event: dict) -> int | None:
+    pull_request = event.get("pull_request")
+    if pull_request:
+        return pull_request.get("number") or event.get("number")
+    issue = event.get("issue") or {}
+    if issue.get("pull_request"):
+        return issue.get("number")
+    return None
+
+
+def event_pr_number() -> int | None:
+    if not EVENT_PATH or not os.path.exists(EVENT_PATH):
+        return None
+    with open(EVENT_PATH, encoding="utf-8") as handle:
+        return event_pr_number_from_payload(json.load(handle))
+
+
+def is_codex_review(review: dict) -> bool:
+    return (review.get("user") or {}).get("id") == CODEX_USER_ID
+
+
+def has_current_head_codex_review(reviews, head_sha: str) -> bool:
+    return any(
+        is_codex_review(review) and review.get("commit_id") == head_sha
+        for review in reviews
+    )
+
+
+def clean_codex_reviewed_prefix(comment: dict) -> str | None:
+    if (comment.get("user") or {}).get("id") != CODEX_USER_ID:
+        return None
+    if (comment.get("performed_via_github_app") or {}).get("id") != CODEX_APP_ID:
+        return None
+    body = comment.get("body") or ""
+    if not CLEAN_CODEX_REVIEW.search(body):
+        return None
+    match = REVIEWED_COMMIT.search(body)
+    if not match:
+        return None
+    prefix = match.group(1).lower()
+    return prefix if len(prefix) >= MIN_REVIEWED_SHA_PREFIX else None
+
+
+def has_current_head_clean_codex_result(comments, head_sha: str) -> bool:
+    normalized = head_sha.lower()
+    return any(
+        (prefix := clean_codex_reviewed_prefix(comment)) is not None
+        and normalized.startswith(prefix)
+        for comment in comments
+    )
+
+
+def require_current_head_codex_review(pr_number: int, failures: list[str]) -> None:
+    pr = api(f"/repos/{REPO}/pulls/{pr_number}")
+    if pr.get("state") != "open" or pr.get("draft"):
+        return
+    if (pr.get("base") or {}).get("ref") != "main":
+        return
+
+    head_sha = pr["head"]["sha"]
+    reviews = pages(f"/repos/{REPO}/pulls/{pr_number}/reviews")
+    if has_current_head_codex_review(reviews, head_sha):
+        print(f"pull request #{pr_number}: Codex review object covers current head {head_sha[:12]}")
+        return
+
+    comments = pages(f"/repos/{REPO}/issues/{pr_number}/comments")
+    if has_current_head_clean_codex_result(comments, head_sha):
+        print(f"pull request #{pr_number}: clean Codex result covers current head {head_sha[:12]}")
+        return
+
+    failures.append(
+        f"pull request #{pr_number}: no Codex review evidence is anchored to current head {head_sha[:12]}"
+    )
+
+
 def main() -> int:
     failures: list[str] = []
-    for item in pages(f"/repos/{REPO}/issues?state=open"):
+    open_items = list(pages(f"/repos/{REPO}/issues?state=open"))
+    for item in open_items:
         number = item["number"]
         kind = "pull request" if "pull_request" in item else "issue"
         scan_surface(kind, f"#{number} title", item.get("title") or "", failures)
         scan_surface(kind, f"#{number} body", item.get("body") or "", failures)
 
     # Conversation and review comments are discussion, not controlled work-state
-    # descriptions. They may legitimately quote typed values while reviewing the
-    # mechanics. Treating third-party review prose as authoritative would make the
-    # ratchet both noisy and impossible for the repository owner to remediate.
+    # descriptions. Review freshness uses immutable Codex bot/App identity and the
+    # SHA GitHub/Codex records for the reviewed head. Finding-bearing reviews expose
+    # PullRequestReview.commit_id; clean Codex reviews are emitted as bot comments
+    # that explicitly name the reviewed commit prefix.
+    pr_number = event_pr_number()
+    if pr_number is not None:
+        require_current_head_codex_review(pr_number, failures)
+    elif EVENT_NAME in {"schedule", "workflow_dispatch"}:
+        for item in open_items:
+            if "pull_request" in item:
+                require_current_head_codex_review(item["number"], failures)
 
     if failures:
-        print("Competing prose work-state detected:", file=sys.stderr)
+        print("Work-graph/review guard failed:", file=sys.stderr)
         for finding in failures:
             print(f"- {finding}", file=sys.stderr)
         return 1
 
-    print("controlled GitHub work descriptions are clean")
+    print("controlled GitHub work descriptions and current-head Codex review evidence are clean")
     return 0
 
 
