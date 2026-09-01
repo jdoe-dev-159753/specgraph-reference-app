@@ -34,6 +34,7 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: specgraph-ci-${{ github.run_id }}
       R2_PORT: '8082'
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Clean container-owned outputs from previous runs
         run: |
@@ -47,6 +48,15 @@ jobs:
             git -C "$GITHUB_WORKSPACE" remote add origin "https://github.com/${GITHUB_REPOSITORY}"
           fi
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact validated source revision
+        run: |
+          checked_out_sha="$(git rev-parse HEAD)"
+          echo "Expected source SHA: $SOURCE_SHA"
+          echo "Checked-out SHA:     $checked_out_sha"
+          test "$checked_out_sha" = "$SOURCE_SHA"
 
       - name: Verify backend against Testcontainers PostgreSQL
         run: >-
@@ -81,7 +91,7 @@ jobs:
 
       - name: Build exact-head R2 application image
         run: |
-          app_image="specgraph-reference-app:ci-${GITHUB_SHA}"
+          app_image="specgraph-reference-app:ci-${SOURCE_SHA}"
           docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$app_image" .
           echo "APP_R2_IMAGE=$app_image" >> "$GITHUB_ENV"
 
@@ -135,7 +145,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r2-postgresql-executable-evidence-${{ github.sha }}
+          name: r2-postgresql-executable-evidence-${{ env.SOURCE_SHA }}
           path: |
             backend/target/surefire-reports
             e2e/playwright-report
