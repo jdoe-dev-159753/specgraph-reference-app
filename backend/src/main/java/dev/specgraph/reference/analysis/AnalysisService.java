@@ -52,6 +52,11 @@ final class AnalysisService implements AnalysisUseCase {
         AnalysisResult result;
         try {
             result = analysisModel.analyze(snapshot, evidence);
+        } catch (InvalidAnalysisResultException exception) {
+            throw new AnalysisFailureException(
+                    AnalysisFailureException.Reason.INVALID_RESULT,
+                    "Analysis model returned an invalid structured result",
+                    exception);
         } catch (RuntimeException exception) {
             throw new AnalysisFailureException(
                     AnalysisFailureException.Reason.MODEL_FAILURE,
