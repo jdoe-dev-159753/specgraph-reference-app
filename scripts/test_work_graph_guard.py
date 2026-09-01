@@ -17,7 +17,7 @@ class ReviewFreshnessTests(unittest.TestCase):
         reviews = [
             {
                 "commit_id": "abc123",
-                "user": {"login": "chatgpt-codex-connector[bot]"},
+                "user": {"id": guard.CODEX_USER_ID, "login": "chatgpt-codex-connector[bot]"},
             }
         ]
         self.assertTrue(guard.has_current_head_codex_review(reviews, "abc123"))
@@ -26,16 +26,25 @@ class ReviewFreshnessTests(unittest.TestCase):
         reviews = [
             {
                 "commit_id": "old123",
-                "user": {"login": "chatgpt-codex-connector[bot]"},
+                "user": {"id": guard.CODEX_USER_ID, "login": "chatgpt-codex-connector[bot]"},
             }
         ]
         self.assertFalse(guard.has_current_head_codex_review(reviews, "new456"))
+
+    def test_prefix_collision_reviewer_is_rejected(self):
+        reviews = [
+            {
+                "commit_id": "abc123",
+                "user": {"id": 123456, "login": "chatgpt-codex-connector-fake"},
+            }
+        ]
+        self.assertFalse(guard.has_current_head_codex_review(reviews, "abc123"))
 
     def test_human_review_on_current_head_does_not_substitute_for_codex(self):
         reviews = [
             {
                 "commit_id": "abc123",
-                "user": {"login": "repository-owner"},
+                "user": {"id": 9963055, "login": "repository-owner"},
             }
         ]
         self.assertFalse(guard.has_current_head_codex_review(reviews, "abc123"))
