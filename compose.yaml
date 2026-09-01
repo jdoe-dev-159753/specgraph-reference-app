@@ -83,6 +83,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      r2:
+        condition: service_healthy
     ports:
       - "${R3_PORT:-8083}:8080"
     healthcheck:
