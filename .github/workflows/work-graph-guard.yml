@@ -19,7 +19,9 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: work-graph-guard-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  # GitHub cannot filter issue_comment by sender in `on`. Give ignored comments a
+  # unique group so their skipped runs cannot cancel a real per-PR guard run.
+  group: work-graph-guard-${{ github.event_name == 'issue_comment' && github.event.comment.user.id != 199175422 && github.run_id || github.event.pull_request.number || github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
