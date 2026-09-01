@@ -59,6 +59,15 @@ jobs:
           maven:3.9-eclipse-temurin-21
           mvn -B -q verify
 
+      - name: Report backend test failures
+        if: failure()
+        run: |
+          if [ -d backend/target/surefire-reports ]; then
+            find backend/target/surefire-reports -maxdepth 1 -type f -name '*.txt' -print -exec cat {} \;
+          else
+            echo 'No Surefire report directory was produced.'
+          fi
+
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -128,6 +137,7 @@ jobs:
         with:
           name: r2-postgresql-executable-evidence-${{ github.sha }}
           path: |
+            backend/target/surefire-reports
             e2e/playwright-report
             e2e/test-results
           if-no-files-found: warn
