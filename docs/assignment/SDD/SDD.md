@@ -209,11 +209,13 @@ Checkpoint host ports are deliberately independent so rings can be compared with
 - R0: host `8080` -> container Tomcat `8080`;
 - R1: host `8081` -> container Tomcat `8080`;
 - R2: host `8082` -> container Tomcat `8080`, private PostgreSQL dependency;
-- R3 source candidate: host `8083` -> container Tomcat `8080`, same PostgreSQL infrastructure plus analysis history.
+- R3: host `8083` -> container Tomcat `8080`, same PostgreSQL infrastructure plus analysis history.
 
-The published Compose OCI tag `ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo` is a **last-known-good artifact**. It advances only after publication resolves immutable image digests, pulls the remote Compose artifact again and passes executable verification. A failed publication leaves the prior tag untouched. Repository source state and registry publication state are therefore intentionally not conflated.
+The published Compose OCI tag `ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo` is a **last-known-good artifact**. It advances only after publication resolves immutable R0/R1/R2/R3/PostgreSQL image digests, binds the complete five-image set into the retained Compose identity, pulls the remote Compose artifact again and passes executable browser verification.
 
-The J2 published contract adds R2 to R0/R1 with PostgreSQL. R3 remains independently runnable from source while its candidate PR is under verification; it must not be advertised as a published checkpoint before its own accepted publication proof exists.
+Accepted source checkpoints are preserved through `demo/r0`, `demo/r1`, `demo/r2` and `demo/r3`. A failed publication leaves the previous `:demo` tag untouched. Repository source state and registry publication state are therefore intentionally not conflated.
+
+The complete J2 reviewer contract publishes R0, R1, PostgreSQL-backed R2 and deterministic analysis/history R3 side by side. Until that publication has passed its remote proof, the source candidate remains independently runnable without pretending the registry already contains it.
 
 Communication semantics:
 
@@ -283,5 +285,6 @@ A reviewer should be able to answer from this SDD without reconstructing PR hist
 - how R2 preserves exact PostgreSQL source semantics and snapshot consistency;
 - how R3 validates, persists and reloads deterministic analysis history without pretending R4 authentication already exists;
 - how `NFR-RES-001` prevents false completed/history state;
-- how source and published checkpoint states differ and why `:demo` is last-known-good;
+- how source and last-known-good published checkpoint states differ;
+- how the complete J2 publication preserves R0-R3 as independent reviewer checkpoints;
 - how R0-R5 extend one architecture concentrically.
