@@ -1,0 +1,260 @@
+name: pre-r2-project-metadata
+
+on:
+  push:
+    branches: [chore/pre-r2-project-metadata]
+    paths: [.github/workflows/pre-r2-project-metadata.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout canonical reconciler from main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          path: trusted-main
+          persist-credentials: false
+
+      - name: Repair native graph and audit Project v2
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const repoFull = `${owner}/${repo}`;
+            const projectTitle = 'SpecGraph Reference App';
+            const parentTargets = new Map([
+              [136, 63], [139, 63], [159, 63],
+              [142, 118], [143, 118],
+              [144, 122], [145, 122],
+              [146, 127], [147, 127], [148, 127], [158, 127],
+            ]);
+
+            const getIssue = async number => (await github.rest.issues.get({ owner, repo, issue_number: number })).data;
+
+            for (const [childNumber, parentNumber] of parentTargets) {
+              let currentParent = null;
+              try {
+                currentParent = (await github.request('GET /repos/{owner}/{repo}/issues/{issue_number}/parent', {
+                  owner, repo, issue_number: childNumber,
+                  headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+                })).data;
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+              if (currentParent?.number === parentNumber) {
+                core.info(`#${childNumber} already parented by #${parentNumber}`);
+                continue;
+              }
+              const child = await getIssue(childNumber);
+              await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                owner, repo, issue_number: parentNumber,
+                sub_issue_id: child.id,
+                replace_parent: true,
+                headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+              });
+              core.info(`Attached #${childNumber} -> #${parentNumber}`);
+            }
+
+            const desiredBlockers = [116, 136];
+            const existingBlockedBy = await github.request('GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by', {
+              owner, repo, issue_number: 139, per_page: 100,
+              headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+            });
+            const existingBlockerNumbers = new Set(existingBlockedBy.data.map(issue => issue.number));
+            for (const blockerNumber of desiredBlockers) {
+              if (existingBlockerNumbers.has(blockerNumber)) continue;
+              const blocker = await getIssue(blockerNumber);
+              await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by', {
+                owner, repo, issue_number: 139, issue_id: blocker.id,
+                headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+              });
+              core.info(`#139 blocked by #${blockerNumber}`);
+            }
+
+            let project = null;
+            let after = null;
+            do {
+              const page = await github.graphql(`
+                query($login: String!, $after: String) {
+                  user(login: $login) {
+                    projectsV2(first: 20, after: $after) {
+                      nodes {
+                        id number title
+                        fields(first: 100) {
+                          nodes {
+                            __typename
+                            ... on ProjectV2SingleSelectField { id name options { id name } }
+                          }
+                        }
+                      }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                  }
+                }
+              `, { login: owner, after });
+              const conn = page.user.projectsV2;
+              project = conn.nodes.find(candidate => candidate.title === projectTitle) ?? null;
+              if (project || !conn.pageInfo.hasNextPage) break;
+              after = conn.pageInfo.endCursor;
+            } while (true);
+            if (!project) throw new Error(`Project v2 not visible through PROJECTS_TOKEN: ${projectTitle}`);
+
+            const allItems = async () => {
+              const items = [];
+              let cursor = null;
+              do {
+                const page = await github.graphql(`
+                  query($project: ID!, $after: String) {
+                    node(id: $project) {
+                      ... on ProjectV2 {
+                        items(first: 100, after: $after) {
+                          nodes {
+                            id
+                            fieldValues(first: 100) {
+                              nodes {
+                                __typename
+                                ... on ProjectV2ItemFieldSingleSelectValue {
+                                  name
+                                  field { ... on ProjectV2SingleSelectField { id name } }
+                                }
+                              }
+                            }
+                            content {
+                              __typename
+                              ... on Issue {
+                                id number state
+                                repository { nameWithOwner }
+                                labels(first: 100) { nodes { name } }
+                                parent { number repository { nameWithOwner } }
+                              }
+                              ... on PullRequest {
+                                id number state merged
+                                repository { nameWithOwner }
+                              }
+                            }
+                          }
+                          pageInfo { hasNextPage endCursor }
+                        }
+                      }
+                    }
+                  }
+                `, { project: project.id, after: cursor });
+                const conn = page.node.items;
+                items.push(...conn.nodes);
+                if (!conn.pageInfo.hasNextPage) break;
+                cursor = conn.pageInfo.endCursor;
+              } while (true);
+              return items;
+            };
+
+            let items = await allItems();
+            const projectIssueNumbers = new Set(items.filter(item => item.content?.__typename === 'Issue' && item.content.repository?.nameWithOwner === repoFull).map(item => item.content.number));
+            const ensureNumbers = [...new Set([...parentTargets.keys(), ...parentTargets.values(), 116, 157, 158, 159])];
+            for (const number of ensureNumbers) {
+              if (projectIssueNumbers.has(number)) continue;
+              const issue = await getIssue(number);
+              await github.graphql(`
+                mutation($project: ID!, $content: ID!) {
+                  addProjectV2ItemById(input: { projectId: $project, contentId: $content }) {
+                    item { id }
+                  }
+                }
+              `, { project: project.id, content: issue.node_id });
+              core.info(`Added #${number} to Project v2`);
+            }
+
+            items = await allItems();
+            const repoItems = () => items.filter(item => item.content?.repository?.nameWithOwner === repoFull);
+            const issueItem = number => repoItems().find(item => item.content.__typename === 'Issue' && item.content.number === number);
+            const single = (item, fieldName) => item?.fieldValues.nodes.find(value => value?.__typename === 'ProjectV2ItemFieldSingleSelectValue' && value.field?.name === fieldName)?.name ?? null;
+            const field = name => project.fields.nodes.find(candidate => candidate?.__typename === 'ProjectV2SingleSelectField' && candidate.name === name);
+            const priorityField = field('Delivery priority');
+            if (!priorityField) throw new Error('Missing Delivery priority field');
+            const mustHave = priorityField.options.find(option => option.name === 'MUST_HAVE');
+            if (!mustHave) throw new Error('Missing MUST_HAVE Delivery priority option');
+
+            const item157 = issueItem(157);
+            if (!item157) throw new Error('#157 missing from Project after ensure step');
+            if (single(item157, 'Delivery priority') !== 'MUST_HAVE') {
+              await github.graphql(`
+                mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $project, itemId: $item, fieldId: $field,
+                    value: { singleSelectOptionId: $option }
+                  }) { projectV2Item { id } }
+                }
+              `, { project: project.id, item: item157.id, field: priorityField.id, option: mustHave.id });
+              core.info('#157 Delivery priority -> MUST_HAVE');
+            }
+
+            const reconcile = require(`${process.env.GITHUB_WORKSPACE}/trusted-main/.github/scripts/project-v2-reconcile.cjs`);
+            await reconcile({ github, context, core });
+
+            items = await allItems();
+            const finalRepoItems = repoItems();
+            const finalIssues = finalRepoItems.filter(item => item.content.__typename === 'Issue');
+            const finalIssue = number => finalIssues.find(item => item.content.number === number);
+            const failures = [];
+            const hierarchy = [];
+            for (const [child, expectedParent] of parentTargets) {
+              const item = finalIssue(child);
+              const actualParent = item?.content.parent?.repository?.nameWithOwner === repoFull ? item.content.parent.number : null;
+              hierarchy.push(`#${child}->#${actualParent ?? 'NONE'}`);
+              if (actualParent !== expectedParent) failures.push(`#${child}: parent expected #${expectedParent}, got ${actualParent ?? 'NONE'}`);
+            }
+
+            const fields157 = {
+              priority: single(finalIssue(157), 'Delivery priority'),
+              disposition: single(finalIssue(157), 'Discovery disposition'),
+              status: single(finalIssue(157), 'Status'),
+            };
+            const fields158 = {
+              priority: single(finalIssue(158), 'Delivery priority'),
+              disposition: single(finalIssue(158), 'Discovery disposition'),
+              status: single(finalIssue(158), 'Status'),
+            };
+            const fields159 = {
+              priority: single(finalIssue(159), 'Delivery priority'),
+              disposition: single(finalIssue(159), 'Discovery disposition'),
+              status: single(finalIssue(159), 'Status'),
+            };
+            if (JSON.stringify(fields157) !== JSON.stringify({ priority: 'MUST_HAVE', disposition: 'FOLLOW_UP', status: 'Todo' })) failures.push(`#157 fields ${JSON.stringify(fields157)}`);
+            if (JSON.stringify(fields158) !== JSON.stringify({ priority: 'MANDATORY', disposition: 'FOLLOW_UP', status: 'Todo' })) failures.push(`#158 fields ${JSON.stringify(fields158)}`);
+            if (JSON.stringify(fields159) !== JSON.stringify({ priority: 'MANDATORY', disposition: 'IN_SCOPE', status: 'In Progress' })) failures.push(`#159 fields ${JSON.stringify(fields159)}`);
+
+            const discoveryBlanks = finalIssues.filter(item => item.content.labels.nodes.some(label => label.name === 'discovery') && !single(item, 'Discovery disposition')).map(item => item.content.number);
+            const statusBlanks = finalRepoItems.filter(item => !single(item, 'Status')).map(item => `${item.content.__typename}#${item.content.number}`);
+            if (discoveryBlanks.length) failures.push(`discovery disposition blanks: ${discoveryBlanks.map(n => `#${n}`).join(', ')}`);
+            if (statusBlanks.length) failures.push(`status blanks: ${statusBlanks.join(', ')}`);
+
+            const rootPriorityBlanks = finalIssues.filter(item => !item.content.parent && !single(item, 'Delivery priority')).map(item => item.content.number);
+            const blockedAfter = await github.request('GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by', {
+              owner, repo, issue_number: 139, per_page: 100,
+              headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+            });
+            const blockers = blockedAfter.data.map(issue => issue.number).sort((a, b) => a - b);
+            for (const expected of desiredBlockers) if (!blockers.includes(expected)) failures.push(`#139 missing blocker #${expected}`);
+
+            const body = [
+              '<!-- pre-r2-native-project-audit -->',
+              `## Pre-R2 native Project audit: ${failures.length ? 'FAIL' : 'PASS'}`,
+              '',
+              `Hierarchy: ${hierarchy.join(', ')}`,
+              `#139 blocked by: ${blockers.map(n => `#${n}`).join(', ') || 'none'}`,
+              `#157: priority=${fields157.priority}, disposition=${fields157.disposition}, status=${fields157.status}`,
+              `#158: priority=${fields158.priority}, disposition=${fields158.disposition}, status=${fields158.status}`,
+              `#159: priority=${fields159.priority}, disposition=${fields159.disposition}, status=${fields159.status}`,
+              `Discovery-disposition blanks across Project: ${discoveryBlanks.length ? discoveryBlanks.map(n => `#${n}`).join(', ') : 'none'}`,
+              `Status blanks across Project: ${statusBlanks.length ? statusBlanks.join(', ') : 'none'}`,
+              `Root issues with blank Delivery priority requiring applicability review: ${rootPriorityBlanks.length ? rootPriorityBlanks.map(n => `#${n}`).join(', ') : 'none'}`,
+              '',
+              failures.length ? `Failures:\n${failures.map(failure => `- ${failure}`).join('\n')}` : 'All mechanically decidable pre-R2 metadata invariants passed. Root-priority blanks are surfaced rather than guessed because only applicable root planning nodes own an explicit priority decision.',
+            ].join('\n');
+            await github.rest.issues.createComment({ owner, repo, issue_number: 157, body });
+            if (failures.length) core.setFailed(failures.join('; '));
