@@ -14,7 +14,7 @@ REPO = os.environ.get("GITHUB_REPOSITORY", "jdoe-dev-159753/specgraph-reference-
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
 EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
 EVENT_NAME = os.environ.get("GITHUB_EVENT_NAME", "")
-CODEX_LOGIN_PREFIX = "chatgpt-codex-connector"
+CODEX_USER_ID = 199175422
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -93,8 +93,7 @@ def event_pr_number() -> int | None:
 
 
 def is_codex_review(review: dict) -> bool:
-    login = ((review.get("user") or {}).get("login") or "").lower()
-    return login.startswith(CODEX_LOGIN_PREFIX)
+    return (review.get("user") or {}).get("id") == CODEX_USER_ID
 
 
 def has_current_head_codex_review(reviews, head_sha: str) -> bool:
@@ -132,8 +131,9 @@ def main() -> int:
         scan_surface(kind, f"#{number} body", item.get("body") or "", failures)
 
     # Conversation and review comments are discussion, not controlled work-state
-    # descriptions. Review freshness is anchored to GitHub's native review.commit_id
-    # and pull_request.head.sha identities rather than prose or commit timestamps.
+    # descriptions. Review freshness is anchored to GitHub's native review.commit_id,
+    # immutable Codex bot user id, and pull_request.head.sha identities rather than
+    # prose, mutable account names, or commit timestamps.
     pr_number = event_pr_number()
     if pr_number is not None:
         require_current_head_codex_review(pr_number, failures)
