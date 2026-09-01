@@ -19,8 +19,8 @@ alt unauthenticated
 else authenticated
   Boundary -> Analysis : listHistory(customerId, operator)
   Analysis -> History : listByCustomer(customerId)
-  History -> Adapter : JpaAnalysisHistoryAdapter
-  Adapter -> DB : JDBC SELECT analysis_history
+  History -> Adapter : JdbcAnalysisHistoryAdapter
+  Adapter -> DB : Spring JDBC SELECT analysis_history
   DB --> Adapter : persisted analyses
   Adapter --> History : AnalysisHistoryEntry[]
   History --> Analysis : AnalysisHistoryEntry[]
@@ -31,6 +31,6 @@ end
 
 note right of History
   The application port returns project-owned AnalysisHistoryEntry values;
-  JPA rows do not cross the persistence boundary.
+  persistence row mappings do not cross the adapter boundary.
 end note
 @enduml

@@ -1,6 +1,15 @@
 spring:
   application:
     name: specgraph-reference-app
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/specgraph}
+    username: ${SPRING_DATASOURCE_USERNAME:specgraph}
+    password: ${SPRING_DATASOURCE_PASSWORD:specgraph}
+  flyway:
+    enabled: true
+    validate-migration-naming: true
+specgraph:
+  source-time-zone: ${SPECGRAPH_SOURCE_TIME_ZONE:UTC}
 management:
   endpoints:
     web:

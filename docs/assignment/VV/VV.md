@@ -52,11 +52,11 @@ Use for project-owned domain values, structured result validation, deterministic
 
 ### Port and contract verification
 
-Each stable project-owned port receives contract tests that can run against the deterministic baseline adapter and the production-like adapter. The purpose is substitution safety: changing `SyntheticActivityAdapter` to JPA or deterministic analysis to a live provider must not change the application contract.
+Each stable project-owned port receives contract tests that can run against the deterministic baseline adapter and the production-like adapter. The purpose is substitution safety: changing `SyntheticActivityAdapter` to a PostgreSQL-backed adapter or deterministic analysis to a live provider must not change the application contract.
 
 ### Integration verification
 
-Use real infrastructure at boundaries where the design depends on infrastructure semantics: Spring Security, HTTP serialization, JPA/Flyway/PostgreSQL, pgvector retrieval and analysis-history persistence. Integration tests verify boundaries, not framework internals.
+Use real infrastructure at boundaries where the design depends on infrastructure semantics: Spring Security, HTTP serialization, Spring JDBC/Flyway/PostgreSQL, pgvector retrieval and analysis-history persistence. Integration tests verify boundaries, not framework internals.
 
 ### Acceptance verification
 
@@ -66,7 +66,7 @@ The dashboard criteria `AC-CUST-001`, `AC-ACT-001`, `AC-ACT-002` and `AC-RISK-00
 
 ### Architecture verification
 
-Mechanically check dependency direction and forbidden coupling: project-owned domain/application contracts must not depend on Spring/JPA/provider-specific types, and adapter substitution must remain possible behind the declared ports. Spring Modulith/architecture checks are executable evidence for the modular-monolith boundary, not a substitute for behavioral tests.
+Mechanically check dependency direction and forbidden coupling: project-owned domain/application contracts must not depend on Spring, JDBC or provider-specific types, and adapter substitution must remain possible behind the declared ports. Spring Modulith/architecture checks are executable evidence for the modular-monolith boundary, not a substitute for behavioral tests.
 
 ### Failure-path verification
 
@@ -110,7 +110,7 @@ A human reviewer validates concerns that automation cannot prove economically: d
 
 Implementation PRs satisfy obligations by adding executable evidence carrying the stable obligation/requirement IDs. Until that happens, generated current-status views shall report the obligation as missing/pending from executable evidence. The durable strategy remains unchanged merely because a test temporarily fails or passes.
 
-The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `CustomerActivityPort`, `AnalysisHistoryPort`, authenticated HTTP boundaries, JPA/PostgreSQL substitution and the Compose topology.
+The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `CustomerActivityPort`, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology.
 
 ![Verification evidence flow](diagrams/verification-evidence-flow.svg)
 

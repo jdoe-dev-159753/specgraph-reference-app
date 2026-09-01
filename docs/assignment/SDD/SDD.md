@@ -4,7 +4,7 @@
 **Design map:** [`design-map.yaml`](design-map.yaml)  
 **Normative requirements:** [`CAA-SRS-001`](../SRS/SRS.md)  
 **Machine-readable requirements:** [`requirements.yaml`](../SRS/requirements.yaml)  
-**Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md), [`ADR-006`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md)  
+**Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md), [`ADR-006`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md), [`ADR-007`](../ADR/ADR-007-spring-jdbc-relational-adapters.md)  
 **Verification strategy:** [`CAA-VV-001`](../VV/VV.md)
 
 This document is the canonical human-readable Software Design Description for the reference application. It is intended to be read end-to-end. [`design-map.yaml`](design-map.yaml) remains the machine-readable requirement-to-design mapping. PlantUML and Graphviz/DOT text files in [`diagrams/`](diagrams/) are the maintainable semantic sources for UML and architecture figures; rendered SVG files are generated views embedded below.
@@ -16,9 +16,9 @@ The system is an operator-facing Customer Activity Analytics application. A cust
 At the highest level, the architecture has four concerns before any package-level detail matters:
 
 1. **Operator interaction:** a browser-based React UI exposes customer review and analysis workflows.
-2. **Application boundary:** a protected HTTP/JSON API mediates operator-facing capabilities.
+2. **Application boundary:** protected Spring MVC adapters inside their owning application modules mediate operator-facing capabilities.
 3. **Domain/application core:** project-owned contracts and ports define customer/activity, risk, policy grounding, analysis, and history behavior independently of infrastructure choices.
-4. **Infrastructure adapters:** synthetic/JPA activity adapters, static/pgvector policy adapters, deterministic/live model adapters, history persistence, and authentication infrastructure implement those ports without becoming the application model.
+4. **Infrastructure adapters:** synthetic/Spring-JDBC activity adapters, static/pgvector policy adapters, deterministic/live model adapters, history persistence, and authentication infrastructure implement those ports without becoming the application model.
 
 ![Figure 1 — Architectural context schematic](diagrams/system-context.svg)
 
@@ -48,7 +48,7 @@ Detailed Sequence diagrams remain available as supplementary design sources wher
 
 - [`CAA-SRS-001`](../SRS/SRS.md) owns normative requirements, invariants, assumptions and acceptance criteria.
 - [`requirements.yaml`](../SRS/requirements.yaml) owns machine-readable requirement identity, provenance and acceptance links.
-- [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md), and [`ADR-006`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md) own independently reviewable architecture decisions.
+- [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md), [`ADR-006`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md), and [`ADR-007`](../ADR/ADR-007-spring-jdbc-relational-adapters.md) own independently reviewable architecture decisions.
 - [`design-map.yaml`](design-map.yaml) owns the current mapping from requirements to design elements, ports, adapters, ADRs and delivery rings.
 - PlantUML and Graphviz/DOT sources in [`diagrams/`](diagrams/) own diagram semantics; rendered SVG files are generated views.
 - implementation and executable verification become authoritative for their concrete behavior once introduced, but do not silently rewrite requirements or ADR rationale.
@@ -57,13 +57,19 @@ If code diverges from this map, the divergence must be reconciled by changing th
 
 ## Application module architecture
 
-The backend implementation is one Spring Boot modular monolith with four application modules: `identity`, `customer`, `risk`, and `analysis`. The package view below is explicitly a UML Package diagram. It uses fully qualified package labels such as `analysis.application` and `analysis.adapter.out.model` rather than context-dependent abbreviations such as `application` or `out/ai` whose meaning disappears as soon as the enclosing box is cropped from the page.
+The backend implementation is one Spring Boot modular monolith with exactly four Spring Modulith application modules: `identity`, `customer`, `risk`, and `analysis`. Their direct Java packages under `dev.specgraph.reference` are the actual module bases and are therefore part of the architecture contract, not merely a folder convention.
 
-Hexagonal dependency direction is strict: adapter packages depend inward on project-owned domain/application contracts. Spring MVC, Spring Security, JPA/Hibernate, PostgreSQL/pgvector and Spring AI remain outside the application core.
+The package structure intentionally stays shallow. Public application contracts and small application/domain values may live in a module base package; activated infrastructure adapters live in descriptive sub-packages of the module that owns them, for example `customer.web` and `customer.persistence`. The design does not manufacture `application/domain/adapter/in/out` namespaces everywhere merely to reproduce a textbook diagram. Detailed hexagonal roles belong in the component/port views and in project-owned interfaces.
+
+The current public cross-module direction required by the customer-review contract is `customer -> risk`: `CustomerSnapshot` includes the public `RiskEvidence` value owned by the risk module. Analysis may depend on customer-facing application contracts for orchestration. Reverse infrastructure dependencies are prohibited.
+
+Spring Modulith verification must both validate the graph and ratchet its identity: the detected module identifiers must be exactly `identity`, `customer`, `risk`, and `analysis`. A new direct top-level `web`, `persistence`, `common`, or similar package must therefore fail architecture verification rather than silently becoming a fifth valid module.
+
+Hexagonal dependency direction remains strict: adapter packages depend inward on project-owned domain/application contracts. Spring MVC, Spring Security, Spring JDBC, PostgreSQL/pgvector and Spring AI remain outside those contracts even when their adapters physically live inside an owning module package.
 
 ![Figure 2a — UML Package diagram — application module architecture](diagrams/package-modules.svg)
 
-**Figure 2a — UML Package diagram — application module architecture.** Packages are UML namespaces; dashed arrows are dependencies. The expanded labels make package identity explicit while preserving the inward dependency rule.
+**Figure 2a — UML Package diagram — Spring Modulith application modules.** The four direct packages are the real module bases. Customer-owned web and persistence adapters remain nested inside the customer module, while the cross-module dependency `customer -> risk` follows the public `RiskEvidence` contract. Hexagonal role detail is deliberately not encoded as fictional package depth.
 
 [PlantUML source](diagrams/package-modules.puml)
 
@@ -81,19 +87,21 @@ The inception document deliberately selected three GoF patterns and warned again
 
 | Pattern | Role in this design | Concrete examples |
 | --- | --- | --- |
-| **Adapter** | Translate infrastructure/framework/provider APIs into application-owned ports and contracts | `SyntheticActivityAdapter`, `JpaCustomerActivityAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisStub`, `SpringAiAnalysisAdapter`, `JpaAnalysisHistoryAdapter` |
-| **Strategy** | Select interchangeable behavior behind one stable port without provider/storage branching in the application core | synthetic vs JPA activity, static vs pgvector policy retrieval, deterministic vs live model implementation |
-| **Facade / application service** | Expose a coarse-grained use case while hiding orchestration across multiple ports | analysis application service coordinating customer context, policy retrieval, model execution, result validation and history persistence |
+| **Adapter** | Translate infrastructure/framework/provider APIs into application-owned ports and contracts | `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `SyntheticActivityAdapter`, `JdbcCustomerActivityAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisStub`, `SpringAiAnalysisAdapter`, `JdbcAnalysisHistoryAdapter` |
+| **Strategy** | Select interchangeable behavior behind one stable port without provider/storage branching in the application core | synthetic vs Spring-JDBC activity, static vs pgvector policy retrieval, deterministic vs live model implementation |
+| **Facade / application service** | Expose a coarse-grained use case while hiding orchestration across multiple ports | customer-review service for the read slice; analysis application service coordinating customer context, policy retrieval, model execution, result validation and history persistence |
 
-This mapping follows the reuse/pattern blueprint in [`Inception.md`](../Inception/Inception.md#12-reuse-first-and-restrained-patterns) and is reflected in [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md) and [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md). Composition, constructor injection, records/final classes and framework-supplied Repository abstractions remain implementation techniques; they are not promoted to additional GoF patterns merely to inflate the vocabulary.
+This mapping follows the reuse/pattern blueprint in [`Inception.md`](../Inception/Inception.md#12-reuse-first-and-restrained-patterns) and is reflected in [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), and the relational adapter refinement in [`ADR-007`](../ADR/ADR-007-spring-jdbc-relational-adapters.md). Composition, constructor injection, records/final classes and framework-supplied data-access primitives remain implementation techniques; they are not promoted to additional GoF patterns merely to inflate the vocabulary.
 
 ## Components and interfaces
 
-The component view makes provided/required seams explicit. The web client requires the protected HTTP/JSON surface. Inside the backend, application modules require project-owned outbound ports (`CustomerActivityPort`, `AnalysisModelPort`, `PolicyKnowledgePort`, `AnalysisHistoryPort`); replaceable adapters provide those ports. Operator-facing HTTP code depends on coarse-grained application use cases/facades rather than coordinating persistence, retrieval and model adapters itself.
+The component view makes provided/required seams explicit. The web client requires the protected HTTP/JSON surface, but HTTP is an adapter role rather than a horizontal application module. `CustomerReviewHttpAdapter` lives inside `customer` and drives the customer-review use case; the R3+ `AnalysisHttpAdapter` lives inside `analysis` and drives analysis/history use cases. The R4 Spring Security boundary supplies authenticated operator context across those protected routes through the `identity` module.
+
+Inside the backend, application modules require project-owned outbound ports (`CustomerActivityPort`, `AnalysisModelPort`, `PolicyKnowledgePort`, `AnalysisHistoryPort`); replaceable adapters provide those ports. Operator-facing HTTP code depends on coarse-grained application use cases/facades rather than coordinating persistence, retrieval and model adapters itself.
 
 ![Figure 3 — UML Component diagram — application components and interfaces](diagrams/component-topology.svg)
 
-**Figure 3 — UML Component diagram — application components and interfaces.** Components and interfaces show structural dependencies across the React client, protected HTTP boundary, application modules, and replaceable outbound adapters. Transport is labelled only when the relation crosses a real runtime boundary; the project-owned ports are in-process interfaces.
+**Figure 3 — UML Component diagram — application components and interfaces.** Components and interfaces show the four application modules, module-owned inbound HTTP adapters, protected security boundary, and replaceable outbound adapters. Transport is labelled only when the relation crosses a real runtime boundary; project-owned ports are in-process interfaces.
 
 [PlantUML source](diagrams/component-topology.puml)
 
@@ -103,7 +111,7 @@ The stable application contracts are `CustomerSnapshot`, project-owned activity/
 
 ![Figure 4a — UML Class diagram — project-owned application contracts](diagrams/domain-contracts.svg)
 
-**Figure 4a — UML Class diagram — project-owned application contracts.** Stable customer-review, analysis and history contracts. Persistence relations, JPA entities and provider response types are deliberately absent from these contracts.
+**Figure 4a — UML Class diagram — project-owned application contracts.** Stable customer-review, analysis and history contracts. Persistence row mappings and provider response types are deliberately absent from these contracts.
 
 [PlantUML source](diagrams/domain-contracts.puml)
 
@@ -111,7 +119,7 @@ The second Class diagram answers a different question: how source persistence co
 
 ![Figure 4b — UML Class diagram — source-to-application mapping](diagrams/source-contract-mapping.svg)
 
-**Figure 4b — UML Class diagram — source-to-application mapping.** Adapter mapping from source transaction/risk concepts into `ActivityProjection` and `RiskEvidence`. Source/JPA relation classes stop at the adapter boundary and never become durable members of `CustomerSnapshot`.
+**Figure 4b — UML Class diagram — source-to-application mapping.** Adapter mapping from source transaction/risk concepts into `ActivityProjection` and `RiskEvidence`. Source/persistence row types stop at the Spring JDBC adapter boundary and never become durable members of `CustomerSnapshot`.
 
 [PlantUML source](diagrams/source-contract-mapping.puml)
 
@@ -125,7 +133,7 @@ The relational view is an entity-relationship view, not a UML Class diagram. It 
 
 [PlantUML source](diagrams/relational-schema.puml)
 
-The selected relational read path is singular: `CustomerActivityPort` is implemented by `JpaCustomerActivityAdapter`, which maps source customer/activity/risk relations into project-owned `CustomerSnapshot`, `ActivityProjection`, and `RiskEvidence` contracts. The `risk` application module does not introduce a competing persistence adapter for the same source risk evidence.
+The selected relational read path is singular: `CustomerActivityPort` is implemented by `JdbcCustomerActivityAdapter`, which uses Spring Framework `JdbcClient` to execute explicit PostgreSQL queries and maps source customer/activity/risk rows into project-owned `CustomerSnapshot`, `ActivityProjection`, and `RiskEvidence` contracts. Flyway remains the sole schema/migration authority. The `risk` application module owns the public `RiskEvidence` contract but does not introduce a competing persistence adapter for the same source risk rows. This access-layer choice is controlled by [`ADR-007`](../ADR/ADR-007-spring-jdbc-relational-adapters.md).
 
 ## Customer review behavior
 
@@ -133,7 +141,7 @@ For workflow-level behavior the SDD uses UML Activity diagrams with ActivityPart
 
 ![Figure 6 — UML Activity diagram — authenticated customer review](diagrams/activity-customer-review.svg)
 
-**Figure 6 — UML Activity diagram — authenticated customer review.** Swimlanes separate operator, React UI, security/HTTP boundary, customer/risk application and activity adapter responsibilities. Authentication rejection, synthetic-versus-relational substitution, unknown-customer handling and successful activity/risk rendering remain ordered and explicit.
+**Figure 6 — UML Activity diagram — authenticated customer review.** Swimlanes separate operator, React UI, security/customer-HTTP boundary, customer application and activity adapter responsibilities. Authentication rejection, synthetic-versus-relational substitution, unknown-customer handling and successful activity/risk rendering remain ordered and explicit. The HTTP adapter is owned by the customer module; risk evidence crosses only as the public `RiskEvidence` contract.
 
 [PlantUML source](diagrams/activity-customer-review.puml) · [Supplementary Sequence diagram](diagrams/sequence-customer-review.svg)
 
@@ -152,6 +160,8 @@ No relevant policy evidence terminates the successfully grounded flow with an ex
 ## Analysis history review
 
 Authenticated operators can list and inspect prior analyses through `AnalysisHistoryPort`. The read contract is `AnalysisHistoryEntry`, which carries analysis/customer identity, generating operator, generation time, structured result and evidence provenance required by `AC-HIST-002`. `AnalysisHistoryCreateCommand` is the separate write input and intentionally lacks the generated analysis identity.
+
+The relational implementation planned for the completed persistence-bearing system is `JdbcAnalysisHistoryAdapter` behind the same application-owned port. It shares Spring JDBC/Flyway/PostgreSQL infrastructure with the R2 activity adapter without introducing an ORM lifecycle into the analysis module.
 
 ![Figure 8 — UML Activity diagram — analysis history review](diagrams/activity-history-review.svg)
 
@@ -196,7 +206,7 @@ Communication semantics are explicit where known:
 - browser ↔ embedded Tomcat: HTTP through the host-published checkpoint port (R0 `8080`, R1 `8081` by default; container port `8080` in both cases);
 - embedded Tomcat ↔ built React assets: same-process static-resource serving from the executable JAR, with no network transport;
 - React browser code ↔ Spring MVC `/api/*`: same-origin HTTP to the same Tomcat process;
-- Spring Boot ↔ PostgreSQL/pgvector: JDBC/PostgreSQL protocol over private TCP when the relational adapter is activated in R2+;
+- Spring Boot ↔ PostgreSQL/pgvector: JDBC/PostgreSQL protocol over private TCP when a relational/vector adapter is activated in R2+;
 - Spring Boot ↔ optional external AI provider: HTTPS provider API when explicitly configured;
 - module/port interactions within the modular monolith: in-process calls.
 
@@ -218,7 +228,7 @@ The ring semantics are:
 
 - **R0 — deployable hollow shell:** Java/Spring/React deployment shell, application modules, project-owned contracts and replaceable ports/adapters. R0 deliberately carries no business-use-case acceptance obligation;
 - **R1 — mandatory synthetic customer review:** first acceptance of customer search, CARD/PAYMENT/CRYPTO activity review and source-derived risk evidence on deterministic synthetic data. Authentication is not an R1 gate;
-- **R2 — relational substitution:** replace the synthetic activity implementation with JPA/PostgreSQL/Flyway/Testcontainers behind `CustomerActivityPort`; no new operator use case is invented merely because the adapter becomes realistic;
+- **R2 — relational substitution:** replace the synthetic activity implementation with Spring JDBC/PostgreSQL/Flyway/Testcontainers behind `CustomerActivityPort`; no new operator use case is invented merely because the adapter becomes realistic;
 - **R3 — mandatory deterministic analysis:** first acceptance of requesting analysis and producing the mandatory structured risk level/findings/recommendations through the existing provider-neutral model port;
 - **R4 — MUST_HAVE closure:** activate multi-operator authentication/security, relevant-policy retrieval/RAG, completed-analysis persistence and history review. Optional live provider integration remains behind the existing ports;
 - **R5 — hardening/demo:** reliability, observability, NICE_TO_HAVE differentiation and demo polish without changing the established boundaries.
@@ -246,16 +256,17 @@ A later ring substitutes infrastructure behind stable seams. It does not introdu
 
 ## ADR consistency
 
-The current design remains consistent with the six accepted architecture decisions:
+The current design remains consistent with the seven accepted architecture decisions:
 
 - [`ADR-001 — Modular monolith with hexagonal boundaries`](../ADR/ADR-001-modular-monolith-hexagonal.md);
 - [`ADR-002 — Provider-neutral analysis`](../ADR/ADR-002-provider-neutral-analysis.md);
 - [`ADR-003 — PostgreSQL + pgvector persistence`](../ADR/ADR-003-postgresql-pgvector-persistence.md);
 - [`ADR-004 — Baseline Java/Spring/React web stack`](../ADR/ADR-004-baseline-web-stack.md);
 - [`ADR-005 — Prebuilt single-image reviewer packaging`](../ADR/ADR-005-prebuilt-demo-container-packaging.md);
-- [`ADR-006 — Compose OCI and multi-platform distribution`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md).
+- [`ADR-006 — Compose OCI and multi-platform distribution`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md);
+- [`ADR-007 — Spring JDBC relational adapters`](../ADR/ADR-007-spring-jdbc-relational-adapters.md).
 
-The contract refinements made during design review, including the split between `AnalysisHistoryCreateCommand` and `AnalysisHistoryEntry`, refine the application design without invalidating those decisions. The explicit Adapter/Strategy/Facade mapping restores inception intent inside the accepted architectural decisions, while ADR-005 separately records the concrete packaging boundary because moving from development-process containers to one executable-JAR runtime is a durable deployment decision rather than mere terminology.
+The contract refinements made during design review, including the split between `AnalysisHistoryCreateCommand` and `AnalysisHistoryEntry`, refine the application design without invalidating those decisions. The explicit Adapter/Strategy/Facade mapping restores inception intent inside the accepted architectural decisions; ADR-007 records the evidence-driven relational access-layer refinement without changing PostgreSQL or hexagonal ownership; ADR-001 now also ratchets the physical four-module Spring Modulith topology so transport/persistence roles cannot silently become horizontal application modules; and ADR-005 separately records the concrete packaging boundary because moving from development-process containers to one executable-JAR runtime is a durable deployment decision rather than mere terminology.
 
 ## Review criterion
 
@@ -263,11 +274,13 @@ A reviewer should be able to answer from this document, without reconstructing P
 
 - what system and operator context the architecture serves;
 - which figures are UML 2.5.1 diagrams and which are explicitly non-UML architecture schematics;
-- how the modular-monolith packages depend on each other;
+- why the executable Spring Modulith graph contains exactly `identity`, `customer`, `risk`, and `analysis`, and why HTTP/persistence remain module-owned adapter roles rather than horizontal modules;
+- how the modular-monolith packages depend on each other, including the accepted `customer -> risk` public-contract direction;
 - how the hexagonal core, ports, driving adapters and driven adapters relate;
 - where Adapter, Strategy and Facade/application-service roles actually occur and why they are not themselves the architectural style;
 - which contracts and ports are application-owned;
 - how the supplied relational schema and exact source types map into those contracts;
+- why Spring JDBC rather than an ORM owns the current relational adapter implementation and how Flyway remains schema authority;
 - how the principal successful and failure workflows execute;
 - where each network or persistence protocol actually occurs;
 - how one prebuilt Spring Boot image shape supports two simultaneously runnable reviewer checkpoints (R0 and R1) without adding a frontend runtime or routing tier;

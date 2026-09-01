@@ -8,7 +8,7 @@ import {
 type Activity = {
   transactionId: string
   type: 'CARD' | 'PAYMENT' | 'CRYPTO'
-  amount: number
+  amount: string
   currency: string
   status: string
   createdAt: string
@@ -16,6 +16,7 @@ type Activity = {
 }
 
 type RiskEvidence = {
+  assessmentId: string
   transactionId: string
   ruleId: string
   ruleName: string
@@ -27,10 +28,14 @@ type CustomerSnapshot = { customerId: string; activities: Activity[]; riskEviden
 type Request = { customerId: string; submission: number }
 
 const SEEDED_CUSTOMER = '11111111-1111-1111-1111-111111111111'
-const amountFormatter = new Intl.NumberFormat('en-CH', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
+
+function formatAmount(amount: string) {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(amount)
+  if (!match) return amount
+  const [, sign, integer, fraction = ''] = match
+  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, "'")
+  return `${sign}${grouped}.${fraction.padEnd(2, '0')}`
+}
 
 async function loadCustomer(request: Request): Promise<CustomerSnapshot> {
   const response = await fetch(`/api/customers/${request.customerId}`)
@@ -62,11 +67,11 @@ export default function App() {
         <Box>
           <Box sx={{ width: 52, height: 4, bgcolor: 'secondary.main', mb: 2 }} />
           <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: '0.14em', fontWeight: 700 }}>
-            Customer Care · R1
+            Customer Care · R2
           </Typography>
           <Typography variant="h3" component="h1" sx={{ mt: 0.25 }}>Customer Activity Analytics</Typography>
           <Typography color="text.secondary" sx={{ mt: 1, maxWidth: 820 }}>
-            Deterministic customer activity and risk evidence for the first mandatory review slice.
+            PostgreSQL-backed customer activity and source-shaped risk evidence through the same review contract.
           </Typography>
         </Box>
 
@@ -127,10 +132,10 @@ export default function App() {
                           <TableCell
                             align="right"
                             data-testid={`activity-${activityKey}-amount`}
-                            data-amount={String(activity.amount)}
+                            data-amount={activity.amount}
                             sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}
                           >
-                            {amountFormatter.format(activity.amount)}
+                            {formatAmount(activity.amount)}
                           </TableCell>
                           <TableCell data-testid={`activity-${activityKey}-currency`} sx={{ fontWeight: 600 }}>
                             {activity.currency}
@@ -169,8 +174,8 @@ export default function App() {
               <List dense disablePadding>
                 {customer.data.riskEvidence.map(evidence => (
                   <ListItem
-                    key={`${evidence.transactionId}-${evidence.ruleId}`}
-                    data-testid={`risk-evidence-${evidence.transactionId}-${evidence.ruleId}`}
+                    key={evidence.assessmentId}
+                    data-testid={`risk-evidence-${evidence.assessmentId}`}
                     divider
                     sx={{ px: 3, py: 1.5, display: 'flex', justifyContent: 'space-between', gap: 2 }}
                   >
@@ -179,7 +184,7 @@ export default function App() {
                       <Typography
                         variant="caption"
                         color="text.secondary"
-                        data-testid={`risk-evidence-${evidence.transactionId}-${evidence.ruleId}-time`}
+                        data-testid={`risk-evidence-${evidence.assessmentId}-time`}
                         data-triggered-at={evidence.triggeredAt}
                       >
                         {evidence.ruleId} · transaction {evidence.transactionId} · {new Date(evidence.triggeredAt).toLocaleString()}

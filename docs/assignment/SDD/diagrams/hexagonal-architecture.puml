@@ -27,10 +27,10 @@ PolicyPort -[hidden]down-> ModelPort
 ModelPort -[hidden]down-> HistoryPort
 
 package "Driven adapters" {
-  component "SyntheticActivityAdapter\nJpaCustomerActivityAdapter\n<<GoF Adapter>>" as ActivityAdapters
+  component "SyntheticActivityAdapter\nJdbcCustomerActivityAdapter\n<<GoF Adapter>>" as ActivityAdapters
   component "StaticPolicyAdapter\nPgVectorPolicyAdapter\n<<GoF Adapter>>" as PolicyAdapters
   component "DeterministicAnalysisStub\nSpringAiAnalysisAdapter\n<<GoF Adapter>>" as ModelAdapters
-  component "JpaAnalysisHistoryAdapter\n<<GoF Adapter>>" as HistoryAdapter
+  component "JdbcAnalysisHistoryAdapter\n<<GoF Adapter>>" as HistoryAdapter
 
   ActivityAdapters -[hidden]down-> PolicyAdapters
   PolicyAdapters -[hidden]down-> ModelAdapters
@@ -56,9 +56,9 @@ PolicyPort --> PolicyAdapters : interchangeable implementations
 ModelPort --> ModelAdapters : interchangeable implementations
 HistoryPort --> HistoryAdapter
 
-ActivityAdapters --> DB : JDBC when JPA selected
+ActivityAdapters --> DB : Spring JDBC when relational selected
 PolicyAdapters --> DB : JDBC/pgvector when selected
-HistoryAdapter --> DB : JDBC
+HistoryAdapter --> DB : Spring JDBC
 ModelAdapters ..> Provider : HTTPS when live adapter selected
 
 note bottom of Core

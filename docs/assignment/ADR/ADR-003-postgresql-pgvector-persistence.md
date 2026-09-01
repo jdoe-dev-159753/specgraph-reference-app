@@ -14,7 +14,7 @@ For a five-day reference application, operating separate persistence products wo
 
 Use PostgreSQL as the production-like relational store and enable pgvector for the RAG adapter.
 
-Persistence remains behind project-owned ports. JPA/Hibernate and Flyway implement relational adapters/migrations; pgvector is used only by the policy-knowledge adapter.
+Persistence remains behind project-owned ports. Flyway is the sole schema/migration authority. Project-owned relational adapters use the Spring JDBC access strategy selected by [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md); pgvector is used only by the policy-knowledge adapter.
 
 The relational model contains:
 
@@ -30,6 +30,7 @@ Synthetic/static adapters remain valid for earlier delivery rings, so PostgreSQL
 - one production-like data service supports relational and vector needs;
 - Flyway migrations provide an explicit schema history;
 - Testcontainers can exercise real PostgreSQL semantics in integration tests;
+- relational access does not grant an ORM authority over the Flyway-controlled schema;
 - vector-store choice remains behind `PolicyKnowledgePort`;
 - later replacement of pgvector does not change the analysis application contract.
 
@@ -44,6 +45,10 @@ Rejected because it adds an operational product without a source requirement or 
 ### In-memory database as the production-like target
 
 Rejected because it weakens fidelity to PostgreSQL behaviour and the supplied relational constraints; in-memory fakes remain useful behind ports for earlier slices/tests.
+
+### JPA/Hibernate as an implicit part of the store decision
+
+Superseded by [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md). PostgreSQL/pgvector and relational access technology are separate architectural dimensions: this ADR owns the persistent product/topology decision, while ADR-007 owns how project adapters access relational data.
 
 ## Requirement and invariant links
 

@@ -16,9 +16,9 @@ Analysis -> Activity : CustomerActivityPort.loadSnapshot
 alt R1 deterministic path
   Activity --> Analysis : SyntheticActivityAdapter → CustomerSnapshot
 else R2+ relational path
-  Activity -> DB : JPA / JDBC activity + risk queries
+  Activity -> DB : Spring JDBC activity + risk queries
   DB --> Activity : source rows
-  Activity --> Analysis : JpaCustomerActivityAdapter → CustomerSnapshot
+  Activity --> Analysis : JdbcCustomerActivityAdapter → CustomerSnapshot
 end
 
 == Policy grounding ==
@@ -26,7 +26,7 @@ Analysis -> Policy : PolicyKnowledgePort.retrieveRelevant
 alt offline baseline
   Policy --> Analysis : StaticPolicyAdapter → PolicyEvidence[]
 else R4 vector retrieval
-  Policy -> DB : pgvector query
+  Policy -> DB : pgvector retrieval through selected adapter technology
   DB --> Policy : corpus evidence
   Policy --> Analysis : PgVectorPolicyAdapter → PolicyEvidence[]
 end
@@ -43,7 +43,7 @@ end
 
 == History persistence ==
 Analysis -> History : AnalysisHistoryPort.persist
-History -> DB : JPA / JDBC INSERT
+History -> DB : Spring JDBC INSERT
 DB --> History : generated identity / failure
 History --> Analysis : AnalysisHistoryEntry / failure
 @enduml

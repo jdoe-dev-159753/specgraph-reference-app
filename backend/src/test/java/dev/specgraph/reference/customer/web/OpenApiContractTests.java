@@ -1,4 +1,4 @@
-package dev.specgraph.reference.web;
+package dev.specgraph.reference.customer.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -14,9 +14,9 @@ import org.junit.jupiter.api.Test;
 @Tag("VFY-CUSTOMER-READ-001")
 class OpenApiContractTests {
     @Test
-    void minimalR1CustomerReadContractIsValidAndCoversTheAcceptedBoundary() {
+    void r2CustomerReadContractIsValidAndPreservesExactDecimalAndTypedActivityFamilies() {
         URL contract = Thread.currentThread().getContextClassLoader().getResource("static/openapi.yaml");
-        assertThat(contract).as("packaged R1 OpenAPI contract").isNotNull();
+        assertThat(contract).as("packaged R2 OpenAPI contract").isNotNull();
 
         SwaggerParseResult result = new OpenAPIV3Parser().readLocation(contract.toExternalForm(), null, null);
         assertThat(result.getMessages()).as("OpenAPI parser diagnostics").isEmpty();
@@ -24,6 +24,7 @@ class OpenApiContractTests {
         OpenAPI api = result.getOpenAPI();
         assertThat(api).isNotNull();
         assertThat(api.getOpenapi()).startsWith("3.0");
+        assertThat(api.getInfo().getVersion()).isEqualTo("r2");
         assertThat(api.getPaths()).containsKey("/api/customers/{customerId}");
         var operation = api.getPaths().get("/api/customers/{customerId}").getGet();
         assertThat(operation).isNotNull();
@@ -50,6 +51,10 @@ class OpenApiContractTests {
                 "transactionId", "amount", "currency", "status", "createdAt"));
         assertThat(base.getProperties()).containsKeys(
                 "transactionId", "amount", "currency", "status", "createdAt");
+        Schema<?> amount = base.getProperties().get("amount");
+        assertThat(amount.getType()).isEqualTo("string");
+        assertThat(amount.getPattern()).isEqualTo("^-?\\d+(?:\\.\\d+)?$");
+        assertThat(String.valueOf(amount.getExample())).isEqualTo("248.50");
 
         assertActivityVariant(api, "CardActivity", "CARD", "CardDetails");
         assertActivityVariant(api, "PaymentActivity", "PAYMENT", "PaymentDetails");
@@ -63,7 +68,8 @@ class OpenApiContractTests {
 
         Schema<?> risk = api.getComponents().getSchemas().get("RiskEvidence");
         assertThat(risk.getRequired()).containsAll(Set.of(
-                "transactionId", "ruleId", "ruleName", "triggeredAt", "scoreContribution"));
+                "assessmentId", "transactionId", "ruleId", "ruleName", "triggeredAt", "scoreContribution"));
+        assertThat(risk.getProperties().get("assessmentId").getFormat()).isEqualTo("uuid");
     }
 
     private static void assertActivityVariant(OpenAPI api, String schemaName, String expectedType, String detailsSchema) {

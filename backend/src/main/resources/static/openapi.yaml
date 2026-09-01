@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Customer Activity Analytics API
-  version: r1
-  description: Minimal reviewer-facing contract for the R1 customer activity and source-risk read slice.
+  version: r2
+  description: Reviewer-facing contract for the R2 PostgreSQL-backed customer activity and source-risk read slice.
 paths:
   /api/customers/{customerId}:
     get:
@@ -60,8 +60,10 @@ components:
           type: string
           format: uuid
         amount:
-          type: number
-          description: Decimal monetary or asset amount. Currency/asset unit is carried separately.
+          type: string
+          pattern: '^-?\d+(?:\.\d+)?$'
+          example: '248.50'
+          description: Exact decimal monetary or asset amount serialized without binary floating-point loss. Currency/asset unit is carried separately.
         currency:
           type: string
         status:
@@ -135,8 +137,12 @@ components:
         exchangeName: { type: string, nullable: true }
     RiskEvidence:
       type: object
-      required: [transactionId, ruleId, ruleName, triggeredAt, scoreContribution]
+      required: [assessmentId, transactionId, ruleId, ruleName, triggeredAt, scoreContribution]
       properties:
+        assessmentId:
+          type: string
+          format: uuid
+          description: Stable identity of the persisted source risk assessment.
         transactionId:
           type: string
           format: uuid

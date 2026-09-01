@@ -16,42 +16,44 @@ package "Web client" {
 
 package "Spring Boot modular monolith" as Backend {
   component "Spring Security Boundary\nADP-AUTH-SPRING-001\nMUST_HAVE activation" as Auth
-  component "HTTP Adapter\nADP-HTTP-001\n<<GoF Adapter>>" as Http
 
-  component "Identity Module\nMOD-IDENTITY-001" as Identity
-  component "Customer Module\nMOD-CUSTOMER-001" as Customer
-  component "Risk Module\nMOD-RISK-001" as Risk
-  component "Analysis Module\nMOD-ANALYSIS-001\napplication-service facade" as Analysis
+  package "customer module" as CustomerModule {
+    component "Customer Review HTTP Adapter\nADP-CUST-HTTP-001\n<<GoF Adapter>>" as CustomerHttp
+    component "Customer Application\nMOD-CUSTOMER-001" as Customer
+    interface "CustomerActivityPort\nPRT-ACTIVITY-001\n<<Strategy seam>>" as ActivityPort
+  }
 
-  interface "CustomerActivityPort\nPRT-ACTIVITY-001\n<<Strategy seam>>" as ActivityPort
-  interface "PolicyKnowledgePort\nPRT-POLICY-001\n<<Strategy seam>>" as PolicyPort
-  interface "AnalysisModelPort\nPRT-MODEL-001\n<<Strategy seam>>" as ModelPort
-  interface "AnalysisHistoryPort\nPRT-HISTORY-001" as HistoryPort
+  package "risk module" as RiskModule {
+    component "Risk Contracts / Application\nMOD-RISK-001" as Risk
+  }
 
-  Identity -[hidden]right-> Customer
-  Customer -[hidden]right-> Risk
-  Risk -[hidden]right-> Analysis
+  package "analysis module" as AnalysisModule {
+    component "Analysis HTTP Adapter\nADP-ANALYSIS-HTTP-001\nR3+\n<<GoF Adapter>>" as AnalysisHttp
+    component "Analysis Application\nMOD-ANALYSIS-001\napplication-service facade" as Analysis
+    interface "PolicyKnowledgePort\nPRT-POLICY-001\n<<Strategy seam>>" as PolicyPort
+    interface "AnalysisModelPort\nPRT-MODEL-001\n<<Strategy seam>>" as ModelPort
+    interface "AnalysisHistoryPort\nPRT-HISTORY-001" as HistoryPort
+  }
 
-  ActivityPort -[hidden]right-> PolicyPort
-  ModelPort -[hidden]right-> HistoryPort
-  ActivityPort -[hidden]down-> ModelPort
-  PolicyPort -[hidden]down-> HistoryPort
+  package "identity module" as IdentityModule {
+    component "Identity Module\nMOD-IDENTITY-001" as Identity
+  }
 }
 
-package "Replaceable adapters" as Adapters {
+package "Replaceable outbound adapters" as Adapters {
   component "Synthetic Activity\nADP-ACT-SYN-001\nR0/R1\n<<GoF Adapter>>" as ActivitySynthetic
-  component "JPA Activity\nADP-ACT-JPA-001\nR2\n<<GoF Adapter>>" as ActivityJpa
+  component "Spring JDBC Activity\nADP-ACT-JDBC-001\nR2\n<<GoF Adapter>>" as ActivityJdbc
   component "Static Policy\nADP-POL-STATIC-001\npre-R4 seam\n<<GoF Adapter>>" as PolicyStatic
   component "pgvector Policy\nADP-POL-PGV-001\nR4\n<<GoF Adapter>>" as PolicyPg
   component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3\n<<GoF Adapter>>" as ModelDet
   component "Spring AI Model\nADP-MODEL-AI-001\nR4 optional\n<<GoF Adapter>>" as ModelAi
-  component "JPA Analysis History\nADP-HIST-JPA-001\nR4\n<<GoF Adapter>>" as HistoryJpa
+  component "Spring JDBC Analysis History\nADP-HIST-JDBC-001\nR4\n<<GoF Adapter>>" as HistoryJdbc
 
-  ActivitySynthetic -[hidden]right-> ActivityJpa
-  ActivityJpa -[hidden]right-> PolicyStatic
+  ActivitySynthetic -[hidden]right-> ActivityJdbc
+  ActivityJdbc -[hidden]right-> PolicyStatic
   PolicyStatic -[hidden]right-> PolicyPg
   ModelDet -[hidden]right-> ModelAi
-  ModelAi -[hidden]right-> HistoryJpa
+  ModelAi -[hidden]right-> HistoryJdbc
 }
 
 component "PostgreSQL + pgvector\nINF-DB-001\nR2+" as Db <<database>>
@@ -59,38 +61,41 @@ component "External AI provider" as Provider <<external>>
 
 Operator --> UI
 UI --> WebApi : HTTP/JSON
-WebApi --> Http : provided by
-Auth --> Http : operator context when R4 activated
+WebApi --> Auth : protected routes when R4 activated
+WebApi --> CustomerHttp : customer review route
+WebApi --> AnalysisHttp : analysis/history routes when activated
 Auth --> Identity
-Http --> Customer
-Http --> Risk
-Http --> Analysis : coarse-grained use case
+Auth --> CustomerHttp : authenticated operator context
+Auth --> AnalysisHttp : authenticated operator context
 
+CustomerHttp --> Customer
+Customer --> Risk : public RiskEvidence contract
 Customer --> ActivityPort
-Risk --> ActivityPort
-Analysis --> ActivityPort : customer context
+
+AnalysisHttp --> Analysis
+Analysis --> Customer : customer/activity context
 Analysis --> PolicyPort
 Analysis --> ModelPort
 Analysis --> HistoryPort
 
 ActivityPort --> ActivitySynthetic
-ActivityPort ..> ActivityJpa
+ActivityPort ..> ActivityJdbc
 PolicyPort --> PolicyStatic
 PolicyPort ..> PolicyPg
 ModelPort --> ModelDet
 ModelPort ..> ModelAi
-HistoryPort ..> HistoryJpa
+HistoryPort ..> HistoryJdbc
 
-ActivityJpa --> Db : JDBC
-PolicyPg --> Db : JDBC / pgvector
-HistoryJpa --> Db : JDBC
+ActivityJdbc --> Db : Spring JDBC
+PolicyPg --> Db : pgvector retrieval adapter
+HistoryJdbc --> Db : Spring JDBC
 ModelAi ..> Provider : HTTPS
 
 note bottom of Backend
-  UML Component diagram: components and provided/required interfaces show structural
-  dependencies. GoF Adapter labels identify boundary translation roles; Strategy seams
-  identify ports with interchangeable implementations; the analysis application service
-  acts as a Facade over orchestration. Structural presence does not imply first acceptance:
-  authentication is activated with the MUST_HAVE ring, not the mandatory R1 slice.
+  The four packages are the Spring Modulith application modules. HTTP is an adapter role,
+  not a fifth horizontal module: each inbound adapter lives inside the module whose use case
+  it drives. GoF Adapter labels identify boundary translation roles; Strategy seams identify
+  interchangeable implementations; the analysis application service acts as a Facade over
+  orchestration. Structural presence does not imply first acceptance.
 end note
 @enduml
