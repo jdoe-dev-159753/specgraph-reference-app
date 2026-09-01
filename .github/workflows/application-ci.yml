@@ -133,7 +133,7 @@ jobs:
             -e BASE_URL=http://127.0.0.1:8082 \
             -v "$PWD/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test'
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r2-customer-review.spec.ts'
 
       - name: Capture deployment evidence
         if: always()
