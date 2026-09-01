@@ -1,83 +1,42 @@
 @startuml
-title Figure 2a — UML Package diagram — application module architecture
+title Figure 2a — UML Package diagram — Spring Modulith application modules
 top to bottom direction
 skinparam packageStyle rectangle
 skinparam linetype polyline
-skinparam nodesep 20
-skinparam ranksep 34
+skinparam nodesep 35
+skinparam ranksep 45
 
-package "identity" as Identity {
-  package "identity.adapter.in.web" as IIn
-  package "identity.application" as IApp
-  package "identity.domain" as IDomain
-  package "identity.adapter.out.persistence" as IOut
-
-  IIn -[hidden]down-> IApp
-  IApp -[hidden]down-> IDomain
-  IDomain -[hidden]down-> IOut
+package "dev.specgraph.reference.identity\n<<application module>>" as Identity
+package "dev.specgraph.reference.risk\n<<application module>>" as Risk
+package "dev.specgraph.reference.customer\n<<application module>>" as Customer {
+  package "customer.web\n<<inbound adapter package>>" as CustomerWeb
+  package "customer.persistence\n<<outbound adapter package>>" as CustomerPersistence
 }
+package "dev.specgraph.reference.analysis\n<<application module>>" as Analysis
 
-package "customer" as Customer {
-  package "customer.adapter.in.web" as CIn
-  package "customer.application" as CApp
-  package "customer.domain" as CDomain
-  package "customer.adapter.out.activity" as COut
+Identity -[hidden]down-> Risk
+Risk -[hidden]down-> Customer
+Customer -[hidden]down-> Analysis
 
-  CIn -[hidden]down-> CApp
-  CApp -[hidden]down-> CDomain
-  CDomain -[hidden]down-> COut
-}
+Customer ..> Risk : public RiskEvidence contract
+Analysis ..> Customer : customer/activity application contracts
 
-package "risk" as Risk {
-  package "risk.adapter.in.web" as RIn
-  package "risk.application" as RApp
-  package "risk.domain" as RDomain
+note right of CustomerWeb
+  HTTP adapter is internal to the
+  customer application module.
+end note
 
-  RIn -[hidden]down-> RApp
-  RApp -[hidden]down-> RDomain
-}
-
-package "analysis" as Analysis {
-  package "analysis.adapter.in.web" as AIn
-  package "analysis.application" as AApp
-  package "analysis.domain" as ADomain
-  package "analysis.adapter.out.model" as AModel
-  package "analysis.adapter.out.knowledge" as AKnowledge
-  package "analysis.adapter.out.history" as AHistory
-
-  AIn -[hidden]down-> AApp
-  AApp -[hidden]down-> ADomain
-  ADomain -[hidden]down-> AModel
-  AModel -[hidden]down-> AKnowledge
-  AKnowledge -[hidden]down-> AHistory
-}
-
-Identity -[hidden]down-> Customer
-Customer -[hidden]down-> Risk
-Risk -[hidden]down-> Analysis
-
-IIn ..> IApp : uses
-IApp ..> IDomain : uses
-IOut ..> IApp : provides outbound adapter
-
-CIn ..> CApp : uses
-CApp ..> CDomain : uses
-COut ..> CApp : provides CustomerActivityPort adapter
-
-RIn ..> RApp : uses
-RApp ..> RDomain : uses
-RApp ..> CApp : requires customer activity contract
-
-AIn ..> AApp : uses
-AApp ..> ADomain : uses
-AApp ..> CApp : requires CustomerActivityPort
-AModel ..> AApp : provides AnalysisModelPort adapter
-AKnowledge ..> AApp : provides PolicyKnowledgePort adapter
-AHistory ..> AApp : provides AnalysisHistoryPort adapter
+note right of CustomerPersistence
+  Synthetic/JDBC persistence adapters
+  provide CustomerActivityPort here.
+end note
 
 note bottom
-  UML Package diagram: packages are namespaces and dashed arrows are dependencies.
-  Fully qualified package labels remain explicit. Modules and their internal package
-  layers are stacked vertically so the figure remains readable at normal GitHub width.
+  UML Package diagram: the four direct packages are the actual Spring Modulith module
+  bases. Adapter sub-packages remain inside their owning module. Detailed hexagonal
+  Adapter/Strategy/Facade roles are shown in the component/port views rather than by
+  inventing package-per-layer namespaces that do not exist in the implementation.
+  Architecture verification ratchets the exact module identifiers:
+  identity, customer, risk, analysis.
 end note
 @enduml
