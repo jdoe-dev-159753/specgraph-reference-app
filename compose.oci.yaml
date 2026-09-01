@@ -2,7 +2,7 @@ name: specgraph-demo
 
 services:
   r0:
-    image: ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0
+    image: ${APP_R0_IMAGE:-ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0}
     pull_policy: always
     restart: unless-stopped
     ports:
@@ -15,7 +15,7 @@ services:
       start_period: 5s
 
   r1:
-    image: ghcr.io/jdoe-dev-159753/specgraph-reference-app:r1
+    image: ${APP_R1_IMAGE:-ghcr.io/jdoe-dev-159753/specgraph-reference-app:r1}
     pull_policy: always
     restart: unless-stopped
     ports:
@@ -43,14 +43,14 @@ services:
       start_period: 5s
 
   r2:
-    image: ghcr.io/jdoe-dev-159753/specgraph-reference-app:r2
+    image: ${APP_R2_IMAGE:-ghcr.io/jdoe-dev-159753/specgraph-reference-app:r2}
     pull_policy: always
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/specgraph
       SPRING_DATASOURCE_USERNAME: specgraph
       SPRING_DATASOURCE_PASSWORD: specgraph
-      SPECGRAPH_SOURCE_TIME_ZONE: "${SPECGRAPH_SOURCE_TIME_ZONE:-UTC}"
+      SPECGRAPH_SOURCE_TIME_ZONE: UTC
     depends_on:
       postgres:
         condition: service_healthy
