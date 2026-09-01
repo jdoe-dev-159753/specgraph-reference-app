@@ -37,6 +37,7 @@ jobs:
       R1_PORT: '8081'
       R2_PORT: '8082'
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      R1_CHECKPOINT_SHA: e2a41694290ef8b03e4485ca1a2fe2c5664d1941
     steps:
       - name: Clean container-owned outputs from previous runs
         run: |
@@ -63,9 +64,17 @@ jobs:
       - name: Checkout immutable R1 checkpoint for compatibility evidence
         uses: actions/checkout@v7
         with:
-          ref: demo/r1
+          ref: ${{ env.R1_CHECKPOINT_SHA }}
           path: .checkpoints/r1
           persist-credentials: false
+
+      - name: Assert exact R1 checkpoint revision
+        working-directory: .checkpoints/r1
+        run: |
+          checked_out_sha="$(git rev-parse HEAD)"
+          echo "Expected R1 checkpoint SHA: $R1_CHECKPOINT_SHA"
+          echo "Checked-out R1 SHA:         $checked_out_sha"
+          test "$checked_out_sha" = "$R1_CHECKPOINT_SHA"
 
       - name: Verify backend against Testcontainers PostgreSQL
         run: >-
@@ -101,7 +110,7 @@ jobs:
       - name: Build exact-head R2 and archived R1 compatibility images
         run: |
           r2_image="specgraph-reference-app:r2-ci-${SOURCE_SHA}"
-          r1_image="specgraph-reference-app:r1-compat-${SOURCE_SHA}"
+          r1_image="specgraph-reference-app:r1-compat-${R1_CHECKPOINT_SHA}"
           docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$r2_image" .
           docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=.checkpoints/r1 -t "$r1_image" .
           echo "APP_R2_IMAGE=$r2_image" >> "$GITHUB_ENV"
@@ -195,6 +204,7 @@ jobs:
         if: always()
         run: |
           mkdir -p e2e/test-results
+          printf 'r2_source_sha=%s\nr1_checkpoint_sha=%s\n' "$SOURCE_SHA" "$R1_CHECKPOINT_SHA" > e2e/test-results/provenance.txt
           docker compose ps > e2e/test-results/compose-ps.txt 2>&1 || true
           docker compose logs --no-color r2 postgres > e2e/test-results/r2-compose.log 2>&1 || true
           docker compose logs --no-color r1 > e2e/test-results/r1-compose.log 2>&1 || true
@@ -203,7 +213,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r2-postgresql-and-r1-compat-evidence-${{ env.SOURCE_SHA }}
+          name: r2-${{ env.SOURCE_SHA }}-r1-${{ env.R1_CHECKPOINT_SHA }}-evidence
           path: |
             backend/target/surefire-reports
             e2e/playwright-report
