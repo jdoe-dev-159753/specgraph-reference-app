@@ -35,7 +35,10 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: .workgraph-trusted
           persist-credentials: false
-      - name: Reject competing prose work-state
+      - name: Verify guard semantics
+        working-directory: .workgraph-trusted
+        run: python3 -m unittest scripts/test_work_graph_guard.py
+      - name: Reject competing prose work-state or stale review requests
         working-directory: .workgraph-trusted
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
