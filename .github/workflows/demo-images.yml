@@ -12,6 +12,10 @@ on:
       - '.github/workflows/demo-images.yml'
   workflow_dispatch:
 
+concurrency:
+  group: demo-images-publication
+  cancel-in-progress: false
+
 permissions:
   contents: read
   packages: write
@@ -222,12 +226,31 @@ jobs:
           echo "R1_DIGEST=$r1_digest" >> "$GITHUB_ENV"
           echo "R2_DIGEST=$r2_digest" >> "$GITHUB_ENV"
 
-      - name: Publish runtime Compose application as OCI artifact
+      - name: Publish runtime Compose application from immutable checkpoint images
         working-directory: packaging
         run: |
+          export APP_R0_IMAGE="$APP_PACKAGE:$R0_IMMUTABLE"
+          export APP_R1_IMAGE="$APP_PACKAGE:$R1_IMMUTABLE"
+          export APP_R2_IMAGE="$APP_PACKAGE:$R2_IMMUTABLE"
+
           docker compose -f compose.oci.yaml publish -y --resolve-image-digests "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
           docker compose -f compose.oci.yaml publish -y --resolve-image-digests "$COMPOSE_PACKAGE:demo"
           docker buildx imagetools inspect "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
+
+      - name: Assert Compose OCI provenance resolves this run's image digests
+        working-directory: packaging
+        run: |
+          verify_compose_ref() {
+            ref="$1"
+            images="$(docker compose -f "oci://$ref" config --images)"
+            printf 'Resolved images for %s:\n%s\n' "$ref" "$images"
+            printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R0_DIGEST"
+            printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R1_DIGEST"
+            printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R2_DIGEST"
+          }
+
+          verify_compose_ref "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
+          verify_compose_ref "$COMPOSE_PACKAGE:demo"
 
       - name: Prove remote Compose OCI deployment pulls from registry
         working-directory: packaging
@@ -271,7 +294,7 @@ jobs:
             printf '| R2 image | `%s` | `%s` | `%s` |\n' "$R2_SHA" "$GITHUB_SHA" "$R2_DIGEST"
             printf '| Compose OCI | R0 + R1 + R2 + PostgreSQL | `%s` | `%s:%s` |\n' "$GITHUB_SHA" "$COMPOSE_PACKAGE" "$COMPOSE_IMMUTABLE"
             echo
-            echo 'Published application image manifests contain both `linux/amd64` and `linux/arm64`; the Compose OCI artifact resolves runtime image digests.'
+            echo 'Published application image manifests contain both `linux/amd64` and `linux/arm64`; both Compose OCI tags are mechanically checked against this run\'s application-image digests.'
             echo
             printf 'Reviewer command: `docker compose -f oci://%s:demo up -d --wait`\n' "$COMPOSE_PACKAGE"
           } >> "$GITHUB_STEP_SUMMARY"
