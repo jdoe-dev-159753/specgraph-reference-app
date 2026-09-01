@@ -31,11 +31,13 @@ Use Spring Modulith to make module boundaries visible and mechanically checkable
 
 Hexagonal architecture is the architectural style. The GoF patterns below are implementation/design roles used inside that style; they do not define the architecture themselves.
 
-- **Adapter** — concrete infrastructure integrations adapt framework/provider/persistence APIs to project-owned ports. Examples include `SyntheticActivityAdapter`, `JpaCustomerActivityAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisStub`, `SpringAiAnalysisAdapter`, and `JpaAnalysisHistoryAdapter`.
-- **Strategy** — where a port has interchangeable implementations, dependency injection/configuration selects one strategy without branching provider logic through the application core. The clearest examples are `AnalysisModelPort`, `PolicyKnowledgePort`, and the synthetic/JPA alternatives behind `CustomerActivityPort`.
+- **Adapter** — concrete infrastructure integrations adapt framework/provider/persistence APIs to project-owned ports. Examples include `SyntheticActivityAdapter`, `JdbcCustomerActivityAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisStub`, `SpringAiAnalysisAdapter`, and `JdbcAnalysisHistoryAdapter`.
+- **Strategy** — where a port has interchangeable implementations, dependency injection/configuration selects one strategy without branching provider logic through the application core. The clearest examples are `AnalysisModelPort`, `PolicyKnowledgePort`, and the synthetic/JDBC alternatives behind `CustomerActivityPort`.
 - **Facade / application service** — coarse-grained application use-case services expose operator-facing operations while coordinating several ports behind one application boundary. The analysis use case is the clearest example: it composes activity lookup, policy retrieval, model execution, validation, and history persistence without exposing that choreography to the HTTP adapter or UI.
 
-These roles are deliberately sparse. Repository abstractions supplied by Spring Data, dependency injection, and ordinary composition are not renamed as additional GoF patterns merely to decorate the design.
+These roles are deliberately sparse. Framework-supplied data-access primitives, dependency injection, and ordinary composition are not renamed as additional GoF patterns merely to decorate the design.
+
+The relational access-layer choice is controlled separately by [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md). It changes the concrete persistence Adapter implementation without changing this ADR's port ownership or dependency direction.
 
 ## Consequences
 
