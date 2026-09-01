@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @Primary
-final class JdbcCustomerActivityAdapter implements CustomerActivityPort {
+class JdbcCustomerActivityAdapter implements CustomerActivityPort {
     private static final String CUSTOMER_EXISTS_SQL = """
             SELECT customer_id
             FROM customers
