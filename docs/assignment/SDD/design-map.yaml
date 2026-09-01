@@ -16,21 +16,27 @@ modules:
   MOD-IDENTITY-001:
     name: identity
     responsibility: authenticated operator context and access boundary
+    package: dev.specgraph.reference.identity
     activation_ring: R4
     adrs: [ADR-001, ADR-004]
+  MOD-RISK-001:
+    name: risk
+    responsibility: source-derived risk evidence contracts and later risk-signal interpretation
+    package: dev.specgraph.reference.risk
+    activation_ring: R1
+    adrs: [ADR-001]
   MOD-CUSTOMER-001:
     name: customer
     responsibility: customer lookup and activity read use cases
-    activation_ring: R1
-    adrs: [ADR-001]
-  MOD-RISK-001:
-    name: risk
-    responsibility: source-derived risk evidence interpretation/presentation
+    package: dev.specgraph.reference.customer
+    depends_on: [MOD-RISK-001]
     activation_ring: R1
     adrs: [ADR-001]
   MOD-ANALYSIS-001:
     name: analysis
     responsibility: analysis orchestration, policy grounding and analysis history
+    package: dev.specgraph.reference.analysis
+    depends_on: [MOD-CUSTOMER-001]
     activation_ring: R3
     adrs: [ADR-001, ADR-002]
 
@@ -39,6 +45,7 @@ contracts:
     name: CustomerSnapshot
     owner: MOD-CUSTOMER-001
     contains: [customer_identity, activities, risk_evidence]
+    uses_contracts_from: [MOD-RISK-001]
     invariants: [INV-DATA-001, INV-DATA-002, INV-RISK-001]
   CTR-ANALYSIS-RESULT-001:
     name: AnalysisResult
@@ -97,29 +104,44 @@ ports:
     adrs: [ADR-001, ADR-003, ADR-007]
 
 adapters:
-  ADP-HTTP-001:
-    name: CustomerAnalysisHttpAdapter
+  ADP-CUST-HTTP-001:
+    name: CustomerReviewHttpAdapter
     kind: inbound
+    owner: MOD-CUSTOMER-001
+    package: dev.specgraph.reference.customer.web
     technology: Spring MVC
-    activation_ring: R0
-    connects_to: [MOD-CUSTOMER-001, MOD-RISK-001, MOD-ANALYSIS-001]
-    adrs: [ADR-004]
+    activation_ring: R1
+    connects_to: [MOD-CUSTOMER-001]
+    adrs: [ADR-001, ADR-004]
+  ADP-ANALYSIS-HTTP-001:
+    name: AnalysisHttpAdapter
+    kind: inbound
+    owner: MOD-ANALYSIS-001
+    package: dev.specgraph.reference.analysis.web
+    technology: Spring MVC
+    activation_ring: R3
+    connects_to: [MOD-ANALYSIS-001]
+    adrs: [ADR-001, ADR-004]
   ADP-AUTH-SPRING-001:
     name: SpringSecurityOperatorAdapter
     kind: inbound_boundary
+    owner: MOD-IDENTITY-001
     technology: Spring Security
     activation_ring: R4
-    connects_to: [MOD-IDENTITY-001, ADP-HTTP-001]
+    connects_to: [MOD-IDENTITY-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
     adrs: [ADR-004]
   ADP-ACT-SYN-001:
     name: SyntheticActivityAdapter
     kind: outbound
+    owner: MOD-CUSTOMER-001
     implements: PRT-ACTIVITY-001
     activation_ring: R0
     adrs: [ADR-001]
   ADP-ACT-JDBC-001:
     name: JdbcCustomerActivityAdapter
     kind: outbound
+    owner: MOD-CUSTOMER-001
+    package: dev.specgraph.reference.customer.persistence
     technology: Spring JDBC JdbcClient
     implements: PRT-ACTIVITY-001
     activation_ring: R2
@@ -127,30 +149,35 @@ adapters:
   ADP-MODEL-DET-001:
     name: DeterministicAnalysisStub
     kind: outbound
+    owner: MOD-ANALYSIS-001
     implements: PRT-MODEL-001
     activation_ring: R0
     adrs: [ADR-002]
   ADP-MODEL-AI-001:
     name: SpringAiAnalysisAdapter
     kind: outbound
+    owner: MOD-ANALYSIS-001
     implements: PRT-MODEL-001
     activation_ring: R4
     adrs: [ADR-002, ADR-004]
   ADP-POL-STATIC-001:
     name: StaticPolicyAdapter
     kind: outbound
+    owner: MOD-ANALYSIS-001
     implements: PRT-POLICY-001
     activation_ring: R0
     adrs: [ADR-002]
   ADP-POL-PGV-001:
     name: PgVectorPolicyAdapter
     kind: outbound
+    owner: MOD-ANALYSIS-001
     implements: PRT-POLICY-001
     activation_ring: R4
     adrs: [ADR-002, ADR-003]
   ADP-HIST-JDBC-001:
     name: JdbcAnalysisHistoryAdapter
     kind: outbound
+    owner: MOD-ANALYSIS-001
     technology: Spring JDBC JdbcClient
     implements: PRT-HISTORY-001
     activation_ring: R4
@@ -178,16 +205,16 @@ infrastructure:
     name: OperatorDashboard
     technology: React TypeScript MUI TanStack Query
     activation_ring: R0
-    connects_to: [ADP-HTTP-001]
+    connects_to: [ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
     adrs: [ADR-004]
 
 requirement_design:
   FR-CUST-001:
-    elements: [CMP-UI-001, ADP-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
+    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R1
   FR-ACT-001:
-    elements: [CMP-UI-001, ADP-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
+    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R1
   FR-ACT-002:
@@ -195,11 +222,11 @@ requirement_design:
     adrs: [ADR-001, ADR-003, ADR-007]
     first_acceptance_ring: R1
   FR-RISK-001:
-    elements: [CMP-UI-001, MOD-RISK-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001, CTR-CUSTOMER-SNAPSHOT-001]
+    elements: [CMP-UI-001, MOD-RISK-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001, CTR-CUSTOMER-SNAPSHOT-001]
     adrs: [ADR-001, ADR-003, ADR-007]
     first_acceptance_ring: R1
   FR-AI-001:
-    elements: [CMP-UI-001, ADP-HTTP-001, MOD-ANALYSIS-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
+    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
     adrs: [ADR-001, ADR-002, ADR-004]
     first_acceptance_ring: R3
   FR-AI-002:
@@ -207,7 +234,7 @@ requirement_design:
     adrs: [ADR-002]
     first_acceptance_ring: R3
   FR-AUTH-001:
-    elements: [CMP-UI-001, ADP-AUTH-SPRING-001, MOD-IDENTITY-001, CTR-OPERATOR-ID-001]
+    elements: [CMP-UI-001, ADP-AUTH-SPRING-001, MOD-IDENTITY-001, CTR-OPERATOR-ID-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
     adrs: [ADR-001, ADR-004]
     first_acceptance_ring: R4
   FR-RAG-001:
@@ -219,7 +246,7 @@ requirement_design:
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R4
   FR-HIST-002:
-    elements: [CMP-UI-001, ADP-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-ANALYSIS-HISTORY-ENTRY-001]
+    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-ANALYSIS-HISTORY-ENTRY-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R4
   NFR-REP-001:
@@ -231,7 +258,7 @@ requirement_design:
     adrs: [ADR-001, ADR-002, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-SEC-001:
-    elements: [ADP-AUTH-SPRING-001, MOD-IDENTITY-001, ADP-HTTP-001]
+    elements: [ADP-AUTH-SPRING-001, MOD-IDENTITY-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
     adrs: [ADR-001, ADR-004]
     first_acceptance_ring: R4
 
@@ -239,9 +266,9 @@ first_vertical_slice:
   rings: [R0, R1]
   requirements: [FR-CUST-001, FR-ACT-001, FR-ACT-002, FR-RISK-001]
   acceptance: [AC-CUST-001, AC-CUST-002, AC-ACT-001, AC-ACT-002, AC-RISK-001]
-  path: [CMP-UI-001, ADP-HTTP-001, MOD-CUSTOMER-001, MOD-RISK-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001]
+  path: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, MOD-RISK-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001]
   prohibited_shortcuts:
-    - bypassing CustomerActivityPort from the HTTP adapter
+    - bypassing CustomerActivityPort from the customer HTTP adapter
     - leaking Spring or persistence types into CustomerSnapshot
     - inventing a runtime risk-rule evaluator
     - requiring PostgreSQL or an external LLM for R1 acceptance
