@@ -20,7 +20,7 @@ The application lets a Customer Care operator inspect deterministic CARD, PAYMEN
 
 The GHCR Compose tag `demo` is deliberately a **last-known-good publication**, not an alias for whatever happens to be on `main`. It advances only after `demo-images` has built the checkpoint images, resolved immutable digests, pulled the remote Compose artifact again and passed browser verification.
 
-This matters when a publication run fails. The repository may already describe a newer publication contract while `:demo` still resolves to the previous accepted artifact. In that case missing checkpoint containers are expected and the failed publication issue remains open rather than mutating the last-known-good tag.
+This matters when a publication run fails. Repository source may already describe a newer publication contract while `:demo` still resolves to the previous accepted artifact. Missing checkpoint containers then mean publication has not completed, not that the advertised port is secretly handled elsewhere.
 
 Requires Docker Compose **2.34+**. The GHCR packages are private, so authenticate Docker once with a GitHub personal access token (classic) carrying `read:packages`:
 
@@ -34,21 +34,24 @@ Launch the last successfully published checkpoint set directly from GHCR:
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait
 ```
 
-Inspect what that published artifact actually contains before assuming a ring is present:
+Inspect what the published artifact actually contains:
 
 ```bash
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo config --services
 ```
 
-The J2 publication contract adds PostgreSQL-backed R2 on port `8082` while retaining R0 and R1. When the corresponding `demo-images` run is green, the expected endpoints are:
+The complete J2 publication contract contains R0, R1, PostgreSQL-backed R2 and deterministic analysis/history R3 side by side:
 
 ```text
 R0: http://<docker-host>:8080/
 R1: http://<docker-host>:8081/
 R2: http://<docker-host>:8082/
+R3: http://<docker-host>:8083/
 ```
 
-R0 is the intentionally hollow deployable shell. R1 is the first MANDATORY synthetic customer/activity/risk slice. R2 preserves that application-owned contract while loading customer activity and source risk evidence from PostgreSQL through Spring JDBC.
+Until the J2 publication issues are completed by a green remote-pull proof, the `demo` tag may legitimately remain on an earlier last-known-good set. The workflow does not overwrite a working reviewer artifact merely because source code was merged.
+
+R0 is the intentionally hollow deployable shell. R1 is the first MANDATORY synthetic customer/activity/risk slice. R2 preserves that application-owned contract while loading customer activity and source risk evidence from PostgreSQL through Spring JDBC. R3 keeps the same source evidence and adds deterministic structured analysis plus persisted reviewable history.
 
 Stop the published deployment with:
 
@@ -56,13 +59,13 @@ Stop the published deployment with:
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo down
 ```
 
-The published topology uses an ephemeral PostgreSQL container for the deterministic reviewer dataset. Removing the deployment therefore resets the J2 fixture state for the next launch.
+The reviewer topology uses an ephemeral PostgreSQL container for deterministic fixture state. Removing the deployment resets the fixture database for the next launch.
 
 ## Run the current checkout from source
 
-The source path is independent of GHCR publication and is the authoritative way to exercise an unmerged candidate.
+The source path is independent of GHCR publication and is authoritative for an unmerged candidate.
 
-Run the current R3 candidate:
+Run R3:
 
 ```bash
 docker compose up --build -d --wait r3
@@ -74,7 +77,7 @@ Then open:
 R3: http://localhost:8083/
 ```
 
-Run only the accepted relational R2 slice instead:
+Run only R2 instead:
 
 ```bash
 docker compose up --build -d --wait r2
@@ -86,7 +89,7 @@ Then open:
 R2: http://localhost:8082/
 ```
 
-The source-build path keeps `SPECGRAPH_SOURCE_TIME_ZONE` configurable. For a source database whose timezone-free wall-clock timestamps are Europe/Zurich values:
+The source-build path keeps `SPECGRAPH_SOURCE_TIME_ZONE` configurable. For timezone-free source timestamps representing Europe/Zurich wall-clock values:
 
 ```bash
 SPECGRAPH_SOURCE_TIME_ZONE=Europe/Zurich docker compose up --build -d --wait r3
@@ -145,10 +148,12 @@ runtime  embedded Tomcat :8080
           /              \
        React UI          /api/*
 
-R2/R3 persistence topology
-  browser -> application -> PostgreSQL :5432
-             :8082 R2
-             :8083 R3 source candidate
+J2 reviewer topology
+  R0 :8080
+  R1 :8081
+  R2 :8082 ----\
+                +--> PostgreSQL :5432 (private Compose network)
+  R3 :8083 ----/
 ```
 
 The application is a modular monolith with hexagonal boundaries. Project-owned application/domain contracts remain inside the framework boundary; HTTP/UI and persistence/model/knowledge/history implementations are adapters behind those contracts.
