@@ -94,6 +94,26 @@ final class AnalysisServiceTests {
     }
 
     @Test
+    void invalidStructuredModelResultDoesNotBecomeModelFailureOrCreateHistory() {
+        var history = new InMemoryAnalysisHistoryAdapter();
+        var service = service(
+                customer -> Optional.of(SNAPSHOT),
+                snapshot -> List.of(POLICY),
+                (snapshot, evidence) -> new AnalysisResult(
+                        AnalysisResult.RiskLevel.MEDIUM,
+                        "   ",
+                        List.of("Review the source evidence.")),
+                history);
+
+        assertThatThrownBy(() -> service.analyze(CUSTOMER_ID, OPERATOR_ID))
+                .isInstanceOfSatisfying(AnalysisFailureException.class, exception -> {
+                    assertThat(exception.reason()).isEqualTo(AnalysisFailureException.Reason.INVALID_RESULT);
+                    assertThat(exception.getCause()).isInstanceOf(InvalidAnalysisResultException.class);
+                });
+        assertThat(history.listByCustomer(CUSTOMER_ID)).isEmpty();
+    }
+
+    @Test
     void persistenceFailureIsExplicitAndCannotReturnFalseCompletedState() {
         AnalysisHistoryPort failingHistory = new AnalysisHistoryPort() {
             @Override
