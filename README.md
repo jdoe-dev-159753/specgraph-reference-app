@@ -144,7 +144,7 @@ The application is a modular monolith with hexagonal boundaries. Project-owned a
 The R2 customer-read path is:
 
 ```text
-CustomerAnalysisHttpAdapter
+CustomerReviewHttpAdapter
         -> CustomerReviewUseCase
         -> CustomerReviewService
         -> CustomerActivityPort
