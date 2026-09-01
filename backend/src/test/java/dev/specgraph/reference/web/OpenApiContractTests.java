@@ -28,6 +28,10 @@ class OpenApiContractTests {
         var operation = api.getPaths().get("/api/customers/{customerId}").getGet();
         assertThat(operation).isNotNull();
         assertThat(operation.getResponses()).containsKeys("200", "404");
+        var okContent = operation.getResponses().get("200").getContent();
+        assertThat(okContent).containsKey("application/json");
+        assertThat(okContent.get("application/json").getSchema().get$ref())
+                .isEqualTo("#/components/schemas/CustomerSnapshot");
 
         Schema<?> activity = api.getComponents().getSchemas().get("Activity");
         assertThat(activity.getOneOf()).extracting(Schema::get$ref).containsExactlyInAnyOrder(
@@ -50,12 +54,16 @@ class OpenApiContractTests {
         assertActivityVariant(api, "CardActivity", "CARD", "CardDetails");
         assertActivityVariant(api, "PaymentActivity", "PAYMENT", "PaymentDetails");
         assertActivityVariant(api, "CryptoActivity", "CRYPTO", "CryptoDetails");
+        assertClosedDetailsSchema(api, "CardDetails");
+        assertClosedDetailsSchema(api, "PaymentDetails");
+        assertClosedDetailsSchema(api, "CryptoDetails");
+
+        Schema<?> cardDetails = api.getComponents().getSchemas().get("CardDetails");
+        assertThat(cardDetails.getProperties().get("cardPresent").getType()).isEqualTo("boolean");
 
         Schema<?> risk = api.getComponents().getSchemas().get("RiskEvidence");
         assertThat(risk.getRequired()).containsAll(Set.of(
                 "transactionId", "ruleId", "ruleName", "triggeredAt", "scoreContribution"));
-        assertThat(api.getComponents().getSchemas()).containsKeys(
-                "CardDetails", "PaymentDetails", "CryptoDetails");
     }
 
     private static void assertActivityVariant(OpenAPI api, String schemaName, String expectedType, String detailsSchema) {
@@ -75,5 +83,13 @@ class OpenApiContractTests {
         assertThat(type.getEnum().stream().map(String::valueOf).toList()).containsExactly(expectedType);
         Schema<?> details = inline.getProperties().get("details");
         assertThat(details.get$ref()).isEqualTo("#/components/schemas/" + detailsSchema);
+    }
+
+    private static void assertClosedDetailsSchema(OpenAPI api, String schemaName) {
+        Schema<?> details = api.getComponents().getSchemas().get(schemaName);
+        assertThat(details).as(schemaName).isNotNull();
+        assertThat(details.getAdditionalProperties())
+                .as(schemaName + " must reject fields from foreign activity families")
+                .isEqualTo(Boolean.FALSE);
     }
 }
