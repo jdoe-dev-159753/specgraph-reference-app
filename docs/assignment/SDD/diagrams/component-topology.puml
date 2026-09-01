@@ -40,18 +40,18 @@ package "Spring Boot modular monolith" as Backend {
 
 package "Replaceable adapters" as Adapters {
   component "Synthetic Activity\nADP-ACT-SYN-001\nR0/R1\n<<GoF Adapter>>" as ActivitySynthetic
-  component "JPA Activity\nADP-ACT-JPA-001\nR2\n<<GoF Adapter>>" as ActivityJpa
+  component "Spring JDBC Activity\nADP-ACT-JDBC-001\nR2\n<<GoF Adapter>>" as ActivityJdbc
   component "Static Policy\nADP-POL-STATIC-001\npre-R4 seam\n<<GoF Adapter>>" as PolicyStatic
   component "pgvector Policy\nADP-POL-PGV-001\nR4\n<<GoF Adapter>>" as PolicyPg
   component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3\n<<GoF Adapter>>" as ModelDet
   component "Spring AI Model\nADP-MODEL-AI-001\nR4 optional\n<<GoF Adapter>>" as ModelAi
-  component "JPA Analysis History\nADP-HIST-JPA-001\nR4\n<<GoF Adapter>>" as HistoryJpa
+  component "Spring JDBC Analysis History\nADP-HIST-JDBC-001\nR4\n<<GoF Adapter>>" as HistoryJdbc
 
-  ActivitySynthetic -[hidden]right-> ActivityJpa
-  ActivityJpa -[hidden]right-> PolicyStatic
+  ActivitySynthetic -[hidden]right-> ActivityJdbc
+  ActivityJdbc -[hidden]right-> PolicyStatic
   PolicyStatic -[hidden]right-> PolicyPg
   ModelDet -[hidden]right-> ModelAi
-  ModelAi -[hidden]right-> HistoryJpa
+  ModelAi -[hidden]right-> HistoryJdbc
 }
 
 component "PostgreSQL + pgvector\nINF-DB-001\nR2+" as Db <<database>>
@@ -74,16 +74,16 @@ Analysis --> ModelPort
 Analysis --> HistoryPort
 
 ActivityPort --> ActivitySynthetic
-ActivityPort ..> ActivityJpa
+ActivityPort ..> ActivityJdbc
 PolicyPort --> PolicyStatic
 PolicyPort ..> PolicyPg
 ModelPort --> ModelDet
 ModelPort ..> ModelAi
-HistoryPort ..> HistoryJpa
+HistoryPort ..> HistoryJdbc
 
-ActivityJpa --> Db : JDBC
+ActivityJdbc --> Db : Spring JDBC
 PolicyPg --> Db : JDBC / pgvector
-HistoryJpa --> Db : JDBC
+HistoryJdbc --> Db : Spring JDBC
 ModelAi ..> Provider : HTTPS
 
 note bottom of Backend
