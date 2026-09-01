@@ -4,7 +4,6 @@ import dev.specgraph.reference.risk.RiskEvidence;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -22,16 +21,16 @@ class SyntheticActivityAdapter implements CustomerActivityPort {
             List.of(
                     new Activity(CARD_TX, Activity.ActivityType.CARD, new BigDecimal("248.50"), "CHF", "Completed",
                             Instant.parse("2026-08-28T09:15:00Z"),
-                            Map.of("cardPan", "**** **** **** 4242", "cardType", "VISA", "merchantName", "Alpine Camera",
-                                    "mccCode", "5946", "cardPresent", "false", "authorizationCode", "A12345")),
+                            new Activity.CardDetails(
+                                    "**** **** **** 4242", "VISA", "Alpine Camera", "5946", false, "A12345", null)),
                     new Activity(PAYMENT_TX, Activity.ActivityType.PAYMENT, new BigDecimal("1250.00"), "CHF", "Completed",
                             Instant.parse("2026-08-29T11:30:00Z"),
-                            Map.of("paymentMethod", "BANK_TRANSFER", "senderAccount", "CH00-SYNTHETIC-01",
-                                    "receiverAccount", "DE00-SYNTHETIC-02", "receiverBankCountry", "DE")),
+                            new Activity.PaymentDetails(
+                                    "BANK_TRANSFER", "CH00-SYNTHETIC-01", "DE00-SYNTHETIC-02", "DE")),
                     new Activity(CRYPTO_TX, Activity.ActivityType.CRYPTO, new BigDecimal("0.42"), "BTC", "Pending",
                             Instant.parse("2026-08-30T14:05:00Z"),
-                            Map.of("blockchain", "Bitcoin", "walletAddressFrom", "bc1q-demo-from",
-                                    "walletAddressTo", "bc1q-demo-to", "txHash", "synthetic-tx-hash", "exchangeName", "Demo Exchange"))),
+                            new Activity.CryptoDetails(
+                                    "Bitcoin", "bc1q-demo-from", "bc1q-demo-to", "synthetic-tx-hash", "Demo Exchange"))),
             List.of(
                     new RiskEvidence(CARD_TX, "RULE-CARD-01", "Card not present high value",
                             Instant.parse("2026-08-28T09:15:01Z"), new BigDecimal("12.5")),
