@@ -8,6 +8,8 @@ import dev.specgraph.reference.analysis.PolicyEvidence;
 import dev.specgraph.reference.identity.OperatorId;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -73,7 +75,7 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 .param("analysisId", analysisId)
                 .param("customerId", command.customerId())
                 .param("operatorId", command.operatorId().value())
-                .param("generatedAt", command.generatedAt())
+                .param("generatedAt", OffsetDateTime.ofInstant(command.generatedAt(), ZoneOffset.UTC))
                 .param("riskLevel", command.result().riskLevel().name())
                 .param("findingsSummary", command.result().findingsSummary())
                 .param("recommendations", writeJson(command.result().recommendations()))
