@@ -5,7 +5,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.modulith.core.ApplicationModules;
 
 @SpringBootTest
-class ReferenceApplicationTests {
+class ReferenceApplicationTests extends PostgresIntegrationTestSupport {
     @Test
     void contextLoads() {}
 

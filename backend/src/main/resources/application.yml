@@ -1,6 +1,17 @@
 spring:
   application:
     name: specgraph-reference-app
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/specgraph}
+    username: ${SPRING_DATASOURCE_USERNAME:specgraph}
+    password: ${SPRING_DATASOURCE_PASSWORD:specgraph}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    validate-migration-naming: true
 management:
   endpoints:
     web:

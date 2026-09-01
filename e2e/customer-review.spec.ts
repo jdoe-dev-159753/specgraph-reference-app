@@ -1,12 +1,13 @@
 import { expect, test } from '@playwright/test'
 
 const seededCustomer = '11111111-1111-1111-1111-111111111111'
+const growingCrossBorderCustomer = '33333333-3333-3333-3333-333333333333'
 const unknownCustomer = '99999999-9999-9999-9999-999999999999'
 
 type Activity = {
   transactionId: string
   type: 'CARD' | 'PAYMENT' | 'CRYPTO'
-  amount: number | string
+  amount: string
   currency: string
   status: string
   createdAt: string
@@ -21,9 +22,10 @@ type RiskEvidence = {
   scoreContribution: number
 }
 
-test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testInfo) => {
+test('VFY-CUSTOMER-READ-001 deployed R2 relational customer review', async ({ page }, testInfo) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Customer Activity Analytics' })).toBeVisible()
+  await expect(page.getByText('Customer Care · R2')).toBeVisible()
 
   const customerId = page.getByLabel('Customer ID')
   await customerId.fill(seededCustomer)
@@ -48,10 +50,11 @@ test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testI
   await expect(page.getByRole('columnheader', { name: 'Time' })).toBeVisible()
 
   for (const activity of snapshot.activities as Activity[]) {
+    expect(typeof activity.amount).toBe('string')
     const key = activity.type.toLowerCase()
     await expect(page.getByTestId(`activity-${key}-type`)).toHaveText(activity.type)
     await expect(page.getByTestId(`activity-${key}-transaction`)).toHaveText(activity.transactionId)
-    await expect(page.getByTestId(`activity-${key}-amount`)).toHaveAttribute('data-amount', String(activity.amount))
+    await expect(page.getByTestId(`activity-${key}-amount`)).toHaveAttribute('data-amount', activity.amount)
     await expect(page.getByTestId(`activity-${key}-amount`)).not.toContainText(activity.currency)
     await expect(page.getByTestId(`activity-${key}-currency`)).toHaveText(activity.currency)
     await expect(page.getByTestId(`activity-${key}-status`)).toContainText(activity.status)
@@ -60,6 +63,8 @@ test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testI
   }
 
   const card = (snapshot.activities as Activity[]).find(activity => activity.type === 'CARD')!
+  expect(card.amount).toBe('248.50')
+  expect(card.currency).toBe('CHF')
   expect(typeof card.details.cardPresent).toBe('boolean')
   await expect(page.getByTestId('activity-card')).toContainText('cardPresent: false')
   await expect(page.getByTestId('activity-card')).toContainText('Alpine Camera')
@@ -77,7 +82,17 @@ test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testI
       .toHaveAttribute('data-triggered-at', evidence.triggeredAt)
   }
 
-  await page.screenshot({ path: testInfo.outputPath('r1-customer-review.png'), fullPage: true })
+  await page.screenshot({ path: testInfo.outputPath('r2-postgresql-customer-review.png'), fullPage: true })
+
+  await customerId.fill(growingCrossBorderCustomer)
+  const scenarioPromise = page.waitForResponse(response =>
+    response.url().endsWith(`/api/customers/${growingCrossBorderCustomer}`) && response.request().method() === 'GET')
+  await page.getByRole('button', { name: 'Search' }).click()
+  expect((await scenarioPromise).status()).toBe(200)
+  await expect(page.getByTestId('customer-activity').getByText('EUR').first()).toBeVisible()
+  await expect(page.getByTestId('customer-activity').getByText('ETH')).toBeVisible()
+  await expect(page.getByTestId('risk-evidence')).toContainText('Growing cross-border payment activity')
+  await expect(page.getByTestId('risk-evidence')).toContainText('New crypto destination')
 
   await customerId.fill(unknownCustomer)
   const notFoundPromise = page.waitForResponse(response =>
