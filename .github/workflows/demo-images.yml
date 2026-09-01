@@ -268,14 +268,43 @@ jobs:
       - name: Assert immutable Compose provenance resolves this run's complete image set
         working-directory: packaging
         run: |
-          images="$(docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" config --images)"
+          compose_ref="oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
+          images="$(docker compose -f "$compose_ref" config --images)"
           printf 'Resolved images for %s:\n%s\n' "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" "$images"
           test "$(printf '%s\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l)" -eq 5
-          printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R0_DIGEST"
-          printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R1_DIGEST"
-          printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R2_DIGEST"
-          printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R3_DIGEST"
-          printf '%s\n' "$images" | grep -F "$POSTGRES_DIGEST"
+
+          assert_app_identity() {
+            service="$1"
+            expected_digest="$2"
+            actual="$(docker compose -f "$compose_ref" config --images "$service")"
+            case "$actual" in
+              "$APP_PACKAGE@$expected_digest"|"$APP_PACKAGE":*"@$expected_digest")
+                printf '%s provenance OK: %s\n' "$service" "$actual"
+                ;;
+              *)
+                printf 'Compose provenance mismatch for %s\nexpected repository: %s\nexpected digest: %s\nactual image: %s\n' \
+                  "$service" "$APP_PACKAGE" "$expected_digest" "$actual" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          assert_app_identity r0 "$R0_DIGEST"
+          assert_app_identity r1 "$R1_DIGEST"
+          assert_app_identity r2 "$R2_DIGEST"
+          assert_app_identity r3 "$R3_DIGEST"
+
+          postgres_actual="$(docker compose -f "$compose_ref" config --images postgres)"
+          case "$postgres_actual" in
+            *"@$POSTGRES_DIGEST")
+              printf 'postgres provenance OK: %s\n' "$postgres_actual"
+              ;;
+            *)
+              printf 'Compose provenance mismatch for postgres\nexpected digest: %s\nactual image: %s\n' \
+                "$POSTGRES_DIGEST" "$postgres_actual" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Prove immutable remote Compose deployment pulls from registry
         working-directory: packaging
@@ -337,14 +366,43 @@ jobs:
       - name: Assert promoted demo resolves the proven complete image set
         working-directory: packaging
         run: |
-          images="$(docker compose -f "oci://$COMPOSE_PACKAGE:demo" config --images)"
+          compose_ref="oci://$COMPOSE_PACKAGE:demo"
+          images="$(docker compose -f "$compose_ref" config --images)"
           printf 'Resolved images for %s:\n%s\n' "$COMPOSE_PACKAGE:demo" "$images"
           test "$(printf '%s\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l)" -eq 5
-          printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R0_DIGEST"
-          printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R1_DIGEST"
-          printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R2_DIGEST"
-          printf '%s\n' "$images" | grep -F "$APP_PACKAGE@$R3_DIGEST"
-          printf '%s\n' "$images" | grep -F "$POSTGRES_DIGEST"
+
+          assert_app_identity() {
+            service="$1"
+            expected_digest="$2"
+            actual="$(docker compose -f "$compose_ref" config --images "$service")"
+            case "$actual" in
+              "$APP_PACKAGE@$expected_digest"|"$APP_PACKAGE":*"@$expected_digest")
+                printf '%s provenance OK: %s\n' "$service" "$actual"
+                ;;
+              *)
+                printf 'Promoted demo provenance mismatch for %s\nexpected repository: %s\nexpected digest: %s\nactual image: %s\n' \
+                  "$service" "$APP_PACKAGE" "$expected_digest" "$actual" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          assert_app_identity r0 "$R0_DIGEST"
+          assert_app_identity r1 "$R1_DIGEST"
+          assert_app_identity r2 "$R2_DIGEST"
+          assert_app_identity r3 "$R3_DIGEST"
+
+          postgres_actual="$(docker compose -f "$compose_ref" config --images postgres)"
+          case "$postgres_actual" in
+            *"@$POSTGRES_DIGEST")
+              printf 'postgres provenance OK: %s\n' "$postgres_actual"
+              ;;
+            *)
+              printf 'Promoted demo provenance mismatch for postgres\nexpected digest: %s\nactual image: %s\n' \
+                "$POSTGRES_DIGEST" "$postgres_actual" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Summarize published reviewer deployment
         working-directory: packaging
