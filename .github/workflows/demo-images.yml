@@ -30,6 +30,33 @@ jobs:
       R1_PORT: '8081'
       R2_PORT: '8082'
     steps:
+      - name: Reclaim stale publication state and require disk headroom
+        run: |
+          echo 'Disk before publication cleanup:'
+          df -h "$GITHUB_WORKSPACE" || df -h /
+          docker system df || true
+
+          docker ps -aq --filter 'name=specgraph-prepublish-' | xargs -r docker rm -f || true
+          docker network ls --format '{{.Name}}' | grep '^specgraph-prepublish-' | xargs -r docker network rm || true
+          docker buildx ls --format '{{.Name}}' 2>/dev/null | grep '^specgraph-multiarch-' | xargs -r -n1 docker buildx rm || true
+          docker image rm -f specgraph-reference-app:r0 specgraph-reference-app:r1 specgraph-reference-app:r2 2>/dev/null || true
+          docker buildx prune -af || true
+          docker builder prune -af || true
+          docker container prune -f --filter 'until=24h' || true
+          docker network prune -f --filter 'until=24h' || true
+          docker image prune -af --filter 'until=24h' || true
+
+          echo 'Disk after publication cleanup:'
+          df -h "$GITHUB_WORKSPACE" || df -h /
+          docker system df || true
+
+          available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR==2 {print $4}')"
+          minimum_kb=$((12 * 1024 * 1024))
+          if [ "$available_kb" -lt "$minimum_kb" ]; then
+            echo "Need at least 12 GiB free for three native images plus multi-platform Buildx publication; only $((available_kb / 1024)) MiB is available." >&2
+            exit 1
+          fi
+
       - name: Checkout packaging authority
         uses: actions/checkout@v7
         with:
@@ -315,11 +342,15 @@ jobs:
             printf 'Reviewer command: `docker compose -f oci://%s:demo up -d --wait`\n' "$COMPOSE_PACKAGE"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Cleanup checkpoint test deployments
+      - name: Cleanup checkpoint test deployments and build cache
         if: always()
         working-directory: packaging
         run: |
           COMPOSE_PROJECT_NAME="specgraph-prepublish-${GITHUB_RUN_ID}" docker compose down --remove-orphans || true
           docker compose -f "oci://$COMPOSE_PACKAGE:demo" down --remove-orphans || true
-          docker buildx rm "$BUILDER_NAME" || true
+          [ -z "${BUILDER_NAME:-}" ] || docker buildx rm "$BUILDER_NAME" || true
+          docker image rm -f specgraph-reference-app:r0 specgraph-reference-app:r1 specgraph-reference-app:r2 2>/dev/null || true
+          docker buildx prune -af || true
+          docker builder prune -af || true
           docker logout ghcr.io || true
+          df -h "$GITHUB_WORKSPACE" || true
