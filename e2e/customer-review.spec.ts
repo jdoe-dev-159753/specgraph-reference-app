@@ -10,6 +10,7 @@ type Activity = {
   currency: string
   status: string
   createdAt: string
+  details: Record<string, string | boolean | null>
 }
 
 type RiskEvidence = {
@@ -48,6 +49,7 @@ test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testI
 
   for (const activity of snapshot.activities as Activity[]) {
     const key = activity.type.toLowerCase()
+    await expect(page.getByTestId(`activity-${key}-type`)).toHaveText(activity.type)
     await expect(page.getByTestId(`activity-${key}-transaction`)).toHaveText(activity.transactionId)
     await expect(page.getByTestId(`activity-${key}-amount`)).toHaveAttribute('data-amount', String(activity.amount))
     await expect(page.getByTestId(`activity-${key}-amount`)).not.toContainText(activity.currency)
@@ -57,6 +59,9 @@ test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testI
     await expect(page.getByTestId(`activity-${key}-time`)).toHaveAttribute('data-created-at', activity.createdAt)
   }
 
+  const card = (snapshot.activities as Activity[]).find(activity => activity.type === 'CARD')!
+  expect(typeof card.details.cardPresent).toBe('boolean')
+  await expect(page.getByTestId('activity-card')).toContainText('cardPresent: false')
   await expect(page.getByTestId('activity-card')).toContainText('Alpine Camera')
   await expect(page.getByTestId('activity-payment')).toContainText('receiverBankCountry: DE')
   await expect(page.getByTestId('activity-crypto')).toContainText('blockchain: Bitcoin')
