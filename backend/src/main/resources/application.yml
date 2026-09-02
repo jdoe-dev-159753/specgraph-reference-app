@@ -1,6 +1,15 @@
 spring:
   application:
     name: specgraph-reference-app
+  ai:
+    model:
+      chat: none
+      embedding: none
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/specgraph}
     username: ${SPRING_DATASOURCE_USERNAME:specgraph}
