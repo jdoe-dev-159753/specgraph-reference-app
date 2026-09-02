@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Customer Activity Analytics API
-  version: r3
-  description: Reviewer-facing contract for the R3 deterministic offline analysis and persistent-history slice, retaining the R2 PostgreSQL-backed customer read contract.
+  version: r4-analysis-chain
+  description: Reviewer-facing contract for the staged evidence-to-analysis pipeline, retaining deterministic offline execution while exposing separate retrieval, detector, and model provenance.
 paths:
   /api/customers/{customerId}:
     get:
@@ -22,7 +22,7 @@ paths:
   /api/customers/{customerId}/analyses:
     post:
       operationId: runCustomerAnalysis
-      summary: Run the deterministic offline analysis and persist the completed result
+      summary: Run the configured analysis chain and persist the completed result
       parameters:
         - $ref: '#/components/parameters/CustomerId'
       responses:
@@ -45,7 +45,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AnalysisProblem'
         '502':
-          description: Grounding/model execution or structured-result validation failed.
+          description: Detector, grounding, model execution, or structured-result validation failed.
           content:
             application/problem+json:
               schema:
@@ -242,9 +242,36 @@ components:
           type: object
           additionalProperties:
             type: string
+    RiskSignalEvidence:
+      type: object
+      required: [detectorIdentity, signalIdentity, score, provenance]
+      description: Derived detector evidence; never a source risk fact.
+      properties:
+        detectorIdentity:
+          type: string
+        signalIdentity:
+          type: string
+        score:
+          type: number
+        provenance:
+          type: object
+          additionalProperties:
+            type: string
+    AnalysisModelProvenance:
+      type: object
+      required: [backendIdentity, modelIdentity, metadata]
+      properties:
+        backendIdentity:
+          type: string
+        modelIdentity:
+          type: string
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
     Analysis:
       type: object
-      required: [analysisId, customerId, operatorId, generatedAt, riskLevel, findingsSummary, recommendations, evidenceProvenance]
+      required: [analysisId, customerId, operatorId, generatedAt, riskLevel, findingsSummary, recommendations, evidenceProvenance, detectorProvenance, modelProvenance]
       properties:
         analysisId:
           type: string
@@ -274,6 +301,12 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/PolicyEvidence'
+        detectorProvenance:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskSignalEvidence'
+        modelProvenance:
+          $ref: '#/components/schemas/AnalysisModelProvenance'
     AnalysisProblem:
       type: object
       required: [status, title, detail, reason]
@@ -286,4 +319,4 @@ components:
           type: string
         reason:
           type: string
-          enum: [CUSTOMER_NOT_FOUND, INSUFFICIENT_GROUNDING, GROUNDING_FAILURE, MODEL_FAILURE, INVALID_RESULT, PERSISTENCE_FAILURE]
+          enum: [CUSTOMER_NOT_FOUND, DETECTOR_FAILURE, INSUFFICIENT_GROUNDING, GROUNDING_FAILURE, MODEL_FAILURE, INVALID_RESULT, PERSISTENCE_FAILURE]
