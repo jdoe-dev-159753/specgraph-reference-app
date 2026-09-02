@@ -1,4 +1,5 @@
 name: apply-compose-provenance-fix
+# One-shot branch patcher for discovery #203; removed before merge.
 
 on:
   pull_request:
