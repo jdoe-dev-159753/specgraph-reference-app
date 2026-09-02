@@ -267,7 +267,7 @@ export default function App() {
               </Typography>
               <Typography variant="h3" component="h1" sx={{ mt: 0.25 }}>Customer Activity Analytics</Typography>
               <Typography color="text.secondary" sx={{ mt: 1, maxWidth: 820 }}>
-                PostgreSQL-backed customer evidence with deterministic analysis, inspectable grounding and reviewable history.
+                PostgreSQL-backed customer evidence with grounded analysis, inspectable provenance and reviewable history.
               </Typography>
             </Box>
             {authenticatedSession && (
@@ -451,9 +451,9 @@ export default function App() {
                       sx={{ justifyContent: 'space-between', alignItems: { md: 'center' } }}
                     >
                       <Box>
-                        <Typography variant="h5">Deterministic analysis</Typography>
+                        <Typography variant="h5">Grounded analysis</Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                          Offline deterministic model. Policy grounding remains synthetic, inspectable and separate from source risk evidence.
+                          Analysis runs through the configured backend. Grounding and execution provenance remain inspectable and separate from source risk evidence.
                         </Typography>
                       </Box>
                       <Button
@@ -465,7 +465,7 @@ export default function App() {
                           csrf: authenticatedSession?.csrf,
                         })}
                       >
-                        {analysis.isPending ? 'Analyzing…' : 'Run deterministic analysis'}
+                        {analysis.isPending ? 'Analyzing…' : 'Run analysis'}
                       </Button>
                     </Stack>
                   </Box>

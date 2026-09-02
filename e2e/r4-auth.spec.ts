@@ -24,7 +24,7 @@ async function runAnalysis(page: import('@playwright/test').Page): Promise<Analy
   const responsePromise = page.waitForResponse(response =>
     response.url().endsWith(`/api/customers/${seededCustomer}/analyses`) &&
     response.request().method() === 'POST')
-  await page.getByRole('button', { name: 'Run deterministic analysis' }).click()
+  await page.getByRole('button', { name: 'Run analysis' }).click()
   const response = await responsePromise
   expect(response.status()).toBe(201)
   return await response.json() as Analysis
