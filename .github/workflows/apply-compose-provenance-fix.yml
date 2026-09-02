@@ -1,5 +1,4 @@
 name: apply-compose-provenance-fix
-# One-shot branch patcher for discovery #203; removed before merge.
 
 on:
   pull_request:
@@ -64,9 +63,7 @@ jobs:
                   break
                   ;;
               esac
-            done <<EOF
-$actual_images
-EOF
+            done <<< "$actual_images"
 
             if [ "$matched" != true ]; then
               printf 'Compose provenance mismatch for %s\\nexpected repository: %s\\nexpected digest: %s\\nactual dependency closure:\\n%s\\n' \\
