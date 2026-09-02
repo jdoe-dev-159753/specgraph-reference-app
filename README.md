@@ -14,6 +14,8 @@
 
 **A runnable reference application for specification-driven, AI-assisted software engineering.**
 
+**Architecture:** a Spring Modulith **modular monolith** with strict **hexagonal (Ports & Adapters) boundaries**. React and Spring MVC form the presentation edge; PostgreSQL, policy retrieval, risk detectors and AI/model providers remain replaceable adapters behind application-owned ports. The result stays simple to deploy as one backend process while keeping infrastructure and provider choices mechanically separated from the application core.
+
 The application lets a Customer Care operator inspect deterministic CARD, PAYMENT and CRYPTO activity plus source-shaped risk evidence. R2 replaces the synthetic activity adapter with PostgreSQL/Flyway persistence behind the same project-owned `CustomerActivityPort`. R3 adds deterministic structured analysis and persistent reviewable analysis history behind provider-neutral ports. R4 later adds real policy retrieval/grounding and multi-operator authentication/authorization.
 
 ## Published reviewer demo
