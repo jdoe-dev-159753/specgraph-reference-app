@@ -3,8 +3,10 @@ package dev.specgraph.reference.analysis.persistence;
 import dev.specgraph.reference.analysis.AnalysisHistoryCreateCommand;
 import dev.specgraph.reference.analysis.AnalysisHistoryEntry;
 import dev.specgraph.reference.analysis.AnalysisHistoryPort;
+import dev.specgraph.reference.analysis.AnalysisModelProvenance;
 import dev.specgraph.reference.analysis.AnalysisResult;
 import dev.specgraph.reference.analysis.PolicyEvidence;
+import dev.specgraph.reference.analysis.RiskSignalEvidence;
 import dev.specgraph.reference.identity.OperatorId;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -33,7 +35,9 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 risk_level,
                 findings_summary,
                 recommendations,
-                evidence_provenance
+                evidence_provenance,
+                detector_provenance,
+                model_provenance
             ) VALUES (
                 :analysisId,
                 :customerId,
@@ -42,7 +46,9 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 :riskLevel,
                 :findingsSummary,
                 CAST(:recommendations AS jsonb),
-                CAST(:evidenceProvenance AS jsonb)
+                CAST(:evidenceProvenance AS jsonb),
+                CAST(:detectorProvenance AS jsonb),
+                CAST(:modelProvenance AS jsonb)
             )
             """;
 
@@ -55,7 +61,9 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 risk_level,
                 findings_summary,
                 recommendations::text AS recommendations,
-                evidence_provenance::text AS evidence_provenance
+                evidence_provenance::text AS evidence_provenance,
+                detector_provenance::text AS detector_provenance,
+                model_provenance::text AS model_provenance
             FROM analysis_history
             """;
 
@@ -80,6 +88,8 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 .param("findingsSummary", command.result().findingsSummary())
                 .param("recommendations", writeJson(command.result().recommendations()))
                 .param("evidenceProvenance", writeJson(command.evidenceProvenance()))
+                .param("detectorProvenance", writeJson(command.detectorProvenance()))
+                .param("modelProvenance", writeJson(command.modelProvenance()))
                 .update();
         return new AnalysisHistoryEntry(
                 analysisId,
@@ -87,7 +97,9 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 command.operatorId(),
                 command.generatedAt(),
                 command.result(),
-                command.evidenceProvenance());
+                command.evidenceProvenance(),
+                command.detectorProvenance(),
+                command.modelProvenance());
     }
 
     @Override
@@ -116,6 +128,12 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
         List<PolicyEvidence> evidence = readJson(
                 rs.getString("evidence_provenance"),
                 new TypeReference<List<PolicyEvidence>>() {});
+        List<RiskSignalEvidence> detectorEvidence = readJson(
+                rs.getString("detector_provenance"),
+                new TypeReference<List<RiskSignalEvidence>>() {});
+        AnalysisModelProvenance modelProvenance = readJson(
+                rs.getString("model_provenance"),
+                new TypeReference<AnalysisModelProvenance>() {});
         AnalysisResult result = new AnalysisResult(
                 AnalysisResult.RiskLevel.valueOf(rs.getString("risk_level")),
                 rs.getString("findings_summary"),
@@ -126,7 +144,9 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 new OperatorId(rs.getString("operator_id")),
                 rs.getTimestamp("generated_at").toInstant(),
                 result,
-                evidence);
+                evidence,
+                detectorEvidence,
+                modelProvenance);
     }
 
     private String writeJson(Object value) {
