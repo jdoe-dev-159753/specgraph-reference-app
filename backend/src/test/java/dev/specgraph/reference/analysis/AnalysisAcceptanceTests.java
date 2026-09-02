@@ -1,5 +1,6 @@
 package dev.specgraph.reference.analysis;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -57,6 +58,21 @@ class AnalysisAcceptanceTests extends PostgresIntegrationTestSupport {
                 "SELECT analysis_id FROM analysis_history WHERE customer_id = ?",
                 UUID.class,
                 SEEDED_CUSTOMER_ID);
+        assertThat(jdbc.queryForObject(
+                        "SELECT detector_provenance::text FROM analysis_history WHERE analysis_id = ?",
+                        String.class,
+                        analysisId))
+                .isEqualTo("[]");
+        assertThat(jdbc.queryForObject(
+                        "SELECT model_provenance ->> 'backendIdentity' FROM analysis_history WHERE analysis_id = ?",
+                        String.class,
+                        analysisId))
+                .isEqualTo("deterministic");
+        assertThat(jdbc.queryForObject(
+                        "SELECT model_provenance ->> 'modelIdentity' FROM analysis_history WHERE analysis_id = ?",
+                        String.class,
+                        analysisId))
+                .isEqualTo("r3-offline-baseline-v1");
 
         mvc.perform(get("/api/customers/{customerId}/analyses", SEEDED_CUSTOMER_ID))
                 .andExpect(status().isOk())
