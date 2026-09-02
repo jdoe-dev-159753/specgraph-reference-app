@@ -1,0 +1,124 @@
+name: apply-compose-provenance-fix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-compose-provenance-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: >-
+      github.head_ref == 'fix/203-compose-provenance-diagnostics' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Replace short-circuit assertions with dependency-closure diagnostics
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/demo-images.yml')
+          text = path.read_text(encoding='utf-8')
+
+          old_cardinality = '''          test "$(printf '%s\\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l)" -eq 5
+'''
+          new_cardinality = '''          image_count="$(printf '%s\\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')"
+          if [ "$image_count" -ne 5 ]; then
+            printf 'Compose provenance image-cardinality mismatch\\nexpected count: 5\\nactual count: %s\\nactual images:\\n%s\\n' \\
+              "$image_count" "$images" >&2
+            exit 1
+          fi
+          printf 'Compose provenance image cardinality OK: expected=5 actual=%s\\n' "$image_count"
+'''
+
+          cardinality_count = text.count(old_cardinality)
+          if cardinality_count != 2:
+              raise SystemExit(
+                  f'Expected exactly 2 silent cardinality assertions, found {cardinality_count}'
+              )
+          text = text.replace(old_cardinality, new_cardinality)
+
+          lines = text.splitlines(keepends=True)
+          replacement = '''          assert_app_identity() {
+            service="$1"
+            expected_digest="$2"
+            actual_images="$(docker compose -f "$compose_ref" config --images "$service")"
+            printf '%s provenance dependency closure:\\n%s\\n' "$service" "$actual_images"
+
+            matched=false
+            while IFS= read -r actual; do
+              case "$actual" in
+                "$APP_PACKAGE@$expected_digest"|"$APP_PACKAGE":*"@$expected_digest")
+                  matched=true
+                  printf '%s provenance match: %s\\n' "$service" "$actual"
+                  break
+                  ;;
+              esac
+            done <<EOF
+$actual_images
+EOF
+
+            if [ "$matched" != true ]; then
+              printf 'Compose provenance mismatch for %s\\nexpected repository: %s\\nexpected digest: %s\\nactual dependency closure:\\n%s\\n' \\
+                "$service" "$APP_PACKAGE" "$expected_digest" "$actual_images" >&2
+              exit 1
+            fi
+          }
+'''.splitlines(keepends=True)
+
+          output = []
+          i = 0
+          function_count = 0
+          while i < len(lines):
+              if lines[i] != '          assert_app_identity() {\n':
+                  output.append(lines[i])
+                  i += 1
+                  continue
+
+              j = i + 1
+              while j < len(lines) and lines[j] != '          }\n':
+                  j += 1
+              if j == len(lines):
+                  raise SystemExit('Unterminated assert_app_identity function')
+
+              output.extend(replacement)
+              function_count += 1
+              i = j + 1
+
+          if function_count != 2:
+              raise SystemExit(
+                  f'Expected exactly 2 assert_app_identity functions, found {function_count}'
+              )
+
+          patched = ''.join(output)
+          if 'actual="$(docker compose -f "$compose_ref" config --images "$service")"' in patched:
+              raise SystemExit('Old single-string service assertion survived patch')
+
+          path.write_text(patched, encoding='utf-8')
+          print('Patched two cardinality assertions and two service-identity assertions.')
+          PY
+
+          git diff --check
+          git diff -- .github/workflows/demo-images.yml
+
+      - name: Commit corrective workflow patch
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- .github/workflows/demo-images.yml; then
+            echo 'Corrective patch is already present; no commit required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/demo-images.yml
+          git commit -m 'fix: handle Compose service dependency closures (#203)'
+          git push origin HEAD:${{ github.head_ref }}
