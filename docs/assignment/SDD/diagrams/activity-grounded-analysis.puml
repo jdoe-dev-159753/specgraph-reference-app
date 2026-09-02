@@ -1,5 +1,5 @@
 @startuml
-title Figure 7 — UML Activity diagram — grounded analysis workflow
+title Figure 7 — UML Activity diagram — staged grounded analysis workflow
 skinparam linetype polyline
 skinparam activity {
   BackgroundColor #F7F7F7
@@ -26,6 +26,22 @@ endif
 
 |Analysis application|
 :Load customer context through\nCustomerActivityPort;
+:Invoke RiskSignalDetectorPort\nwith CustomerSnapshot;
+
+|Detector adapter|
+if (Detector succeeds?) then (no)
+  :Return detector failure;
+  |Analysis application|
+  :Stop before grounding/model/history;
+  |React operator UI|
+  :Display analysis-stage failure;
+  |Customer Care Operator|
+  stop
+else (yes)
+  :Return RiskSignalEvidence[];\n(default no-op returns empty list)
+endif
+
+|Analysis application|
 :Retrieve relevant knowledge through\nPolicyKnowledgePort;
 
 |Policy adapter|
@@ -42,7 +58,8 @@ else (yes)
 endif
 
 |Analysis application|
-:Invoke AnalysisModelPort with\ncustomer context + PolicyEvidence;
+:Assemble AnalysisEvidenceEnvelope;\nkeep source, detector and policy evidence distinct;
+:Invoke AnalysisModelPort\nwith bounded evidence envelope;
 
 |Model adapter|
 if (Execution/provider succeeds?) then (no)
@@ -54,7 +71,7 @@ if (Execution/provider succeeds?) then (no)
   |Customer Care Operator|
   stop
 else (yes)
-  :Return structured candidate;
+  :Return AnalysisModelOutput;\nstructured result + model provenance;
 endif
 
 |Analysis application|
@@ -69,7 +86,7 @@ else (yes)
 endif
 
 |History adapter|
-:Persist completed result through\nAnalysisHistoryPort;
+:Persist completed result plus\npolicy, detector and model provenance;
 if (Persistence succeeds?) then (no)
   :Return persistence failure;
   |Analysis application|
@@ -86,7 +103,7 @@ endif
 :Return completed grounded analysis;
 
 |React operator UI|
-:Render risk level, findings,\nrecommendations and provenance;
+:Render risk level, findings,\nrecommendations and layered provenance;
 
 |Customer Care Operator|
 :Review completed analysis;
