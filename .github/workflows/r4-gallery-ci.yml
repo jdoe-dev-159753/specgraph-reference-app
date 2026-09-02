@@ -1,0 +1,125 @@
+name: r4-gallery-ci
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'e2e/**'
+      - 'compose.r4.yaml'
+      - 'docs/reviewer/**'
+      - 'README.md'
+      - '.github/workflows/r4-gallery-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: r4-gallery-ci-shared-docker-host
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify-gallery:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        include:
+          - variant: baseline
+            port: '18084'
+            profiles: r4
+            expected_detector: none
+          - variant: bayesian
+            port: '18085'
+            profiles: r4,bayesian-detector
+            expected_detector: beta-binomial-review-elevation-v1
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      R4_PORT: ${{ matrix.port }}
+      R4_PROFILES: ${{ matrix.profiles }}
+      COMPOSE_PROJECT_NAME: specgraph-r4-gallery-${{ matrix.variant }}-${{ github.run_id }}
+      EVIDENCE_NAME: r4-${{ matrix.variant }}
+      EXPECT_DETECTOR: ${{ matrix.expected_detector }}
+
+    steps:
+      - name: Clean container-owned outputs before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints'
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact source and gallery configuration
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          docker compose -f compose.r4.yaml config --quiet
+          docker compose -f compose.r4.yaml config | grep -q "SPRING_PROFILES_ACTIVE: ${R4_PROFILES}"
+          printf 'variant=%s port=%s profiles=%s expectedDetector=%s\n' \
+            '${{ matrix.variant }}' "$R4_PORT" "$R4_PROFILES" "$EXPECT_DETECTOR"
+
+      - name: Start isolated R4 gallery variant
+        env:
+          APP_R4_IMAGE: specgraph-reference-app:r4-gallery-${{ matrix.variant }}-${{ env.SOURCE_SHA }}
+        run: |
+          echo "APP_R4_IMAGE=$APP_R4_IMAGE" >> "$GITHUB_ENV"
+          docker compose -f compose.r4.yaml up -d --build
+          for attempt in $(seq 1 180); do
+            if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
+              docker compose -f compose.r4.yaml ps
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f compose.r4.yaml logs --no-color postgres r4
+          exit 1
+
+      - name: Verify configured R4 flow and capture Playwright screenshot
+        run: |
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL="http://127.0.0.1:${R4_PORT}" \
+            -e EVIDENCE_NAME="$EVIDENCE_NAME" \
+            -e EXPECT_DETECTOR="$EXPECT_DETECTOR" \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
+
+      - name: Collect reviewer screenshot
+        if: always()
+        run: |
+          mkdir -p "e2e/reviewer-evidence/${{ matrix.variant }}"
+          find e2e/test-results -type f -name '*.png' -exec cp -v {} "e2e/reviewer-evidence/${{ matrix.variant }}/" \; 2>/dev/null || true
+          printf '%s\n' \
+            "sourceSha=$SOURCE_SHA" \
+            "variant=${{ matrix.variant }}" \
+            "profiles=$R4_PROFILES" \
+            "expectedDetector=$EXPECT_DETECTOR" \
+            "stage2=pgvector+all-MiniLM-L6-v2" \
+            "stage3=deterministic" \
+            > "e2e/reviewer-evidence/${{ matrix.variant }}/provenance.txt"
+
+      - name: Upload R4 gallery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r4-gallery-${{ matrix.variant }}-${{ env.SOURCE_SHA }}
+          path: |
+            e2e/reviewer-evidence/${{ matrix.variant }}/**
+            e2e/test-results/**
+            e2e/playwright-report/**
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Reclaim isolated gallery variant
+        if: always()
+        run: |
+          docker compose -f compose.r4.yaml down -v --remove-orphans 2>/dev/null || true
+          if [ -n "${APP_R4_IMAGE:-}" ]; then
+            docker image rm -f "$APP_R4_IMAGE" 2>/dev/null || true
+          fi
