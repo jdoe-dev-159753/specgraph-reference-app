@@ -15,9 +15,9 @@ import org.junit.jupiter.api.Test;
 @Tag("VFY-ANALYSIS-001")
 class OpenApiContractTests {
     @Test
-    void r3ContractRetainsTypedCustomerReadAndAddsStructuredPersistentAnalysis() {
+    void r4AnalysisChainRetainsTypedCustomerReadAndExposesLayeredProvenance() {
         URL contract = Thread.currentThread().getContextClassLoader().getResource("static/openapi.yaml");
-        assertThat(contract).as("packaged R3 OpenAPI contract").isNotNull();
+        assertThat(contract).as("packaged R4 analysis-chain OpenAPI contract").isNotNull();
 
         SwaggerParseResult result = new OpenAPIV3Parser().readLocation(contract.toExternalForm(), null, null);
         assertThat(result.getMessages()).as("OpenAPI parser diagnostics").isEmpty();
@@ -25,7 +25,7 @@ class OpenApiContractTests {
         OpenAPI api = result.getOpenAPI();
         assertThat(api).isNotNull();
         assertThat(api.getOpenapi()).startsWith("3.0");
-        assertThat(api.getInfo().getVersion()).isEqualTo("r3");
+        assertThat(api.getInfo().getVersion()).isEqualTo("r4-analysis-chain");
         assertThat(api.getPaths()).containsKeys(
                 "/api/customers/{customerId}",
                 "/api/customers/{customerId}/analyses",
@@ -48,11 +48,27 @@ class OpenApiContractTests {
         Schema<?> analysis = api.getComponents().getSchemas().get("Analysis");
         assertThat(analysis.getRequired()).containsAll(Set.of(
                 "analysisId", "customerId", "operatorId", "generatedAt", "riskLevel",
-                "findingsSummary", "recommendations", "evidenceProvenance"));
+                "findingsSummary", "recommendations", "evidenceProvenance", "detectorProvenance", "modelProvenance"));
         assertThat(analysis.getProperties().get("analysisId").getFormat()).isEqualTo("uuid");
         assertThat(analysis.getProperties().get("generatedAt").getFormat()).isEqualTo("date-time");
         assertThat(analysis.getProperties().get("riskLevel").getEnum().stream().map(String::valueOf).toList())
                 .containsExactly("LOW", "MEDIUM", "HIGH");
+        assertThat(analysis.getProperties().get("detectorProvenance").getItems().get$ref())
+                .isEqualTo("#/components/schemas/RiskSignalEvidence");
+        assertThat(analysis.getProperties().get("modelProvenance").get$ref())
+                .isEqualTo("#/components/schemas/AnalysisModelProvenance");
+
+        Schema<?> detectorEvidence = api.getComponents().getSchemas().get("RiskSignalEvidence");
+        assertThat(detectorEvidence.getRequired()).containsAll(Set.of(
+                "detectorIdentity", "signalIdentity", "score", "provenance"));
+
+        Schema<?> modelProvenance = api.getComponents().getSchemas().get("AnalysisModelProvenance");
+        assertThat(modelProvenance.getRequired()).containsAll(Set.of(
+                "backendIdentity", "modelIdentity", "metadata"));
+
+        Schema<?> problem = api.getComponents().getSchemas().get("AnalysisProblem");
+        assertThat(problem.getProperties().get("reason").getEnum().stream().map(String::valueOf).toList())
+                .contains("DETECTOR_FAILURE");
 
         Schema<?> activity = api.getComponents().getSchemas().get("Activity");
         assertThat(activity.getOneOf()).extracting(Schema::get$ref).containsExactlyInAnyOrder(

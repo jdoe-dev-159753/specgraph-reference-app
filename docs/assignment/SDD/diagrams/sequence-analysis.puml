@@ -1,5 +1,5 @@
 @startuml
-title Figure 7a — Grounded analysis orchestration
+title Figure 7a — Staged evidence-to-analysis orchestration
 hide footbox
 skinparam maxMessageSize 50
 
@@ -7,6 +7,7 @@ actor Operator
 participant "UI + HTTP\nboundary" as Boundary
 participant "Analysis\napplication" as Analysis
 participant "CustomerActivityPort" as Activity
+participant "RiskSignalDetectorPort" as Detector
 participant "PolicyKnowledgePort" as Policy
 participant "AnalysisModelPort" as Model
 participant "AnalysisHistoryPort" as History
@@ -14,43 +15,54 @@ participant "AnalysisHistoryPort" as History
 Operator -> Boundary : Analyze selected customer
 Boundary -> Analysis : analyze(customerId, operatorId)
 Analysis -> Activity : loadSnapshot(customerId)
-Activity --> Analysis : CustomerSnapshot
-Analysis -> Policy : retrieveRelevant(context)
+Activity --> Analysis : CustomerSnapshot\n(source facts + source risk evidence)
 
-alt no relevant policy evidence
-  Policy --> Analysis : explicit no-evidence
-  Analysis --> Boundary : insufficient grounding
-  Boundary --> Operator : not presented as grounded/completed
-else relevant evidence available
-  Policy --> Analysis : PolicyEvidence[]
-  Analysis -> Model : analyze(context, evidence)
-  alt model/provider failure
-    Model --> Analysis : failure
-    Analysis --> Boundary : explicit analysis failure
-    Boundary --> Operator : not completed / retained
-  else candidate returned
-    Model --> Analysis : structured candidate
-    Analysis -> Analysis : validate result contract
-    alt invalid structured result
-      Analysis --> Boundary : validation failure
-      Boundary --> Operator : invalid result not retained
-    else valid result
-      Analysis -> History : persist(AnalysisHistoryCreateCommand)
-      alt persistence failure
-        History --> Analysis : failure
-        Analysis --> Boundary : explicit persistence failure
-        Boundary --> Operator : not represented as retained/completed
-      else persistence succeeds
-        History --> Analysis : AnalysisHistoryEntry
-        Analysis --> Boundary : completed structured analysis
-        Boundary --> Operator : risk + findings + recommendations + provenance
+Analysis -> Detector : detect(snapshot)
+alt detector failure
+  Detector --> Analysis : failure
+  Analysis --> Boundary : explicit detector failure
+  Boundary --> Operator : not completed / retained
+else detector succeeds
+  Detector --> Analysis : RiskSignalEvidence[]\n(default no-op => [])
+  Analysis -> Policy : retrieveRelevant(snapshot)
+
+  alt no relevant policy evidence
+    Policy --> Analysis : explicit no-evidence
+    Analysis --> Boundary : insufficient grounding
+    Boundary --> Operator : not presented as grounded/completed
+  else relevant evidence available
+    Policy --> Analysis : PolicyEvidence[]
+    Analysis -> Analysis : assemble AnalysisEvidenceEnvelope\n(source | detector | policy kept distinct)
+    Analysis -> Model : analyze(evidenceEnvelope)
+    alt model/provider failure
+      Model --> Analysis : failure
+      Analysis --> Boundary : explicit analysis failure
+      Boundary --> Operator : not completed / retained
+    else candidate returned
+      Model --> Analysis : AnalysisModelOutput\n(result + model provenance)
+      Analysis -> Analysis : validate structured AnalysisResult
+      alt invalid structured result
+        Analysis --> Boundary : validation failure
+        Boundary --> Operator : invalid result not retained
+      else valid result
+        Analysis -> History : persist(result + policy/detector/model provenance)
+        alt persistence failure
+          History --> Analysis : failure
+          Analysis --> Boundary : explicit persistence failure
+          Boundary --> Operator : not represented as retained/completed
+        else persistence succeeds
+          History --> Analysis : AnalysisHistoryEntry
+          Analysis --> Boundary : completed structured analysis
+          Boundary --> Operator : risk + findings + recommendations\n+ layered provenance
+        end
       end
     end
   end
 end
 
 note over Activity,History
-  These are project-owned application ports. Figure 7b shows the
-  replaceable adapters and the JDBC/HTTPS infrastructure boundaries.
+  These are project-owned application ports. RAG is the PolicyKnowledgePort
+  stage, not the complete analysis architecture. Bayesian/statistical detector
+  and live/OpenAI model adapters substitute independently behind stable ports.
 end note
 @enduml

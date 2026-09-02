@@ -1,13 +1,19 @@
 package dev.specgraph.reference.analysis;
 
-import dev.specgraph.reference.customer.CustomerSnapshot;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
 class DeterministicAnalysisAdapter implements AnalysisModelPort {
+    private static final AnalysisModelProvenance PROVENANCE = new AnalysisModelProvenance(
+            "deterministic",
+            "r3-offline-baseline-v1",
+            Map.of("externalTransmission", "false"));
+
     @Override
-    public AnalysisResult analyze(CustomerSnapshot snapshot, List<PolicyEvidence> evidence) {
+    public AnalysisModelOutput analyze(AnalysisEvidenceEnvelope evidence) {
+        var snapshot = evidence.snapshot();
         int sourceRiskSignals = snapshot.riskEvidence().size();
         AnalysisResult.RiskLevel riskLevel = sourceRiskSignals == 0
                 ? AnalysisResult.RiskLevel.LOW
@@ -27,6 +33,8 @@ class DeterministicAnalysisAdapter implements AnalysisModelPort {
                         "Review the persisted source risk signals with the associated transactions.",
                         "Confirm the activity context against the retrieved synthetic policy evidence before escalation.");
 
-        return new AnalysisResult(riskLevel, findings, recommendations);
+        return new AnalysisModelOutput(
+                new AnalysisResult(riskLevel, findings, recommendations),
+                PROVENANCE);
     }
 }

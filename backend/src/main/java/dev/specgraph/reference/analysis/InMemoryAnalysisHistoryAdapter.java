@@ -18,7 +18,9 @@ class InMemoryAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 command.operatorId(),
                 command.generatedAt(),
                 command.result(),
-                command.evidenceProvenance());
+                command.evidenceProvenance(),
+                command.detectorProvenance(),
+                command.modelProvenance());
         analyses.add(entry);
         return entry;
     }

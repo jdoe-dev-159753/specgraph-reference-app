@@ -34,7 +34,7 @@ modules:
     adrs: [ADR-001]
   MOD-ANALYSIS-001:
     name: analysis
-    responsibility: analysis orchestration, policy grounding and analysis history
+    responsibility: staged analysis orchestration, detector evidence, policy grounding, model synthesis and analysis history
     package: dev.specgraph.reference.analysis
     depends_on: [MOD-CUSTOMER-001]
     activation_ring: R3
@@ -52,11 +52,51 @@ contracts:
     owner: MOD-ANALYSIS-001
     contains: [risk_level, findings_summary, recommendations]
     invariants: [INV-AI-001]
+  CTR-ANALYSIS-PIPELINE-ARTIFACT-001:
+    name: AnalysisPipelineArtifact
+    owner: MOD-ANALYSIS-001
+    java_shape: sealed_interface
+    discriminant: concrete_record_type
+    derived_kind_values: [DETECTOR_EVIDENCE, POLICY_RETRIEVAL_EVIDENCE, MODEL_BACKEND_PROVENANCE]
+    common_projection: [kind, artifact_identity, metadata]
+    sealed_permits: [CTR-RISK-SIGNAL-EVIDENCE-001, CTR-POLICY-EVIDENCE-001, CTR-ANALYSIS-MODEL-PROVENANCE-001]
+    prohibited_shapes: [generic_nullable_payload_union, provider_or_library_dto]
+    invariants: [INV-RISK-001, INV-RAG-001, INV-AI-001]
   CTR-POLICY-EVIDENCE-001:
     name: PolicyEvidence
     owner: MOD-ANALYSIS-001
+    java_shape: record
+    implements: CTR-ANALYSIS-PIPELINE-ARTIFACT-001
+    artifact_kind: POLICY_RETRIEVAL_EVIDENCE
     contains: [source_identity, content, retrieval_metadata]
     invariants: [INV-RAG-001]
+  CTR-RISK-SIGNAL-EVIDENCE-001:
+    name: RiskSignalEvidence
+    owner: MOD-ANALYSIS-001
+    java_shape: record
+    implements: CTR-ANALYSIS-PIPELINE-ARTIFACT-001
+    artifact_kind: DETECTOR_EVIDENCE
+    contains: [detector_identity, signal_identity, score, detector_provenance]
+    invariants: [INV-RISK-001]
+  CTR-ANALYSIS-EVIDENCE-ENVELOPE-001:
+    name: AnalysisEvidenceEnvelope
+    owner: MOD-ANALYSIS-001
+    contains: [customer_snapshot, detector_evidence, policy_evidence]
+    type_safety: retains stage-specific typed collections rather than one generic artifact list
+    invariants: [INV-RISK-001, INV-RAG-001]
+  CTR-ANALYSIS-MODEL-PROVENANCE-001:
+    name: AnalysisModelProvenance
+    owner: MOD-ANALYSIS-001
+    java_shape: record
+    implements: CTR-ANALYSIS-PIPELINE-ARTIFACT-001
+    artifact_kind: MODEL_BACKEND_PROVENANCE
+    contains: [backend_identity, model_identity, metadata]
+    invariants: [INV-AI-001]
+  CTR-ANALYSIS-MODEL-OUTPUT-001:
+    name: AnalysisModelOutput
+    owner: MOD-ANALYSIS-001
+    contains: [analysis_result, model_provenance]
+    invariants: [INV-AI-001]
   CTR-OPERATOR-ID-001:
     name: OperatorId
     owner: MOD-IDENTITY-001
@@ -65,12 +105,12 @@ contracts:
   CTR-ANALYSIS-HISTORY-CREATE-001:
     name: AnalysisHistoryCreateCommand
     owner: MOD-ANALYSIS-001
-    contains: [customer_identity, operator_identity, generated_at, result, evidence_provenance]
+    contains: [customer_identity, operator_identity, generated_at, result, evidence_provenance, detector_provenance, model_provenance]
     invariants: [INV-HIST-001]
   CTR-ANALYSIS-HISTORY-ENTRY-001:
     name: AnalysisHistoryEntry
     owner: MOD-ANALYSIS-001
-    contains: [analysis_identity, customer_identity, operator_identity, generated_at, result, evidence_provenance]
+    contains: [analysis_identity, customer_identity, operator_identity, generated_at, result, evidence_provenance, detector_provenance, model_provenance]
     invariants: [INV-HIST-001]
 
 ports:
@@ -81,11 +121,20 @@ ports:
     returns: CTR-CUSTOMER-SNAPSHOT-001
     activation_ring: R0
     adrs: [ADR-001, ADR-003, ADR-007]
+  PRT-DETECTOR-001:
+    name: RiskSignalDetectorPort
+    owner: MOD-ANALYSIS-001
+    direction: outbound
+    accepts: CTR-CUSTOMER-SNAPSHOT-001
+    returns: CTR-RISK-SIGNAL-EVIDENCE-001
+    activation_ring: R4
+    adrs: [ADR-001, ADR-002]
   PRT-MODEL-001:
     name: AnalysisModelPort
     owner: MOD-ANALYSIS-001
     direction: outbound
-    returns: CTR-ANALYSIS-RESULT-001
+    accepts: CTR-ANALYSIS-EVIDENCE-ENVELOPE-001
+    returns: CTR-ANALYSIS-MODEL-OUTPUT-001
     activation_ring: R0
     adrs: [ADR-002]
   PRT-POLICY-001:
@@ -147,6 +196,14 @@ adapters:
     implements: PRT-ACTIVITY-001
     activation_ring: R2
     adrs: [ADR-003, ADR-004, ADR-007]
+  ADP-DETECTOR-NOOP-001:
+    name: NoOpRiskSignalDetectorAdapter
+    kind: outbound
+    owner: MOD-ANALYSIS-001
+    implements: PRT-DETECTOR-001
+    activation_ring: R4
+    responsibility: keep the detector stage explicit while preserving the deterministic no-extra-signal baseline until a real detector adapter is deliberately selected
+    adrs: [ADR-001, ADR-002]
   ADP-MODEL-DET-001:
     name: DeterministicAnalysisAdapter
     kind: outbound
@@ -233,11 +290,11 @@ requirement_design:
     adrs: [ADR-001, ADR-003, ADR-007]
     first_acceptance_ring: R1
   FR-AI-001:
-    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
+    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-DETECTOR-001, ADP-DETECTOR-NOOP-001, PRT-POLICY-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
     adrs: [ADR-001, ADR-002, ADR-004]
     first_acceptance_ring: R3
   FR-AI-002:
-    elements: [MOD-ANALYSIS-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
+    elements: [MOD-ANALYSIS-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-DETECTOR-001, CTR-RISK-SIGNAL-EVIDENCE-001, PRT-POLICY-001, CTR-POLICY-EVIDENCE-001, CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, PRT-MODEL-001, CTR-ANALYSIS-MODEL-OUTPUT-001, CTR-ANALYSIS-RESULT-001, CTR-ANALYSIS-MODEL-PROVENANCE-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
     adrs: [ADR-002]
     first_acceptance_ring: R3
   FR-AUTH-001:
@@ -245,11 +302,11 @@ requirement_design:
     adrs: [ADR-001, ADR-004]
     first_acceptance_ring: R4
   FR-RAG-001:
-    elements: [MOD-ANALYSIS-001, PRT-POLICY-001, CTR-POLICY-EVIDENCE-001, ADP-POL-STATIC-001, ADP-POL-PGV-001]
+    elements: [MOD-ANALYSIS-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-POLICY-001, CTR-POLICY-EVIDENCE-001, CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, ADP-POL-STATIC-001, ADP-POL-PGV-001]
     adrs: [ADR-002, ADR-003]
     first_acceptance_ring: R4
   FR-HIST-001:
-    elements: [MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, INF-DB-001, CTR-ANALYSIS-HISTORY-CREATE-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
+    elements: [MOD-ANALYSIS-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, INF-DB-001, CTR-ANALYSIS-HISTORY-CREATE-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001, CTR-RISK-SIGNAL-EVIDENCE-001, CTR-POLICY-EVIDENCE-001, CTR-ANALYSIS-MODEL-PROVENANCE-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R3
   FR-HIST-002:
@@ -257,15 +314,15 @@ requirement_design:
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-REP-001:
-    elements: [INF-COMPOSE-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
+    elements: [INF-COMPOSE-001, ADP-ACT-SYN-001, ADP-DETECTOR-NOOP-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
     adrs: [ADR-002, ADR-004, ADR-005, ADR-006]
     first_acceptance_ring: R3
   NFR-VER-001:
-    elements: [PRT-ACTIVITY-001, PRT-MODEL-001, PRT-POLICY-001, ADP-ACT-SYN-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
+    elements: [CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-ACTIVITY-001, PRT-DETECTOR-001, PRT-MODEL-001, PRT-POLICY-001, ADP-ACT-SYN-001, ADP-DETECTOR-NOOP-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
     adrs: [ADR-001, ADR-002, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-RES-001:
-    elements: [MOD-ANALYSIS-001, PRT-POLICY-001, PRT-MODEL-001, PRT-HISTORY-001, ADP-POL-STATIC-001, ADP-MODEL-DET-001, ADP-HIST-JDBC-001]
+    elements: [MOD-ANALYSIS-001, PRT-DETECTOR-001, PRT-POLICY-001, PRT-MODEL-001, PRT-HISTORY-001, ADP-DETECTOR-NOOP-001, ADP-POL-STATIC-001, ADP-MODEL-DET-001, ADP-HIST-JDBC-001]
     adrs: [ADR-002, ADR-003, ADR-007]
     first_acceptance_ring: R3
   NFR-SEC-001:
@@ -273,7 +330,7 @@ requirement_design:
     adrs: [ADR-001, ADR-004]
     first_acceptance_ring: R4
   CON-AI-002:
-    elements: [MOD-ANALYSIS-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
+    elements: [MOD-ANALYSIS-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
     adrs: [ADR-002, ADR-004]
     first_acceptance_ring: R3
 

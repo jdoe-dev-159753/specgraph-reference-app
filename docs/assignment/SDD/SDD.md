@@ -17,8 +17,8 @@ The architecture separates four concerns:
 
 1. **Operator interaction:** React exposes customer review and analysis/history workflows.
 2. **Inbound application boundary:** module-owned Spring MVC adapters expose coarse-grained use cases.
-3. **Application/domain core:** project-owned contracts and ports define customer/activity, risk, policy, model and history behavior independently of infrastructure.
-4. **Infrastructure adapters:** synthetic/Spring-JDBC activity, static/pgvector policy, deterministic/live analysis and JDBC history adapters implement those ports.
+3. **Application/domain core:** project-owned contracts and ports define customer/activity, risk, detector, policy, model and history behavior independently of infrastructure.
+4. **Infrastructure adapters:** synthetic/Spring-JDBC activity, no-op/future statistical detector, static/pgvector policy, deterministic/live analysis and JDBC history adapters implement those ports.
 
 ![Figure 1 - Architectural context schematic](diagrams/system-context.svg)
 
@@ -54,7 +54,7 @@ The backend has exactly four Spring Modulith application modules under `dev.spec
 - `identity`: real authenticated operator context, activated in R4;
 - `risk`: project-owned source-risk contracts, active from R1;
 - `customer`: customer lookup and activity-review use cases, active from R1;
-- `analysis`: analysis orchestration, policy evidence and analysis history, active from R3.
+- `analysis`: staged analysis orchestration, detector/policy evidence, model synthesis and analysis history, active from R3.
 
 The current public cross-module direction required by customer review is `customer -> risk`. Analysis may use customer-facing application contracts. Reverse infrastructure dependencies are prohibited.
 
@@ -64,7 +64,7 @@ Spring Modulith verification ratchets the physical graph: the detected module id
 
 [PlantUML source](diagrams/package-modules.puml)
 
-Hexagonal dependency direction remains strict. Spring MVC, Spring Security, Spring JDBC, PostgreSQL/pgvector and provider SDKs stop at adapters. Application-owned contracts do not import them.
+Hexagonal dependency direction remains strict. Spring MVC, Spring Security, Spring JDBC, PostgreSQL/pgvector, statistical-model libraries and provider SDKs stop at adapters. Application-owned contracts do not import them.
 
 ![Figure 2b - Hexagonal architecture](diagrams/hexagonal-architecture.svg)
 
@@ -77,17 +77,18 @@ The central outbound ports are:
 | Port | Responsibility | Activated behavior |
 | --- | --- | --- |
 | `CustomerActivityPort` | load one project-owned `CustomerSnapshot` | synthetic R1, Spring JDBC R2+ |
+| `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | explicit no-op R4 baseline, optional Bayesian/statistical/graph adapters later |
 | `PolicyKnowledgePort` | return project-owned `PolicyEvidence` | static deterministic evidence R3, pgvector R4 |
-| `AnalysisModelPort` | produce a structured project-owned `AnalysisResult` | deterministic R3, optional live provider later |
+| `AnalysisModelPort` | consume one project-owned `AnalysisEvidenceEnvelope` and return structured result plus model provenance | deterministic R3/R4 baseline, optional live provider later |
 | `AnalysisHistoryPort` | persist/list/inspect validated analysis history | Spring JDBC R3+ |
 
-The primary adapters are `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `SyntheticActivityAdapter`, `JdbcCustomerActivityAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, and `JdbcAnalysisHistoryAdapter`.
+The primary adapters are `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `SyntheticActivityAdapter`, `JdbcCustomerActivityAdapter`, `NoOpRiskSignalDetectorAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, and `JdbcAnalysisHistoryAdapter`.
 
 The inception-selected GoF roles remain intentionally limited:
 
-- **Adapter:** translates framework/provider/storage APIs to project-owned ports.
-- **Strategy:** selects interchangeable activity, policy, model or future detector behavior behind stable ports.
-- **Facade/application service:** exposes one coarse-grained use case while hiding multi-port orchestration. `AnalysisService` is the R3 example.
+- **Adapter:** translates framework/provider/storage/model APIs to project-owned ports.
+- **Strategy:** selects interchangeable activity, detector, policy or analysis-model behavior behind stable ports.
+- **Facade/application service:** exposes one coarse-grained use case while hiding multi-port orchestration. `AnalysisService` owns the evidence-to-analysis chain.
 
 Hexagonal architecture is the dependency style containing these roles; it is not itself a Strategy pattern. New patterns are not added to inflate vocabulary.
 
@@ -97,11 +98,19 @@ Hexagonal architecture is the dependency style containing these roles; it is not
 
 ## 5. Project-owned contracts
 
-Stable contracts include `CustomerSnapshot`, activity/risk projections, `AnalysisResult`, `PolicyEvidence`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`.
+Stable contracts include `CustomerSnapshot`, activity/risk projections, the sealed `AnalysisPipelineArtifact` pivot, `RiskSignalEvidence`, `PolicyEvidence`, `AnalysisEvidenceEnvelope`, `AnalysisResult`, `AnalysisModelProvenance`, `AnalysisModelOutput`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`.
 
-`AnalysisResult` is constrained to a structured risk level `LOW | MEDIUM | HIGH`, a non-empty findings summary and non-empty recommendations. `AnalysisHistoryEntry` adds generated analysis identity, customer identity, operator attribution, generation time, structured result and evidence provenance.
+`AnalysisPipelineArtifact` is the common application-owned pivot for derived analysis-stage artifacts crossing hexagonal adapter boundaries. It is a Java sealed interface whose permitted record variants are exactly `RiskSignalEvidence`, `PolicyEvidence`, and `AnalysisModelProvenance`. The concrete record type is the discriminant. `kind()` and `artifactIdentity()` are derived exhaustively from that concrete type; there is no mutable external tag paired with a generic payload and no design in which two or three irrelevant payload fields must be `null`. Adding a fourth artifact variant must extend the sealed hierarchy and therefore makes exhaustive pattern switches fail compilation until the new variant is handled deliberately.
 
-Persistence rows and provider response classes do not become members of these contracts.
+The pivot standardizes the mechanics that really are common, namely artifact kind, stable artifact identity and provider-neutral metadata, while preserving variant-specific typed payloads. `RiskSignalEvidence` retains detector identity, signal identity and score; `PolicyEvidence` retains retrieved source identity and content; `AnalysisModelProvenance` retains backend and model identities. A common transport/persistence family therefore does not imply common semantic authority. Source `risk_assessments` remain source truth; detector evidence is derived; policy evidence is retrieved context; model/backend provenance describes advisory execution.
+
+`AnalysisEvidenceEnvelope` is the application-owned boundary passed to advisory analysis models. It keeps three semantic layers distinguishable: persisted customer/source-risk facts in `CustomerSnapshot`, optional derived detector signals in `RiskSignalEvidence`, and retrieved policy knowledge in `PolicyEvidence`. Its members remain strongly typed collections rather than a generic `List<AnalysisPipelineArtifact>`, so the compiler also enforces which artifact variants are legal at each stage. Provider- or library-specific context classes do not cross this boundary.
+
+`AnalysisResult` is constrained to a structured risk level `LOW | MEDIUM | HIGH`, a non-empty findings summary and non-empty recommendations. `AnalysisModelOutput` couples that validated application result shape to project-owned backend/model provenance without exposing provider SDK types.
+
+`AnalysisHistoryEntry` adds generated analysis identity, customer identity, operator attribution, generation time, structured result, policy/retrieval provenance, detector provenance and model/backend provenance. These provenance families remain separate typed fields for semantic clarity while their values participate in the same sealed `AnalysisPipelineArtifact` family. They are not flattened into one untyped metadata bag.
+
+Persistence rows, pgvector `Document` values, statistical-library result classes and provider response classes do not become members of these contracts. Adapters must translate them into the corresponding project-owned record variant before the application core sees them.
 
 ![Figure 4a - UML Class diagram - project-owned contracts](diagrams/domain-contracts.svg)
 
@@ -113,11 +122,13 @@ Persistence rows and provider response classes do not become members of these co
 
 ## 6. Detection versus explanation trust boundary
 
-Source `risk_assessments` are persisted source-shaped evidence. They remain distinct from generated analysis.
+Source `risk_assessments` are persisted source-shaped evidence. They remain distinct from derived detector evidence and generated analysis.
 
 The R3 deterministic analysis may synthesize customer context, source risk evidence and static policy evidence, but it cannot manufacture a source risk fact. A later live LLM remains advisory explanation/synthesis, not the sole detector or authority for customer risk.
 
-If later evidence justifies deterministic/statistical/Bayesian/graph/classical-ML detection, that capability must sit behind a project-owned detector seam such as `RiskSignalDetectorPort`. Its outputs remain separately identified derived signals carrying detector/version/provenance metadata. A library-specific model type must never leak into source risk rows or application contracts.
+R4 activates the project-owned `RiskSignalDetectorPort` as an explicit stage in the chain. Its default `NoOpRiskSignalDetectorAdapter` deliberately emits no additional signals, so introducing the seam does not change the accepted deterministic R3 risk decision. A later deterministic/statistical/Bayesian/graph/classical-ML implementation can substitute behind the same port when justified by data and benchmark evidence. Its outputs are `RiskSignalEvidence` values with detector identity, signal identity, score and provenance; they never overwrite source `risk_assessments`.
+
+The detector stage and analysis-model stage are therefore intentionally different. A detector may estimate or rank a suspicious pattern from activity evidence; `AnalysisModelPort` receives those derived signals together with source evidence and retrieved policy context and produces bounded advisory synthesis. The OpenAI/Spring AI adapter, when explicitly enabled later, receives the same `AnalysisEvidenceEnvelope` as the deterministic model rather than a provider-specific side channel.
 
 [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md) owns this decision and compares candidate detector families.
 
@@ -132,6 +143,8 @@ The source relation types include exact monetary `DECIMAL/NUMERIC`, bounded curr
 Multi-query customer aggregate reads execute under PostgreSQL `REPEATABLE READ`, so activities and risk evidence cannot be assembled from different committed snapshots.
 
 R3 adds project-owned `analysis_history` through Flyway and `JdbcAnalysisHistoryAdapter`. Only a validated analysis whose persistence succeeds is represented as completed retained history.
+
+The R4 analysis-chain foundation extends each history row with separately serialized detector and model provenance. Existing pre-R4 rows receive an explicit deterministic legacy model identity during migration rather than an unreadable empty object. Policy/retrieval evidence remains in its existing provenance field; detector/model metadata does not mutate source risk tables.
 
 ![Figure 5 - Relational persistence model](diagrams/relational-schema.svg)
 
@@ -149,9 +162,9 @@ Unknown customers return an explicit not-found result rather than fabricated dat
 
 [PlantUML source](diagrams/activity-customer-review.puml) | [Sequence view](diagrams/sequence-customer-review.svg)
 
-## 9. R3 deterministic analysis and history
+## 9. Deterministic analysis baseline and R4 staged composition
 
-R3 activates the mandatory offline path:
+R3 established the mandatory offline path:
 
 ```text
 AnalysisHttpAdapter
@@ -165,15 +178,42 @@ AnalysisHttpAdapter
   -> PostgreSQL
 ```
 
-The successful path is complete only after history persistence succeeds. Static policy evidence supplies deterministic grounding for R3 without claiming that R4 pgvector/RAG is already implemented.
+The successful R3 path is complete only after history persistence succeeds. Static policy evidence supplies deterministic grounding for R3 without claiming that R4 pgvector/RAG is already implemented.
+
+R4 preserves that behavior while making the complete evidence chain explicit and independently substitutable:
+
+```text
+AnalysisHttpAdapter
+  -> AnalysisUseCase
+  -> AnalysisService
+  -> CustomerActivityPort
+       -> CustomerSnapshot
+          [activities + persisted source risk evidence]
+  -> RiskSignalDetectorPort
+       -> RiskSignalEvidence[*] implements AnalysisPipelineArtifact
+          [default NoOpRiskSignalDetectorAdapter => []]
+  -> PolicyKnowledgePort
+       -> PolicyEvidence[*] implements AnalysisPipelineArtifact
+          [StaticPolicyAdapter until #119 activates pgvector retrieval]
+  -> AnalysisEvidenceEnvelope
+       [source facts | detector evidence | policy evidence remain distinct and statically typed]
+  -> AnalysisModelPort
+       -> AnalysisModelOutput
+          [validated AnalysisResult + AnalysisModelProvenance implements AnalysisPipelineArtifact]
+  -> AnalysisHistoryPort
+       [policy/retrieval + detector + model provenance persisted separately]
+  -> PostgreSQL
+```
+
+This composition means RAG is one context-supply stage, not the complete AI architecture. A Bayesian/statistical detector can later replace only the detector adapter; an OpenAI/live model can later replace only the analysis-model adapter. Both adapters must translate their library/provider-native results into an existing application-owned sealed record variant. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.
 
 ![Figure 7 - UML Activity diagram - grounded analysis](diagrams/activity-grounded-analysis.svg)
 
 [PlantUML source](diagrams/activity-grounded-analysis.puml) | [Orchestration sequence](diagrams/sequence-analysis.svg) | [Adapter sequence](diagrams/sequence-analysis-adapters.svg)
 
-R3 requires operator **attribution** in persisted provenance but deliberately does not activate R4 authentication/authorization. The R3 HTTP/application boundary supplies a deterministic project-owned `OperatorId` for offline verification. R4 later replaces that deterministic attribution source with real authenticated multi-operator context without changing the history contract.
+R3 requires operator **attribution** in persisted provenance but deliberately does not activate R4 authentication/authorization. The R3/R4 deterministic HTTP/application boundary currently supplies a deterministic project-owned `OperatorId` for offline verification. R4 authentication work replaces that deterministic attribution source with real authenticated multi-operator context without changing the history contract.
 
-R3 list/inspect operations therefore prove persistent reviewable history, while authorization of those operations remains an R4 acceptance obligation.
+R3 list/inspect operations therefore prove persistent reviewable history, while authorization of those operations remains a separate R4 acceptance obligation.
 
 ![Figure 8 - UML Activity diagram - analysis history review](diagrams/activity-history-review.svg)
 
@@ -181,16 +221,17 @@ R3 list/inspect operations therefore prove persistent reviewable history, while 
 
 ## 10. Failure and degraded behavior
 
-`NFR-RES-001` maps explicitly to the analysis module and policy/model/history boundaries. These failure modes terminate without a false completed/history state:
+`NFR-RES-001` maps explicitly to the analysis module and detector/policy/model/history boundaries. These failure modes terminate without a false completed/history state:
 
 - customer not found;
+- detector adapter failure;
 - insufficient policy grounding;
 - policy adapter failure;
 - model execution failure;
 - structurally invalid model output;
 - persistence failure.
 
-No evidence means no successfully grounded model execution. Invalid structured output cannot reach history persistence. Failed persistence cannot be reported as retained history.
+Stage ordering is fail-closed. A detector failure stops before policy retrieval/model execution/history persistence. Missing policy evidence means no successfully grounded model execution. Invalid structured output cannot reach history persistence. Failed persistence cannot be reported as retained history.
 
 ![Figure 9 - UML Activity diagram - failure behavior](diagrams/activity-failure-behavior.svg)
 
@@ -240,8 +281,8 @@ The rings activate capability maturity while preserving the same application cor
 - **R1 - mandatory synthetic customer review:** customer lookup, CARD/PAYMENT/CRYPTO and source-derived risk evidence on deterministic data.
 - **R2 - relational substitution:** Spring JDBC/PostgreSQL/Flyway/Testcontainers behind `CustomerActivityPort`; no invented new operator use case.
 - **R3 - mandatory deterministic analysis and reviewable history:** deterministic policy/model adapters, structured analysis, explicit failures, operator attribution and PostgreSQL-backed analysis history.
-- **R4 - MUST_HAVE closure:** real policy retrieval/RAG, multi-operator authentication/authorization and related trust boundaries; optional live provider remains behind existing ports.
-- **R5 - hardening/demo:** reliability, observability, reviewer polish and NICE_TO_HAVE differentiation without changing established boundaries.
+- **R4 - MUST_HAVE closure:** explicit staged detector/retrieval/model/history orchestration, real policy retrieval/RAG, multi-operator authentication/authorization and related trust boundaries; optional live provider remains behind existing ports.
+- **R5 - hardening/demo:** reliability, observability, reviewer polish and NICE_TO_HAVE differentiation such as a concrete Bayesian detector or live-provider comparison without changing established boundaries.
 
 GitHub milestones `J1..J5` are the orthogonal delivery-timebox dimension. A day may activate more than one ring.
 
@@ -254,6 +295,7 @@ GitHub milestones `J1..J5` are the orthogonal delivery-timebox dimension. A day 
 | Review source-derived risk evidence | MANDATORY | R1 |
 | Request structured deterministic analysis | MANDATORY | R3 |
 | Persist and inspect deterministic analysis history with operator attribution | MUST_HAVE | R3 |
+| Compose source, optional detector and policy evidence through one provider-neutral analysis envelope | MUST_HAVE | R4 |
 | Retrieve real relevant policy knowledge / RAG | MUST_HAVE | R4 |
 | Authenticate/authorize real operators | MUST_HAVE | R4 |
 
@@ -271,20 +313,25 @@ The design remains governed by seven accepted ADRs:
 6. Compose OCI multi-platform distribution;
 7. Spring JDBC relational adapters.
 
-The R3 refinement does not create a parallel architecture. It activates existing R0 seams, corrects the concrete deterministic adapter name, resolves the previously open analysis-history relational shape and keeps live provider/security/RAG capabilities outside the mandatory R3 boundary.
+The R4 analysis-chain refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, and extends persisted provenance while preserving the accepted R3 deterministic adapter and source-risk authority. Real pgvector retrieval, authenticated operator context, Bayesian detection and live/OpenAI synthesis remain substitutions or capabilities owned by their separate work nodes rather than being falsely claimed by this foundation.
 
 ## 14. Review criterion
 
 A reviewer should be able to answer from this SDD without reconstructing PR history:
 
 - what the system boundary and four application modules are;
-- where framework/provider/storage types stop;
+- where framework/provider/storage/model-library types stop;
 - which ports and adapters are stable and which ring activates them;
-- why source risk evidence, optional derived detector signals and generated explanation have different authority;
-- why external AI transmission is opt-in and absent from default R3 execution;
+- why source risk evidence, optional derived detector signals, retrieved policy evidence and generated explanation have different authority;
+- how `AnalysisPipelineArtifact` acts as a sealed tagged-union equivalent whose concrete record type is the compile-time discriminant for detector, retrieval and model/backend provenance artifacts;
+- why the pivot shares mechanics without introducing nullable payload branches or erasing stage-specific types;
+- how the executable chain composes `CustomerSnapshot -> RiskSignalDetectorPort -> PolicyKnowledgePort -> AnalysisEvidenceEnvelope -> AnalysisModelPort -> AnalysisHistoryPort`;
+- why RAG is one grounding/context stage rather than the whole analysis architecture;
+- how a future Bayesian detector and optional OpenAI adapter substitute independently behind project-owned ports;
+- why external AI transmission is opt-in and absent from default deterministic execution;
 - how R2 preserves exact PostgreSQL source semantics and snapshot consistency;
-- how R3 validates, persists and reloads deterministic analysis history without pretending R4 authentication already exists;
-- how `NFR-RES-001` prevents false completed/history state;
+- how deterministic analysis is validated, persisted and reloaded without pretending R4 authentication already exists;
+- how `NFR-RES-001` prevents false completed/history state at detector, grounding, model and persistence boundaries;
 - how source and last-known-good published checkpoint states differ;
 - how the complete J2 publication preserves R0-R3 as independent reviewer checkpoints;
 - how R0-R5 extend one architecture concentrically.

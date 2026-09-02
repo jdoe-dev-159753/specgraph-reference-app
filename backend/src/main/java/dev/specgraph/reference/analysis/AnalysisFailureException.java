@@ -19,6 +19,7 @@ public final class AnalysisFailureException extends RuntimeException {
 
     public enum Reason {
         CUSTOMER_NOT_FOUND,
+        DETECTOR_FAILURE,
         INSUFFICIENT_GROUNDING,
         GROUNDING_FAILURE,
         MODEL_FAILURE,
