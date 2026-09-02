@@ -1,0 +1,71 @@
+@startuml
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam wrapWidth 220
+skinparam maxMessageSize 160
+skinparam ArrowColor #555555
+skinparam rectangle {
+  RoundCorner 12
+}
+
+title R4 analysis architecture — functions first, implementations second
+
+rectangle "SOURCE FACTS\nCustomerSnapshot\nactivities + persisted risk_assessments\n(source truth)" as source
+
+package "STAGE 1 — PRIMITIVE SIGNAL ANALYSIS" as stage1 {
+  interface "RiskSignalDetectorPort" as detectorPort
+  rectangle "Deterministic / rules\nconstant, explainable baseline" as rules
+  rectangle "Bayesian / sequential\nprobabilistic inference\nApache Commons Math adapter" as bayes
+  rectangle "Fuzzy logic\ngraded rule inference\npermissive JVM adapter TBD" as fuzzy
+  rectangle "Random Forest / Extra Trees\nclassical learned ML\nTribuo adapter candidate" as forest
+  rectangle "Optional anomaly / graph\nclassical statistical/graph methods" as anomaly
+  rectangle "Canonical RiskSignalEvidence\ntyped derived artifacts\nnever source truth" as signals
+
+  rules --> detectorPort
+  bayes --> detectorPort
+  fuzzy --> detectorPort
+  forest --> detectorPort
+  anomaly --> detectorPort
+  detectorPort --> signals
+}
+
+package "STAGE 2 — EVIDENCE GROUNDING & FUSION" as stage2 {
+  interface "PolicyKnowledgePort" as policyPort
+  rectangle "Policy retrieval adapter\npgvector + local embeddings\nimplementation detail" as retrieval
+  rectangle "AnalysisEvidenceEnvelope\nsource facts + detector artifacts + policy evidence\ncanonical typed pivot graph" as envelope
+
+  retrieval --> policyPort
+  policyPort --> envelope
+}
+
+package "STAGE 3 — FINAL ADVISORY SYNTHESIS" as stage3 {
+  interface "AnalysisModelPort" as modelPort
+  rectangle "Deterministic/local synthesizer\ndefault offline path" as deterministicModel
+  rectangle "Live LLM synthesizer\nOpenAI via Spring AI adapter\nexplicit opt-in" as openai
+  rectangle "Structured AnalysisResult\nLOW | MEDIUM | HIGH\nfindings + recommendations" as result
+
+  deterministicModel --> modelPort
+  openai --> modelPort
+  modelPort --> result
+}
+
+rectangle "GROUNDING / SAFETY VALIDATION\nexact evidence references\nfail closed" as validator
+rectangle "PERSISTED REVIEW HISTORY\noperator + detector + retrieval + model provenance" as history
+rectangle "REVIEWER UI / API" as reviewer
+
+source --> detectorPort : bounded facts
+source --> envelope : preserve source authority
+signals --> envelope
+source --> policyPort : retrieval query context
+envelope --> modelPort : bounded grounded evidence
+result --> validator
+validator --> history : validated only
+history --> reviewer
+
+note bottom
+Architecture names FUNCTIONS and PORTS.
+Library/vendor names appear only beneath adapters as implementation provenance.
+OpenAI implements Stage 3 synthesis; Bayesian, fuzzy and Random Forest implement Stage 1 signal analysis.
+end note
+@enduml

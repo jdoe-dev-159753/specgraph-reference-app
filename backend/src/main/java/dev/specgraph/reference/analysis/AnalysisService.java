@@ -71,10 +71,7 @@ final class AnalysisService implements AnalysisUseCase {
         try {
             output = analysisModel.analyze(evidence);
         } catch (InvalidAnalysisResultException exception) {
-            throw new AnalysisFailureException(
-                    AnalysisFailureException.Reason.INVALID_RESULT,
-                    "Analysis model returned an invalid structured result",
-                    exception);
+            throw invalidResult("Analysis model returned an invalid structured result", exception);
         } catch (RuntimeException exception) {
             throw new AnalysisFailureException(
                     AnalysisFailureException.Reason.MODEL_FAILURE,
@@ -82,9 +79,13 @@ final class AnalysisService implements AnalysisUseCase {
                     exception);
         }
         if (output == null) {
-            throw new AnalysisFailureException(
-                    AnalysisFailureException.Reason.INVALID_RESULT,
-                    "Analysis model returned no structured output");
+            throw invalidResult("Analysis model returned no structured output", null);
+        }
+
+        try {
+            AnalysisGroundingValidator.validate(evidence, output.provenance());
+        } catch (InvalidAnalysisResultException exception) {
+            throw invalidResult("Analysis model returned unsupported or incomplete grounding provenance", exception);
         }
 
         AnalysisHistoryCreateCommand command = new AnalysisHistoryCreateCommand(
@@ -113,5 +114,12 @@ final class AnalysisService implements AnalysisUseCase {
     @Override
     public Optional<AnalysisHistoryEntry> findHistory(UUID customerId, UUID analysisId) {
         return analysisHistory.findByCustomerAndId(customerId, analysisId);
+    }
+
+    private static AnalysisFailureException invalidResult(String message, RuntimeException cause) {
+        if (cause == null) {
+            return new AnalysisFailureException(AnalysisFailureException.Reason.INVALID_RESULT, message);
+        }
+        return new AnalysisFailureException(AnalysisFailureException.Reason.INVALID_RESULT, message, cause);
     }
 }
