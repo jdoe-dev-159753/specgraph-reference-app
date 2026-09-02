@@ -14,8 +14,8 @@ obligations:
   VFY-AUTH-001:
     covers: [FR-AUTH-001, NFR-SEC-001]
     acceptance: [AC-AUTH-001, AC-SEC-001]
-    methods: [security_integration, api_acceptance]
-    design: [MOD-IDENTITY-001, ADP-AUTH-SPRING-001]
+    methods: [security_integration, api_acceptance, ui_e2e]
+    design: [MOD-IDENTITY-001, CTR-OPERATOR-CONTEXT-001, PRT-OPERATOR-CONTEXT-001, ADP-SESSION-HTTP-001, ADP-AUTH-SPRING-001, CMP-UI-001]
     executable_evidence: discovered_by_markers
   VFY-ANALYSIS-CONTRACT-001:
     covers: [FR-AI-001, FR-AI-002, INV-AI-001, CON-AI-001]

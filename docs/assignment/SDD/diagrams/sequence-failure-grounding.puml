@@ -4,24 +4,36 @@ hide footbox
 skinparam maxMessageSize 48
 
 actor Operator
-participant "UI + HTTP\nboundary" as Boundary
+participant "React UI" as UI
+participant "Spring Security +\nAnalysis HTTP adapter" as Boundary
+participant "OperatorContextPort" as OperatorContext
 participant "Analysis\napplication" as Analysis
 participant "PolicyKnowledgePort" as Policy
 
-Operator -> Boundary : protected analysis action
+Operator -> UI : protected analysis action
+UI -> Boundary : POST analysis + CSRF
 alt unauthenticated
-  Boundary --> Operator : reject / redirect
+  Boundary --> UI : HTTP 401
+  UI --> Operator : authentication required
 else authenticated
+  Boundary -> OperatorContext : requireAuthenticated()
+  OperatorContext --> Boundary : OperatorId
   Boundary -> Analysis : analyze(customerId, OperatorId)
   Analysis -> Policy : retrieveRelevant(context)
   alt no relevant evidence
     Policy --> Analysis : explicit no-evidence
     Analysis --> Boundary : insufficient grounding
-    Boundary --> Operator : not grounded / not completed
+    Boundary --> UI : not grounded / not completed
+    UI --> Operator : insufficient grounding
   else evidence available
     Policy --> Analysis : PolicyEvidence[] with provenance
   end
 end
+
+note right of OperatorContext
+  Spring Security Authentication/SecurityContext remain adapter-local.
+  The application boundary sees only project-owned OperatorContext/OperatorId.
+end note
 
 note right of Analysis
   AC-RAG-002 forbids fabricated grounding provenance.

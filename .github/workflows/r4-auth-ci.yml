@@ -1,0 +1,128 @@
+name: r4-auth-ci
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'e2e/**'
+      - 'docker/**'
+      - '.dockerignore'
+      - '.github/workflows/r4-auth-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: r4-auth-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-r4-auth:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      AUTH_PORT: '8084'
+    steps:
+      - name: Clean container-owned outputs before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints'
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact validated source revision
+        run: |
+          checked_out_sha="$(git rev-parse HEAD)"
+          echo "Expected source SHA: $SOURCE_SHA"
+          echo "Checked-out SHA:     $checked_out_sha"
+          test "$checked_out_sha" = "$SOURCE_SHA"
+
+      - name: Build exact-head application image
+        run: |
+          image="specgraph-reference-app:r4-auth-ci-${SOURCE_SHA}"
+          docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$image" .
+          echo "R4_AUTH_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Start isolated PostgreSQL and r4-auth application
+        run: |
+          network="specgraph-r4-auth-${GITHUB_RUN_ID}"
+          database="specgraph-r4-auth-db-${GITHUB_RUN_ID}"
+          application="specgraph-r4-auth-app-${GITHUB_RUN_ID}"
+          echo "R4_AUTH_NETWORK=$network" >> "$GITHUB_ENV"
+          echo "R4_AUTH_DATABASE=$database" >> "$GITHUB_ENV"
+          echo "R4_AUTH_APPLICATION=$application" >> "$GITHUB_ENV"
+
+          docker network create "$network"
+          docker run -d --name "$database" --network "$network" --network-alias postgres \
+            -e POSTGRES_DB=specgraph \
+            -e POSTGRES_USER=specgraph \
+            -e POSTGRES_PASSWORD=specgraph \
+            postgres:17-alpine
+
+          for attempt in $(seq 1 60); do
+            if docker exec "$database" pg_isready -U specgraph -d specgraph >/dev/null 2>&1; then
+              echo "PostgreSQL ready after ${attempt} attempts"
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker logs "$database"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker run -d --name "$application" --network "$network" \
+            -p "${AUTH_PORT}:8080" \
+            -e SPRING_PROFILES_ACTIVE=r4-auth \
+            -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/specgraph \
+            -e SPRING_DATASOURCE_USERNAME=specgraph \
+            -e SPRING_DATASOURCE_PASSWORD=specgraph \
+            -e SPECGRAPH_SOURCE_TIME_ZONE=UTC \
+            "$R4_AUTH_IMAGE"
+
+          for attempt in $(seq 1 90); do
+            if curl -fsS "http://127.0.0.1:${AUTH_PORT}/actuator/health" >/dev/null 2>&1; then
+              echo "r4-auth application healthy after ${attempt} attempts"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs "$application"
+          exit 1
+
+      - name: VFY-AUTH-001 - Verify multi-operator browser boundary
+        run: |
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL="http://127.0.0.1:${AUTH_PORT}" \
+            -e EVIDENCE_NAME=r4-auth \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-auth.spec.ts'
+
+      - name: Upload R4 auth evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r4-auth-${{ env.SOURCE_SHA }}
+          path: |
+            e2e/test-results/r4-auth.xml
+            e2e/test-results/r4-auth-artifacts/**
+            e2e/playwright-report/r4-auth/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Reclaim isolated R4 auth runtime
+        if: always()
+        run: |
+          docker rm -f "${R4_AUTH_APPLICATION:-missing}" "${R4_AUTH_DATABASE:-missing}" 2>/dev/null || true
+          docker network rm "${R4_AUTH_NETWORK:-missing}" 2>/dev/null || true
+          if [ -n "${R4_AUTH_IMAGE:-}" ]; then
+            docker image rm -f "$R4_AUTH_IMAGE" 2>/dev/null || true
+          fi

@@ -1,13 +1,67 @@
 openapi: 3.0.3
 info:
   title: Customer Activity Analytics API
-  version: r4-analysis-chain
-  description: Reviewer-facing contract for the staged evidence-to-analysis pipeline, retaining deterministic offline execution while exposing separate retrieval, detector, and model provenance.
+  version: r4-multi-operator
+  description: Reviewer-facing R4 contract for authenticated customer review and the staged evidence-to-analysis pipeline. The deterministic offline model remains the default while retrieval, detector and model provenance stay separate.
 paths:
+  /api/session:
+    get:
+      operationId: getOperatorSession
+      summary: Bootstrap the current operator session and CSRF token
+      responses:
+        '200':
+          description: Current authenticated or unauthenticated session state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+  /api/session/login:
+    post:
+      operationId: loginOperator
+      summary: Authenticate a local demonstration operator
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      responses:
+        '204':
+          description: Authentication succeeded and the HTTP session now carries the operator identity.
+        '401':
+          description: Credentials are invalid; no authenticated operator context is created.
+        '403':
+          description: CSRF token is missing or invalid.
+  /api/session/logout:
+    post:
+      operationId: logoutOperator
+      summary: End the authenticated operator session
+      security:
+        - SessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Session authentication was cleared.
+        '401':
+          description: No authenticated operator session is available.
+        '403':
+          description: CSRF token is missing or invalid.
   /api/customers/{customerId}:
     get:
       operationId: getCustomerSnapshot
       summary: Read one customer activity and risk snapshot
+      security:
+        - SessionCookie: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
       responses:
@@ -17,21 +71,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CustomerSnapshot'
+        '401':
+          description: R4 requires an authenticated operator session.
         '404':
           description: Customer ID is unknown; no customer is fabricated.
   /api/customers/{customerId}/analyses:
     post:
       operationId: runCustomerAnalysis
       summary: Run the configured analysis chain and persist the completed result
+      security:
+        - SessionCookie: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/CsrfToken'
       responses:
         '201':
-          description: Validated analysis completed and persisted
+          description: Validated analysis completed and persisted with authenticated operator attribution
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Analysis'
+        '401':
+          description: R4 requires an authenticated operator session.
+        '403':
+          description: CSRF token is missing or invalid.
         '404':
           description: Customer ID is unknown.
           content:
@@ -59,6 +122,8 @@ paths:
     get:
       operationId: listCustomerAnalyses
       summary: List persisted prior analyses for one customer
+      security:
+        - SessionCookie: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
       responses:
@@ -70,10 +135,14 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Analysis'
+        '401':
+          description: R4 requires an authenticated operator session.
   /api/customers/{customerId}/analyses/{analysisId}:
     get:
       operationId: getCustomerAnalysis
       summary: Inspect one persisted analysis
+      security:
+        - SessionCookie: []
       parameters:
         - $ref: '#/components/parameters/CustomerId'
         - name: analysisId
@@ -89,9 +158,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Analysis'
+        '401':
+          description: R4 requires an authenticated operator session.
         '404':
           description: No matching persisted analysis exists for this customer.
 components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+      description: Spring Security HTTP session used by the R4 application boundary.
   parameters:
     CustomerId:
       name: customerId
@@ -100,7 +177,57 @@ components:
       schema:
         type: string
         format: uuid
+    CsrfToken:
+      name: X-CSRF-TOKEN
+      in: header
+      required: true
+      description: Token obtained from GET /api/session and required for R4 state-changing requests.
+      schema:
+        type: string
+        minLength: 1
   schemas:
+    CsrfView:
+      type: object
+      required: [headerName, parameterName, token]
+      properties:
+        headerName:
+          type: string
+          enum: [X-CSRF-TOKEN]
+        parameterName:
+          type: string
+        token:
+          type: string
+          minLength: 1
+    SessionResponse:
+      oneOf:
+        - $ref: '#/components/schemas/AuthenticatedSession'
+        - $ref: '#/components/schemas/UnauthenticatedSession'
+      discriminator:
+        propertyName: state
+        mapping:
+          AUTHENTICATED: '#/components/schemas/AuthenticatedSession'
+          UNAUTHENTICATED: '#/components/schemas/UnauthenticatedSession'
+    AuthenticatedSession:
+      type: object
+      required: [state, operatorId, csrf]
+      properties:
+        state:
+          type: string
+          enum: [AUTHENTICATED]
+        operatorId:
+          type: string
+          minLength: 1
+        csrf:
+          $ref: '#/components/schemas/CsrfView'
+    UnauthenticatedSession:
+      type: object
+      required: [state, csrf]
+      properties:
+        state:
+          type: string
+          enum: [UNAUTHENTICATED]
+        csrf:
+          $ref: '#/components/schemas/CsrfView'
     CustomerSnapshot:
       type: object
       required: [customerId, activities, riskEvidence]

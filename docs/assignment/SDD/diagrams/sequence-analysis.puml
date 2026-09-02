@@ -4,7 +4,9 @@ hide footbox
 skinparam maxMessageSize 50
 
 actor Operator
-participant "UI + HTTP\nboundary" as Boundary
+participant "React UI" as UI
+participant "Spring Security +\nAnalysis HTTP adapter" as Boundary
+participant "OperatorContextPort" as OperatorContext
 participant "Analysis\napplication" as Analysis
 participant "CustomerActivityPort" as Activity
 participant "RiskSignalDetectorPort" as Detector
@@ -12,57 +14,67 @@ participant "PolicyKnowledgePort" as Policy
 participant "AnalysisModelPort" as Model
 participant "AnalysisHistoryPort" as History
 
-Operator -> Boundary : Analyze selected customer
-Boundary -> Analysis : analyze(customerId, operatorId)
-Analysis -> Activity : loadSnapshot(customerId)
-Activity --> Analysis : CustomerSnapshot\n(source facts + source risk evidence)
+Operator -> UI : Analyze selected customer
+UI -> Boundary : POST protected analysis request + CSRF
+Boundary -> OperatorContext : requireAuthenticated()
+alt unauthenticated
+  OperatorContext --> Boundary : rejection
+  Boundary --> UI : HTTP 401
+  UI --> Operator : authentication required
+else authenticated
+  OperatorContext --> Boundary : OperatorId
+  Boundary -> Analysis : analyze(customerId, OperatorId)
+  Analysis -> Activity : loadSnapshot(customerId)
+  Activity --> Analysis : CustomerSnapshot\n(source facts + source risk evidence)
 
-Analysis -> Detector : detect(snapshot)
-alt detector failure
-  Detector --> Analysis : failure
-  Analysis --> Boundary : explicit detector failure
-  Boundary --> Operator : not completed / retained
-else detector succeeds
-  Detector --> Analysis : RiskSignalEvidence[]\n(default no-op => [])
-  Analysis -> Policy : retrieveRelevant(snapshot)
+  Analysis -> Detector : detect(snapshot)
+  alt detector failure
+    Detector --> Analysis : failure
+    Analysis --> Boundary : explicit detector failure
+    Boundary --> UI : not completed / retained
+  else detector succeeds
+    Detector --> Analysis : RiskSignalEvidence[]\n(default no-op => [])
+    Analysis -> Policy : retrieveRelevant(snapshot)
 
-  alt no relevant policy evidence
-    Policy --> Analysis : explicit no-evidence
-    Analysis --> Boundary : insufficient grounding
-    Boundary --> Operator : not presented as grounded/completed
-  else relevant evidence available
-    Policy --> Analysis : PolicyEvidence[]
-    Analysis -> Analysis : assemble AnalysisEvidenceEnvelope\n(source | detector | policy kept distinct)
-    Analysis -> Model : analyze(evidenceEnvelope)
-    alt model/provider failure
-      Model --> Analysis : failure
-      Analysis --> Boundary : explicit analysis failure
-      Boundary --> Operator : not completed / retained
-    else candidate returned
-      Model --> Analysis : AnalysisModelOutput\n(result + model provenance)
-      Analysis -> Analysis : validate structured AnalysisResult
-      alt invalid structured result
-        Analysis --> Boundary : validation failure
-        Boundary --> Operator : invalid result not retained
-      else valid result
-        Analysis -> History : persist(result + policy/detector/model provenance)
-        alt persistence failure
-          History --> Analysis : failure
-          Analysis --> Boundary : explicit persistence failure
-          Boundary --> Operator : not represented as retained/completed
-        else persistence succeeds
-          History --> Analysis : AnalysisHistoryEntry
-          Analysis --> Boundary : completed structured analysis
-          Boundary --> Operator : risk + findings + recommendations\n+ layered provenance
+    alt no relevant policy evidence
+      Policy --> Analysis : explicit no-evidence
+      Analysis --> Boundary : insufficient grounding
+      Boundary --> UI : not presented as grounded/completed
+    else relevant evidence available
+      Policy --> Analysis : PolicyEvidence[]
+      Analysis -> Analysis : assemble AnalysisEvidenceEnvelope\n(source | detector | policy kept distinct)
+      Analysis -> Model : analyze(evidenceEnvelope)
+      alt model/provider failure
+        Model --> Analysis : failure
+        Analysis --> Boundary : explicit analysis failure
+        Boundary --> UI : not completed / retained
+      else candidate returned
+        Model --> Analysis : AnalysisModelOutput\n(result + model provenance)
+        Analysis -> Analysis : validate structured AnalysisResult
+        alt invalid structured result
+          Analysis --> Boundary : validation failure
+          Boundary --> UI : invalid result not retained
+        else valid result
+          Analysis -> History : persist(result + operator + policy/detector/model provenance)
+          alt persistence failure
+            History --> Analysis : failure
+            Analysis --> Boundary : explicit persistence failure
+            Boundary --> UI : not represented as retained/completed
+          else persistence succeeds
+            History --> Analysis : AnalysisHistoryEntry
+            Analysis --> Boundary : completed structured analysis
+            Boundary --> UI : risk + findings + recommendations\n+ layered provenance
+            UI --> Operator : review completed analysis
+          end
         end
       end
     end
   end
 end
 
-note over Activity,History
-  These are project-owned application ports. RAG is the PolicyKnowledgePort
-  stage, not the complete analysis architecture. Bayesian/statistical detector
-  and live/OpenAI model adapters substitute independently behind stable ports.
+note over OperatorContext,History
+  OperatorContextPort is project-owned; Spring Security types stop at its adapter.
+  The remaining participants are application ports/contracts. RAG is the
+  PolicyKnowledgePort stage, not the complete analysis architecture.
 end note
 @enduml

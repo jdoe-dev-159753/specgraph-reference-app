@@ -64,8 +64,10 @@ jobs:
           flock 9
           echo "Acquired shared Docker-host R4 retrieval lock"
 
+          evidence_tmp="$(mktemp -d)"
           cleanup() {
             docker compose -f compose.r4.yaml down -v --remove-orphans || true
+            rm -rf "$evidence_tmp"
           }
           trap cleanup EXIT
 
@@ -95,12 +97,81 @@ jobs:
             sleep 2
           done
 
-          curl -fsS "http://127.0.0.1:${R4_PORT}/api/customers/11111111-1111-1111-1111-111111111111" >/dev/null
+          base_url="http://127.0.0.1:${R4_PORT}"
+          cookie_jar="$evidence_tmp/cookies.txt"
+          session_response="$evidence_tmp/session.json"
+          login_response="$evidence_tmp/login.txt"
+          analysis_response="$evidence_tmp/analysis.json"
 
-          analysis_response="$(mktemp)"
-          analysis_status="$(curl -sS -o "$analysis_response" -w '%{http_code}' \
+          # Bootstrap the public session contract to establish a session and
+          # obtain the CSRF token required by the form-login mutation.
+          curl -fsS -c "$cookie_jar" -b "$cookie_jar" \
+            "$base_url/api/session" > "$session_response"
+          mapfile -t csrf < <(python3 - "$session_response" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              payload = json.load(handle)
+
+          if payload.get("state") != "UNAUTHENTICATED":
+              raise SystemExit("R4 session bootstrap was not unauthenticated")
+          csrf = payload.get("csrf")
+          if not isinstance(csrf, dict) or not csrf.get("headerName") or not csrf.get("token"):
+              raise SystemExit("R4 session bootstrap returned no usable CSRF token")
+          print(csrf["headerName"])
+          print(csrf["token"])
+          PY
+          )
+          csrf_header="${csrf[0]}"
+          csrf_token="${csrf[1]}"
+
+          login_status="$(curl -sS -c "$cookie_jar" -b "$cookie_jar" \
+            -o "$login_response" -w '%{http_code}' \
             -X POST \
-            "http://127.0.0.1:${R4_PORT}/api/customers/44444444-4444-4444-4444-444444444444/analyses")"
+            -H "${csrf_header}: ${csrf_token}" \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'username=operator-alpha' \
+            --data-urlencode 'password=alpha-demo-2026' \
+            "$base_url/api/session/login")"
+          if [ "$login_status" != "204" ]; then
+            echo "Expected R4 operator login HTTP 204, got ${login_status}"
+            cat "$login_response"
+            docker compose -f compose.r4.yaml logs r4 postgres
+            exit 1
+          fi
+
+          # Authentication rotates the security context/session state. Re-read
+          # the canonical session view and use its current CSRF token.
+          curl -fsS -c "$cookie_jar" -b "$cookie_jar" \
+            "$base_url/api/session" > "$session_response"
+          mapfile -t csrf < <(python3 - "$session_response" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              payload = json.load(handle)
+
+          if payload.get("state") != "AUTHENTICATED" or payload.get("operatorId") != "operator-alpha":
+              raise SystemExit("R4 focused retrieval proof did not establish operator-alpha session")
+          csrf = payload.get("csrf")
+          if not isinstance(csrf, dict) or not csrf.get("headerName") or not csrf.get("token"):
+              raise SystemExit("Authenticated R4 session returned no usable CSRF token")
+          print(csrf["headerName"])
+          print(csrf["token"])
+          PY
+          )
+          csrf_header="${csrf[0]}"
+          csrf_token="${csrf[1]}"
+
+          curl -fsS -c "$cookie_jar" -b "$cookie_jar" \
+            "$base_url/api/customers/11111111-1111-1111-1111-111111111111" >/dev/null
+
+          analysis_status="$(curl -sS -c "$cookie_jar" -b "$cookie_jar" \
+            -o "$analysis_response" -w '%{http_code}' \
+            -X POST \
+            -H "${csrf_header}: ${csrf_token}" \
+            "$base_url/api/customers/44444444-4444-4444-4444-444444444444/analyses")"
           if [ "$analysis_status" != "201" ]; then
             echo "Expected R4 analysis HTTP 201, got ${analysis_status}"
             cat "$analysis_response"
@@ -114,6 +185,9 @@ jobs:
 
           with open(sys.argv[1], encoding="utf-8") as handle:
               payload = json.load(handle)
+
+          if payload.get("operatorId") != "operator-alpha":
+              raise SystemExit("R4 analysis did not retain authenticated operator attribution")
 
           evidence = payload.get("evidenceProvenance")
           if not isinstance(evidence, list) or not evidence:

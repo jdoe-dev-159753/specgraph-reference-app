@@ -13,11 +13,12 @@ import org.junit.jupiter.api.Test;
 
 @Tag("VFY-CUSTOMER-READ-001")
 @Tag("VFY-ANALYSIS-001")
+@Tag("VFY-AUTH-001")
 class OpenApiContractTests {
     @Test
-    void r4AnalysisChainRetainsTypedCustomerReadAndExposesLayeredProvenance() {
+    void r4ContractRetainsTypedCustomerAnalysisAndExposesSessionSecurity() {
         URL contract = Thread.currentThread().getContextClassLoader().getResource("static/openapi.yaml");
-        assertThat(contract).as("packaged R4 analysis-chain OpenAPI contract").isNotNull();
+        assertThat(contract).as("packaged R4 OpenAPI contract").isNotNull();
 
         SwaggerParseResult result = new OpenAPIV3Parser().readLocation(contract.toExternalForm(), null, null);
         assertThat(result.getMessages()).as("OpenAPI parser diagnostics").isEmpty();
@@ -25,25 +26,67 @@ class OpenApiContractTests {
         OpenAPI api = result.getOpenAPI();
         assertThat(api).isNotNull();
         assertThat(api.getOpenapi()).startsWith("3.0");
-        assertThat(api.getInfo().getVersion()).isEqualTo("r4-analysis-chain");
+        assertThat(api.getInfo().getVersion()).isEqualTo("r4-multi-operator");
         assertThat(api.getPaths()).containsKeys(
+                "/api/session",
+                "/api/session/login",
+                "/api/session/logout",
                 "/api/customers/{customerId}",
                 "/api/customers/{customerId}/analyses",
                 "/api/customers/{customerId}/analyses/{analysisId}");
 
+        var session = api.getPaths().get("/api/session").getGet();
+        assertThat(session).isNotNull();
+        assertThat(session.getResponses().get("200").getContent().get("application/json").getSchema().get$ref())
+                .isEqualTo("#/components/schemas/SessionResponse");
+
+        var login = api.getPaths().get("/api/session/login").getPost();
+        assertThat(login).isNotNull();
+        assertThat(login.getResponses()).containsKeys("204", "401", "403");
+        assertThat(login.getParameters()).extracting(parameter -> parameter.get$ref())
+                .contains("#/components/parameters/CsrfToken");
+        assertThat(login.getRequestBody().getContent()).containsKey("application/x-www-form-urlencoded");
+
+        var logout = api.getPaths().get("/api/session/logout").getPost();
+        assertThat(logout).isNotNull();
+        assertThat(logout.getSecurity()).isNotEmpty();
+        assertThat(logout.getResponses()).containsKeys("204", "401", "403");
+
+        assertThat(api.getComponents().getSecuritySchemes()).containsKey("SessionCookie");
+        var sessionCookie = api.getComponents().getSecuritySchemes().get("SessionCookie");
+        assertThat(sessionCookie.getName()).isEqualTo("JSESSIONID");
+        assertThat(String.valueOf(sessionCookie.getIn())).containsIgnoringCase("cookie");
+
+        Schema<?> sessionResponse = api.getComponents().getSchemas().get("SessionResponse");
+        assertThat(sessionResponse.getOneOf()).extracting(Schema::get$ref).containsExactlyInAnyOrder(
+                "#/components/schemas/AuthenticatedSession",
+                "#/components/schemas/UnauthenticatedSession");
+        assertThat(sessionResponse.getDiscriminator().getPropertyName()).isEqualTo("state");
+
+        Schema<?> authenticatedSession = api.getComponents().getSchemas().get("AuthenticatedSession");
+        assertThat(authenticatedSession.getRequired()).containsAll(Set.of("state", "operatorId", "csrf"));
+        Schema<?> unauthenticatedSession = api.getComponents().getSchemas().get("UnauthenticatedSession");
+        assertThat(unauthenticatedSession.getRequired()).containsAll(Set.of("state", "csrf"));
+
         var customerOperation = api.getPaths().get("/api/customers/{customerId}").getGet();
         assertThat(customerOperation).isNotNull();
-        assertThat(customerOperation.getResponses()).containsKeys("200", "404");
+        assertThat(customerOperation.getSecurity()).isNotEmpty();
+        assertThat(customerOperation.getResponses()).containsKeys("200", "401", "404");
         assertThat(customerOperation.getResponses().get("200").getContent().get("application/json").getSchema().get$ref())
                 .isEqualTo("#/components/schemas/CustomerSnapshot");
 
         var analysisCollection = api.getPaths().get("/api/customers/{customerId}/analyses");
         assertThat(analysisCollection.getPost()).isNotNull();
-        assertThat(analysisCollection.getPost().getResponses()).containsKeys("201", "404", "422", "502", "503");
+        assertThat(analysisCollection.getPost().getSecurity()).isNotEmpty();
+        assertThat(analysisCollection.getPost().getParameters()).extracting(parameter -> parameter.get$ref())
+                .contains("#/components/parameters/CsrfToken");
+        assertThat(analysisCollection.getPost().getResponses())
+                .containsKeys("201", "401", "403", "404", "422", "502", "503");
         assertThat(analysisCollection.getPost().getResponses().get("201").getContent().get("application/json").getSchema().get$ref())
                 .isEqualTo("#/components/schemas/Analysis");
         assertThat(analysisCollection.getGet()).isNotNull();
-        assertThat(analysisCollection.getGet().getResponses()).containsKey("200");
+        assertThat(analysisCollection.getGet().getSecurity()).isNotEmpty();
+        assertThat(analysisCollection.getGet().getResponses()).containsKeys("200", "401");
 
         Schema<?> analysis = api.getComponents().getSchemas().get("Analysis");
         assertThat(analysis.getRequired()).containsAll(Set.of(
