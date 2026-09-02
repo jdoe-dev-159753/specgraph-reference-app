@@ -271,22 +271,36 @@ jobs:
           compose_ref="oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
           images="$(docker compose -f "$compose_ref" config --images)"
           printf 'Resolved images for %s:\n%s\n' "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" "$images"
-          test "$(printf '%s\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l)" -eq 5
+          image_count="$(printf '%s\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')"
+          if [ "$image_count" -ne 5 ]; then
+            printf 'Compose provenance image-cardinality mismatch\nexpected count: 5\nactual count: %s\nactual images:\n%s\n' \
+              "$image_count" "$images" >&2
+            exit 1
+          fi
+          printf 'Compose provenance image cardinality OK: expected=5 actual=%s\n' "$image_count"
 
           assert_app_identity() {
             service="$1"
             expected_digest="$2"
-            actual="$(docker compose -f "$compose_ref" config --images "$service")"
-            case "$actual" in
-              "$APP_PACKAGE@$expected_digest"|"$APP_PACKAGE":*"@$expected_digest")
-                printf '%s provenance OK: %s\n' "$service" "$actual"
-                ;;
-              *)
-                printf 'Compose provenance mismatch for %s\nexpected repository: %s\nexpected digest: %s\nactual image: %s\n' \
-                  "$service" "$APP_PACKAGE" "$expected_digest" "$actual" >&2
-                exit 1
-                ;;
-            esac
+            actual_images="$(docker compose -f "$compose_ref" config --images "$service")"
+            printf '%s provenance dependency closure:\n%s\n' "$service" "$actual_images"
+
+            matched=false
+            while IFS= read -r actual; do
+              case "$actual" in
+                "$APP_PACKAGE@$expected_digest"|"$APP_PACKAGE":*"@$expected_digest")
+                  matched=true
+                  printf '%s provenance match: %s\n' "$service" "$actual"
+                  break
+                  ;;
+              esac
+            done <<< "$actual_images"
+
+            if [ "$matched" != true ]; then
+              printf 'Compose provenance mismatch for %s\nexpected repository: %s\nexpected digest: %s\nactual dependency closure:\n%s\n' \
+                "$service" "$APP_PACKAGE" "$expected_digest" "$actual_images" >&2
+              exit 1
+            fi
           }
 
           assert_app_identity r0 "$R0_DIGEST"
@@ -369,22 +383,36 @@ jobs:
           compose_ref="oci://$COMPOSE_PACKAGE:demo"
           images="$(docker compose -f "$compose_ref" config --images)"
           printf 'Resolved images for %s:\n%s\n' "$COMPOSE_PACKAGE:demo" "$images"
-          test "$(printf '%s\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l)" -eq 5
+          image_count="$(printf '%s\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')"
+          if [ "$image_count" -ne 5 ]; then
+            printf 'Promoted demo provenance image-cardinality mismatch\nexpected count: 5\nactual count: %s\nactual images:\n%s\n' \
+              "$image_count" "$images" >&2
+            exit 1
+          fi
+          printf 'Promoted demo provenance image cardinality OK: expected=5 actual=%s\n' "$image_count"
 
           assert_app_identity() {
             service="$1"
             expected_digest="$2"
-            actual="$(docker compose -f "$compose_ref" config --images "$service")"
-            case "$actual" in
-              "$APP_PACKAGE@$expected_digest"|"$APP_PACKAGE":*"@$expected_digest")
-                printf '%s provenance OK: %s\n' "$service" "$actual"
-                ;;
-              *)
-                printf 'Promoted demo provenance mismatch for %s\nexpected repository: %s\nexpected digest: %s\nactual image: %s\n' \
-                  "$service" "$APP_PACKAGE" "$expected_digest" "$actual" >&2
-                exit 1
-                ;;
-            esac
+            actual_images="$(docker compose -f "$compose_ref" config --images "$service")"
+            printf '%s promoted provenance dependency closure:\n%s\n' "$service" "$actual_images"
+
+            matched=false
+            while IFS= read -r actual; do
+              case "$actual" in
+                "$APP_PACKAGE@$expected_digest"|"$APP_PACKAGE":*"@$expected_digest")
+                  matched=true
+                  printf '%s promoted provenance match: %s\n' "$service" "$actual"
+                  break
+                  ;;
+              esac
+            done <<< "$actual_images"
+
+            if [ "$matched" != true ]; then
+              printf 'Promoted demo provenance mismatch for %s\nexpected repository: %s\nexpected digest: %s\nactual dependency closure:\n%s\n' \
+                "$service" "$APP_PACKAGE" "$expected_digest" "$actual_images" >&2
+              exit 1
+            fi
           }
 
           assert_app_identity r0 "$R0_DIGEST"
