@@ -48,7 +48,10 @@ class AnalysisAcceptanceTests extends PostgresIntegrationTestSupport {
                 .andExpect(jsonPath("$.findingsSummary").isNotEmpty())
                 .andExpect(jsonPath("$.recommendations", hasSize(2)))
                 .andExpect(jsonPath("$.evidenceProvenance[0].sourceIdentity")
-                        .value("synthetic-policy:r3-review-baseline"));
+                        .value("synthetic-policy:r3-review-baseline"))
+                .andExpect(jsonPath("$.detectorProvenance", hasSize(0)))
+                .andExpect(jsonPath("$.modelProvenance.backendIdentity").value("deterministic"))
+                .andExpect(jsonPath("$.modelProvenance.modelIdentity").value("r3-offline-baseline-v1"));
 
         UUID analysisId = jdbc.queryForObject(
                 "SELECT analysis_id FROM analysis_history WHERE customer_id = ?",
@@ -60,7 +63,9 @@ class AnalysisAcceptanceTests extends PostgresIntegrationTestSupport {
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].analysisId").value(analysisId.toString()))
                 .andExpect(jsonPath("$[0].operatorId").value("r3-demo-operator"))
-                .andExpect(jsonPath("$[0].riskLevel").value("MEDIUM"));
+                .andExpect(jsonPath("$[0].riskLevel").value("MEDIUM"))
+                .andExpect(jsonPath("$[0].detectorProvenance", hasSize(0)))
+                .andExpect(jsonPath("$[0].modelProvenance.backendIdentity").value("deterministic"));
 
         mvc.perform(get(
                         "/api/customers/{customerId}/analyses/{analysisId}",
@@ -68,7 +73,8 @@ class AnalysisAcceptanceTests extends PostgresIntegrationTestSupport {
                         analysisId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.analysisId").value(analysisId.toString()))
-                .andExpect(jsonPath("$.recommendations", hasSize(2)));
+                .andExpect(jsonPath("$.recommendations", hasSize(2)))
+                .andExpect(jsonPath("$.modelProvenance.modelIdentity").value("r3-offline-baseline-v1"));
     }
 
     @Test
