@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
+          clean: false
 
       - name: Replace short-circuit assertions with dependency-closure diagnostics
         run: |
