@@ -30,7 +30,7 @@ jobs:
           text = path.read_text(encoding='utf-8')
 
           old_cardinality = '''          test "$(printf '%s\\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l)" -eq 5
-'''
+          '''
           new_cardinality = '''          image_count="$(printf '%s\\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')"
           if [ "$image_count" -ne 5 ]; then
             printf 'Compose provenance image-cardinality mismatch\\nexpected count: 5\\nactual count: %s\\nactual images:\\n%s\\n' \\
@@ -38,7 +38,7 @@ jobs:
             exit 1
           fi
           printf 'Compose provenance image cardinality OK: expected=5 actual=%s\\n' "$image_count"
-'''
+          '''
 
           cardinality_count = text.count(old_cardinality)
           if cardinality_count != 2:
@@ -71,7 +71,7 @@ jobs:
               exit 1
             fi
           }
-'''.splitlines(keepends=True)
+          '''.splitlines(keepends=True)
 
           output = []
           i = 0
