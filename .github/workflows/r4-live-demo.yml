@@ -1,0 +1,138 @@
+name: r4-live-demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: OpenAI model used only for the synthetic live R4 proof
+        required: true
+        default: gpt-5-mini
+        type: string
+
+concurrency:
+  group: r4-live-demo-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prove-live-grounded-r4:
+    environment: r4-live-demo
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+      LIVE_PORT: '8085'
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ inputs.model }}
+    steps:
+      - name: Assert protected live credential is configured
+        run: |
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo '::error::OPENAI_API_KEY is not configured in the r4-live-demo GitHub Environment.'
+            exit 1
+          fi
+
+      - name: Clean container-owned outputs before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints'
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Assert exact dispatched source revision
+        run: |
+          checked_out_sha="$(git rev-parse HEAD)"
+          echo "Expected source SHA: $SOURCE_SHA"
+          echo "Checked-out SHA:     $checked_out_sha"
+          test "$checked_out_sha" = "$SOURCE_SHA"
+
+      - name: Build exact-head application image
+        run: |
+          image="specgraph-reference-app:r4-live-${SOURCE_SHA}"
+          docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$image" .
+          echo "R4_LIVE_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Start isolated pgvector and live R4 application
+        run: |
+          network="specgraph-r4-live-${GITHUB_RUN_ID}"
+          database="specgraph-r4-live-db-${GITHUB_RUN_ID}"
+          application="specgraph-r4-live-app-${GITHUB_RUN_ID}"
+          echo "R4_LIVE_NETWORK=$network" >> "$GITHUB_ENV"
+          echo "R4_LIVE_DATABASE=$database" >> "$GITHUB_ENV"
+          echo "R4_LIVE_APPLICATION=$application" >> "$GITHUB_ENV"
+
+          docker network create "$network"
+          docker run -d --name "$database" --network "$network" --network-alias postgres \
+            -e POSTGRES_DB=specgraph \
+            -e POSTGRES_USER=specgraph \
+            -e POSTGRES_PASSWORD=specgraph \
+            pgvector/pgvector:0.8.6-pg17
+
+          for attempt in $(seq 1 60); do
+            if docker exec "$database" pg_isready -U specgraph -d specgraph >/dev/null 2>&1; then
+              echo "PostgreSQL/pgvector ready after ${attempt} attempts"
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker logs "$database"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker run -d --name "$application" --network "$network" \
+            -p "${LIVE_PORT}:8080" \
+            -e SPRING_PROFILES_ACTIVE=r4,bayesian-detector,openai-model \
+            -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/specgraph \
+            -e SPRING_DATASOURCE_USERNAME=specgraph \
+            -e SPRING_DATASOURCE_PASSWORD=specgraph \
+            -e SPECGRAPH_SOURCE_TIME_ZONE=UTC \
+            -e OPENAI_API_KEY \
+            -e OPENAI_MODEL \
+            "$R4_LIVE_IMAGE"
+
+          for attempt in $(seq 1 180); do
+            if curl -fsS "http://127.0.0.1:${LIVE_PORT}/actuator/health" >/dev/null 2>&1; then
+              echo "Live R4 application healthy after ${attempt} attempts"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs "$application"
+          exit 1
+
+      - name: VFY-R4-LIVE-001 - Prove Bayesian to pgvector to OpenAI chain
+        run: |
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL="http://127.0.0.1:${LIVE_PORT}" \
+            -e EVIDENCE_NAME=r4-live-grounded \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-live-grounded.spec.ts'
+
+      - name: Upload sanitized live R4 reviewer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r4-live-grounded-${{ env.SOURCE_SHA }}
+          path: |
+            e2e/test-results/r4-live-grounded.xml
+            e2e/test-results/r4-live-grounded-artifacts/**
+            e2e/playwright-report/r4-live-grounded/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Reclaim isolated live R4 runtime
+        if: always()
+        run: |
+          docker rm -f "${R4_LIVE_APPLICATION:-missing}" "${R4_LIVE_DATABASE:-missing}" 2>/dev/null || true
+          docker network rm "${R4_LIVE_NETWORK:-missing}" 2>/dev/null || true
+          if [ -n "${R4_LIVE_IMAGE:-}" ]; then
+            docker image rm -f "$R4_LIVE_IMAGE" 2>/dev/null || true
+          fi
