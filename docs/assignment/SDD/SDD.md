@@ -98,15 +98,19 @@ Hexagonal architecture is the dependency style containing these roles; it is not
 
 ## 5. Project-owned contracts
 
-Stable contracts include `CustomerSnapshot`, activity/risk projections, `RiskSignalEvidence`, `PolicyEvidence`, `AnalysisEvidenceEnvelope`, `AnalysisResult`, `AnalysisModelProvenance`, `AnalysisModelOutput`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`.
+Stable contracts include `CustomerSnapshot`, activity/risk projections, the sealed `AnalysisPipelineArtifact` pivot, `RiskSignalEvidence`, `PolicyEvidence`, `AnalysisEvidenceEnvelope`, `AnalysisResult`, `AnalysisModelProvenance`, `AnalysisModelOutput`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`.
 
-`AnalysisEvidenceEnvelope` is the application-owned boundary passed to advisory analysis models. It keeps three semantic layers distinguishable: persisted customer/source-risk facts in `CustomerSnapshot`, optional derived detector signals in `RiskSignalEvidence`, and retrieved policy knowledge in `PolicyEvidence`. Provider- or library-specific context classes do not cross this boundary.
+`AnalysisPipelineArtifact` is the common application-owned pivot for derived analysis-stage artifacts crossing hexagonal adapter boundaries. It is a Java sealed interface whose permitted record variants are exactly `RiskSignalEvidence`, `PolicyEvidence`, and `AnalysisModelProvenance`. The concrete record type is the discriminant. `kind()` and `artifactIdentity()` are derived exhaustively from that concrete type; there is no mutable external tag paired with a generic payload and no design in which two or three irrelevant payload fields must be `null`. Adding a fourth artifact variant must extend the sealed hierarchy and therefore makes exhaustive pattern switches fail compilation until the new variant is handled deliberately.
+
+The pivot standardizes the mechanics that really are common, namely artifact kind, stable artifact identity and provider-neutral metadata, while preserving variant-specific typed payloads. `RiskSignalEvidence` retains detector identity, signal identity and score; `PolicyEvidence` retains retrieved source identity and content; `AnalysisModelProvenance` retains backend and model identities. A common transport/persistence family therefore does not imply common semantic authority. Source `risk_assessments` remain source truth; detector evidence is derived; policy evidence is retrieved context; model/backend provenance describes advisory execution.
+
+`AnalysisEvidenceEnvelope` is the application-owned boundary passed to advisory analysis models. It keeps three semantic layers distinguishable: persisted customer/source-risk facts in `CustomerSnapshot`, optional derived detector signals in `RiskSignalEvidence`, and retrieved policy knowledge in `PolicyEvidence`. Its members remain strongly typed collections rather than a generic `List<AnalysisPipelineArtifact>`, so the compiler also enforces which artifact variants are legal at each stage. Provider- or library-specific context classes do not cross this boundary.
 
 `AnalysisResult` is constrained to a structured risk level `LOW | MEDIUM | HIGH`, a non-empty findings summary and non-empty recommendations. `AnalysisModelOutput` couples that validated application result shape to project-owned backend/model provenance without exposing provider SDK types.
 
-`AnalysisHistoryEntry` adds generated analysis identity, customer identity, operator attribution, generation time, structured result, policy/retrieval provenance, detector provenance and model/backend provenance. These provenance families remain separate rather than being flattened into one untyped metadata bag.
+`AnalysisHistoryEntry` adds generated analysis identity, customer identity, operator attribution, generation time, structured result, policy/retrieval provenance, detector provenance and model/backend provenance. These provenance families remain separate typed fields for semantic clarity while their values participate in the same sealed `AnalysisPipelineArtifact` family. They are not flattened into one untyped metadata bag.
 
-Persistence rows, detector-library classes and provider response classes do not become members of these contracts.
+Persistence rows, pgvector `Document` values, statistical-library result classes and provider response classes do not become members of these contracts. Adapters must translate them into the corresponding project-owned record variant before the application core sees them.
 
 ![Figure 4a - UML Class diagram - project-owned contracts](diagrams/domain-contracts.svg)
 
@@ -186,22 +190,22 @@ AnalysisHttpAdapter
        -> CustomerSnapshot
           [activities + persisted source risk evidence]
   -> RiskSignalDetectorPort
-       -> RiskSignalEvidence[*]
+       -> RiskSignalEvidence[*] implements AnalysisPipelineArtifact
           [default NoOpRiskSignalDetectorAdapter => []]
   -> PolicyKnowledgePort
-       -> PolicyEvidence[*]
+       -> PolicyEvidence[*] implements AnalysisPipelineArtifact
           [StaticPolicyAdapter until #119 activates pgvector retrieval]
   -> AnalysisEvidenceEnvelope
-       [source facts | detector evidence | policy evidence remain distinct]
+       [source facts | detector evidence | policy evidence remain distinct and statically typed]
   -> AnalysisModelPort
        -> AnalysisModelOutput
-          [validated AnalysisResult + backend/model provenance]
+          [validated AnalysisResult + AnalysisModelProvenance implements AnalysisPipelineArtifact]
   -> AnalysisHistoryPort
        [policy/retrieval + detector + model provenance persisted separately]
   -> PostgreSQL
 ```
 
-This composition means RAG is one context-supply stage, not the complete AI architecture. A Bayesian/statistical detector can later replace only the detector adapter; an OpenAI/live model can later replace only the analysis-model adapter. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.
+This composition means RAG is one context-supply stage, not the complete AI architecture. A Bayesian/statistical detector can later replace only the detector adapter; an OpenAI/live model can later replace only the analysis-model adapter. Both adapters must translate their library/provider-native results into an existing application-owned sealed record variant. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.
 
 ![Figure 7 - UML Activity diagram - grounded analysis](diagrams/activity-grounded-analysis.svg)
 
@@ -309,7 +313,7 @@ The design remains governed by seven accepted ADRs:
 6. Compose OCI multi-platform distribution;
 7. Spring JDBC relational adapters.
 
-The R4 analysis-chain refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, and extends persisted provenance while preserving the accepted R3 deterministic adapter and source-risk authority. Real pgvector retrieval, authenticated operator context, Bayesian detection and live/OpenAI synthesis remain substitutions or capabilities owned by their separate work nodes rather than being falsely claimed by this foundation.
+The R4 analysis-chain refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, and extends persisted provenance while preserving the accepted R3 deterministic adapter and source-risk authority. Real pgvector retrieval, authenticated operator context, Bayesian detection and live/OpenAI synthesis remain substitutions or capabilities owned by their separate work nodes rather than being falsely claimed by this foundation.
 
 ## 14. Review criterion
 
@@ -319,6 +323,8 @@ A reviewer should be able to answer from this SDD without reconstructing PR hist
 - where framework/provider/storage/model-library types stop;
 - which ports and adapters are stable and which ring activates them;
 - why source risk evidence, optional derived detector signals, retrieved policy evidence and generated explanation have different authority;
+- how `AnalysisPipelineArtifact` acts as a sealed tagged-union equivalent whose concrete record type is the compile-time discriminant for detector, retrieval and model/backend provenance artifacts;
+- why the pivot shares mechanics without introducing nullable payload branches or erasing stage-specific types;
 - how the executable chain composes `CustomerSnapshot -> RiskSignalDetectorPort -> PolicyKnowledgePort -> AnalysisEvidenceEnvelope -> AnalysisModelPort -> AnalysisHistoryPort`;
 - why RAG is one grounding/context stage rather than the whole analysis architecture;
 - how a future Bayesian detector and optional OpenAI adapter substitute independently behind project-owned ports;

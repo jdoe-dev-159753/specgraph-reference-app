@@ -34,16 +34,54 @@ package "Customer review contracts" {
   ActivityProjection -[hidden]right-> RiskEvidence
 }
 
-package "Analysis and history contracts" {
+package "Analysis pivot artifacts" {
+  interface AnalysisPipelineArtifact <<sealed project contract>> {
+    kind : DETECTOR_EVIDENCE|POLICY_RETRIEVAL_EVIDENCE|MODEL_BACKEND_PROVENANCE
+    artifactIdentity
+    metadata
+  }
+  class RiskSignalEvidence <<record>> {
+    detectorIdentity
+    signalIdentity
+    score
+    provenance
+  }
+  class PolicyEvidence <<record>> {
+    sourceIdentity
+    content
+    retrievalMetadata
+  }
+  class AnalysisModelProvenance <<record>> {
+    backendIdentity
+    modelIdentity
+    metadata
+  }
+
+  AnalysisPipelineArtifact <|.. RiskSignalEvidence
+  AnalysisPipelineArtifact <|.. PolicyEvidence
+  AnalysisPipelineArtifact <|.. AnalysisModelProvenance
+
+  note right of AnalysisPipelineArtifact
+    Closed tagged-union equivalent.
+    Concrete record type is the discriminant.
+    No nullable generic payload branch.
+  end note
+}
+
+package "Analysis orchestration and history contracts" {
+  class AnalysisEvidenceEnvelope <<project contract>> {
+    snapshot : CustomerSnapshot
+    detectorEvidence : RiskSignalEvidence[*]
+    policyEvidence : PolicyEvidence[*]
+  }
   class AnalysisResult <<project contract>> {
     riskLevel : LOW|MEDIUM|HIGH
     findingsSummary
     recommendations
   }
-  class PolicyEvidence <<project contract>> {
-    sourceIdentity
-    content
-    retrievalMetadata
+  class AnalysisModelOutput <<project contract>> {
+    result : AnalysisResult
+    provenance : AnalysisModelProvenance
   }
   class OperatorId <<project value>> {
     operatorIdentity
@@ -54,6 +92,8 @@ package "Analysis and history contracts" {
     generatedAt
     result : AnalysisResult
     evidenceProvenance : PolicyEvidence[*]
+    detectorProvenance : RiskSignalEvidence[*]
+    modelProvenance : AnalysisModelProvenance
   }
   class AnalysisHistoryEntry <<project contract>> {
     analysisIdentity
@@ -62,25 +102,40 @@ package "Analysis and history contracts" {
     generatedAt
     result : AnalysisResult
     evidenceProvenance : PolicyEvidence[*]
+    detectorProvenance : RiskSignalEvidence[*]
+    modelProvenance : AnalysisModelProvenance
   }
+
+  AnalysisEvidenceEnvelope "1" --> "1" CustomerSnapshot
+  AnalysisEvidenceEnvelope "1" o-- "0..*" RiskSignalEvidence
+  AnalysisEvidenceEnvelope "1" o-- "0..*" PolicyEvidence
+
+  AnalysisModelOutput "1" *-- "1" AnalysisResult
+  AnalysisModelOutput "1" *-- "1" AnalysisModelProvenance
 
   AnalysisHistoryCreateCommand "1" *-- "1" AnalysisResult
   AnalysisHistoryCreateCommand "1" --> "1" OperatorId
   AnalysisHistoryCreateCommand "1" o-- "0..*" PolicyEvidence
+  AnalysisHistoryCreateCommand "1" o-- "0..*" RiskSignalEvidence
+  AnalysisHistoryCreateCommand "1" *-- "1" AnalysisModelProvenance
+
   AnalysisHistoryEntry ..> AnalysisHistoryCreateCommand : persisted form + generated identity
   AnalysisHistoryEntry "1" *-- "1" AnalysisResult
   AnalysisHistoryEntry "1" --> "1" OperatorId
   AnalysisHistoryEntry "1" o-- "0..*" PolicyEvidence
-  AnalysisResult ..> CustomerSnapshot : derived from customer context
-  AnalysisResult ..> PolicyEvidence : grounded by evidence
+  AnalysisHistoryEntry "1" o-- "0..*" RiskSignalEvidence
+  AnalysisHistoryEntry "1" *-- "1" AnalysisModelProvenance
 
-  AnalysisResult -[hidden]right-> PolicyEvidence
-  PolicyEvidence -[hidden]right-> OperatorId
+  AnalysisResult ..> CustomerSnapshot : derived from source context
+  AnalysisResult ..> RiskSignalEvidence : may use derived detector evidence
+  AnalysisResult ..> PolicyEvidence : grounded by retrieval evidence
 }
 
 note bottom
-  UML Class diagram: these classifiers are application-owned contracts.
-  Persistence relations, Spring/JPA types, and provider response types do not become
-  members of this contract model.
+  UML Class diagram: application-owned contracts are the stable pivot across hexagonal adapters.
+  Source truth remains CustomerSnapshot/RiskEvidence. Detector evidence, retrieval evidence,
+  and model/backend provenance share a sealed typed artifact family without sharing authority.
+  Persistence relations, Spring/pgvector/statistical-library/provider response types do not
+  become members of this contract model.
 end note
 @enduml

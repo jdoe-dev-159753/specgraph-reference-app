@@ -8,7 +8,7 @@ public record RiskSignalEvidence(
         String detectorIdentity,
         String signalIdentity,
         double score,
-        Map<String, String> provenance) {
+        Map<String, String> provenance) implements AnalysisPipelineArtifact {
     public RiskSignalEvidence {
         detectorIdentity = requireText(detectorIdentity, "detectorIdentity");
         signalIdentity = requireText(signalIdentity, "signalIdentity");
@@ -16,6 +16,11 @@ public record RiskSignalEvidence(
             throw new IllegalArgumentException("score must be finite");
         }
         provenance = Map.copyOf(Objects.requireNonNull(provenance, "provenance"));
+    }
+
+    @Override
+    public Map<String, String> metadata() {
+        return provenance;
     }
 
     private static String requireText(String value, String field) {

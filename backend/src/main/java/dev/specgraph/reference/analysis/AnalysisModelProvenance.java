@@ -6,7 +6,7 @@ import java.util.Objects;
 public record AnalysisModelProvenance(
         String backendIdentity,
         String modelIdentity,
-        Map<String, String> metadata) {
+        Map<String, String> metadata) implements AnalysisPipelineArtifact {
     public AnalysisModelProvenance {
         backendIdentity = requireText(backendIdentity, "backendIdentity");
         modelIdentity = requireText(modelIdentity, "modelIdentity");

@@ -3,7 +3,8 @@ package dev.specgraph.reference.analysis;
 import java.util.Map;
 import java.util.Objects;
 
-public record PolicyEvidence(String sourceIdentity, String content, Map<String, String> retrievalMetadata) {
+public record PolicyEvidence(String sourceIdentity, String content, Map<String, String> retrievalMetadata)
+        implements AnalysisPipelineArtifact {
     public PolicyEvidence {
         Objects.requireNonNull(sourceIdentity, "sourceIdentity");
         Objects.requireNonNull(content, "content");
@@ -15,5 +16,10 @@ public record PolicyEvidence(String sourceIdentity, String content, Map<String, 
             throw new IllegalArgumentException("content must not be blank");
         }
         retrievalMetadata = Map.copyOf(retrievalMetadata);
+    }
+
+    @Override
+    public Map<String, String> metadata() {
+        return retrievalMetadata;
     }
 }
