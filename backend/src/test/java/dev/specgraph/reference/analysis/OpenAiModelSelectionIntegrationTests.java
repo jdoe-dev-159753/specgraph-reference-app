@@ -1,0 +1,34 @@
+package dev.specgraph.reference.analysis;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import dev.specgraph.reference.PostgresIntegrationTestSupport;
+import dev.specgraph.reference.ReferenceApplication;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.env.Environment;
+import org.springframework.test.context.ActiveProfiles;
+
+@Tag("VFY-CONFIDENTIALITY-001")
+@Tag("VFY-ANALYSIS-CONTRACT-001")
+@ActiveProfiles("openai-model")
+@SpringBootTest(
+        classes = ReferenceApplication.class,
+        properties = "spring.ai.openai.api-key=synthetic-test-key-never-used")
+final class OpenAiModelSelectionIntegrationTests extends PostgresIntegrationTestSupport {
+    @Autowired AnalysisModelPort analysisModel;
+    @Autowired Environment environment;
+
+    @Test
+    void explicitProfileSelectsOnlyTheOpenAiAnalysisAdapterAndLeavesOtherOpenAiFamiliesOff() {
+        assertThat(analysisModel).isInstanceOf(SpringAiAnalysisAdapter.class);
+        assertThat(environment.getProperty("spring.ai.model.chat")).isEqualTo("openai");
+        assertThat(environment.getProperty("spring.ai.model.embedding")).isEqualTo("none");
+        assertThat(environment.getProperty("spring.ai.model.image")).isEqualTo("none");
+        assertThat(environment.getProperty("spring.ai.model.moderation")).isEqualTo("none");
+        assertThat(environment.getProperty("spring.ai.model.audio.speech")).isEqualTo("none");
+        assertThat(environment.getProperty("spring.ai.model.audio.transcription")).isEqualTo("none");
+    }
+}

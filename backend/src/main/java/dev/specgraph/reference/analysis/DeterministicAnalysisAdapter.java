@@ -1,11 +1,12 @@
 package dev.specgraph.reference.analysis;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
+@Profile("!openai-model")
 class DeterministicAnalysisAdapter implements AnalysisModelPort {
     private static final String BACKEND_IDENTITY = "deterministic";
     private static final String MODEL_IDENTITY = "r3-offline-baseline-v1";
@@ -39,24 +40,7 @@ class DeterministicAnalysisAdapter implements AnalysisModelPort {
                         BACKEND_IDENTITY,
                         MODEL_IDENTITY,
                         PROMPT_IDENTITY,
-                        evidenceReferences(evidence),
+                        AnalysisEvidenceReferences.from(evidence),
                         Map.of("externalTransmission", "false")));
-    }
-
-    private List<AnalysisEvidenceReference> evidenceReferences(AnalysisEvidenceEnvelope evidence) {
-        List<AnalysisEvidenceReference> references = new ArrayList<>();
-        evidence.snapshot().activities().forEach(activity -> references.add(new AnalysisEvidenceReference(
-                AnalysisEvidenceReference.Kind.ACTIVITY,
-                activity.transactionId().toString())));
-        evidence.snapshot().riskEvidence().forEach(risk -> references.add(new AnalysisEvidenceReference(
-                AnalysisEvidenceReference.Kind.SOURCE_RISK,
-                risk.assessmentId().toString())));
-        evidence.detectorEvidence().forEach(signal -> references.add(new AnalysisEvidenceReference(
-                AnalysisEvidenceReference.Kind.DETECTOR_SIGNAL,
-                signal.artifactIdentity())));
-        evidence.policyEvidence().forEach(policy -> references.add(new AnalysisEvidenceReference(
-                AnalysisEvidenceReference.Kind.POLICY_RETRIEVAL,
-                policy.artifactIdentity())));
-        return List.copyOf(references);
     }
 }
