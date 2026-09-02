@@ -30,7 +30,7 @@ test('VFY-ANALYSIS-001 R3 deterministic analysis is retained and reviewable afte
   const analysisResponsePromise = page.waitForResponse(response =>
     response.url().endsWith(`/api/customers/${seededCustomer}/analyses`) &&
     response.request().method() === 'POST')
-  await page.getByRole('button', { name: 'Run deterministic analysis' }).click()
+  await page.getByRole('button', { name: 'Run analysis' }).click()
   const analysisResponse = await analysisResponsePromise
   expect(analysisResponse.status()).toBe(201)
 
