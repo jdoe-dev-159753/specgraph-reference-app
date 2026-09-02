@@ -2,9 +2,11 @@ package dev.specgraph.reference.analysis.web;
 
 import dev.specgraph.reference.analysis.AnalysisFailureException;
 import dev.specgraph.reference.analysis.AnalysisHistoryEntry;
+import dev.specgraph.reference.analysis.AnalysisModelProvenance;
 import dev.specgraph.reference.analysis.AnalysisResult;
 import dev.specgraph.reference.analysis.AnalysisUseCase;
 import dev.specgraph.reference.analysis.PolicyEvidence;
+import dev.specgraph.reference.analysis.RiskSignalEvidence;
 import dev.specgraph.reference.identity.OperatorId;
 import java.time.Instant;
 import java.util.List;
@@ -56,7 +58,7 @@ final class AnalysisHttpAdapter {
         HttpStatus status = switch (exception.reason()) {
             case CUSTOMER_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case INSUFFICIENT_GROUNDING -> HttpStatus.UNPROCESSABLE_ENTITY;
-            case GROUNDING_FAILURE, MODEL_FAILURE, INVALID_RESULT -> HttpStatus.BAD_GATEWAY;
+            case DETECTOR_FAILURE, GROUNDING_FAILURE, MODEL_FAILURE, INVALID_RESULT -> HttpStatus.BAD_GATEWAY;
             case PERSISTENCE_FAILURE -> HttpStatus.SERVICE_UNAVAILABLE;
         };
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, exception.getMessage());
@@ -73,7 +75,9 @@ final class AnalysisHttpAdapter {
             AnalysisResult.RiskLevel riskLevel,
             String findingsSummary,
             List<String> recommendations,
-            List<PolicyEvidence> evidenceProvenance) {
+            List<PolicyEvidence> evidenceProvenance,
+            List<RiskSignalEvidence> detectorProvenance,
+            AnalysisModelProvenance modelProvenance) {
         static AnalysisResponse from(AnalysisHistoryEntry entry) {
             return new AnalysisResponse(
                     entry.analysisId(),
@@ -83,7 +87,9 @@ final class AnalysisHttpAdapter {
                     entry.result().riskLevel(),
                     entry.result().findingsSummary(),
                     entry.result().recommendations(),
-                    entry.evidenceProvenance());
+                    entry.evidenceProvenance(),
+                    entry.detectorProvenance(),
+                    entry.modelProvenance());
         }
     }
 }
