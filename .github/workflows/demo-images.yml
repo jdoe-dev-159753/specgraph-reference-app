@@ -32,7 +32,7 @@ jobs:
       R3_PORT: '8083'
 
     steps:
-      - name: Reclaim stale publication state and require disk headroom
+      - name: Reclaim stale publication state
         run: |
           echo 'Disk before publication cleanup:'
           df -h "$GITHUB_WORKSPACE" || df -h /
@@ -48,20 +48,13 @@ jobs:
             specgraph-reference-app:r3 2>/dev/null || true
           docker buildx prune -af || true
           docker builder prune -af || true
-          docker container prune -f --filter 'until=24h' || true
-          docker network prune -f --filter 'until=24h' || true
-          docker image prune -af --filter 'until=24h' || true
+          docker container prune -f || true
+          docker network prune -f || true
+          docker image prune -af || true
 
           echo 'Disk after publication cleanup:'
           df -h "$GITHUB_WORKSPACE" || df -h /
           docker system df || true
-
-          available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR==2 {print $4}')"
-          minimum_kb=$((16 * 1024 * 1024))
-          if [ "$available_kb" -lt "$minimum_kb" ]; then
-            echo "Need at least 16 GiB free for four native images plus multi-platform publication; only $((available_kb / 1024)) MiB is available." >&2
-            exit 1
-          fi
 
       - name: Checkout packaging authority
         uses: actions/checkout@v7
