@@ -1,0 +1,5 @@
+# Synthetic R4 policy corpus
+classpath:policy/synthetic/card-review.md
+classpath:policy/synthetic/cross-border-payment-review.md
+classpath:policy/synthetic/crypto-review.md
+classpath:policy/synthetic/human-escalation.md

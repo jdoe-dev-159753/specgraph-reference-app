@@ -3,9 +3,11 @@ package dev.specgraph.reference.analysis;
 import dev.specgraph.reference.customer.CustomerSnapshot;
 import java.util.List;
 import java.util.Map;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
+@Profile("!r4")
 class StaticPolicyAdapter implements PolicyKnowledgePort {
     @Override
     public List<PolicyEvidence> retrieveRelevant(CustomerSnapshot snapshot) {

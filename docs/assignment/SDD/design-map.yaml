@@ -143,6 +143,7 @@ ports:
     direction: outbound
     returns: CTR-POLICY-EVIDENCE-001
     activation_ring: R0
+    implementation_adapters: [ADP-POL-STATIC-001, ADP-POL-PGV-001]
     adrs: [ADR-002, ADR-003]
   PRT-HISTORY-001:
     name: AnalysisHistoryPort
@@ -231,8 +232,19 @@ adapters:
     name: PgVectorPolicyAdapter
     kind: outbound
     owner: MOD-ANALYSIS-001
+    package: dev.specgraph.reference.analysis
+    technology: Spring AI PgVectorStore with local transformer embeddings
     implements: PRT-POLICY-001
     activation_ring: R4
+    profile: r4
+    schema_authority: Flyway
+    vector_dimensions: 384
+    vector_distance: cosine
+    vector_index: HNSW
+    document_identity: deterministic RFC-variant UUIDv8 derived by SyntheticPolicyCorpusLoader from SHA-256 of source identity, chunk index and content
+    corpus_replacement: Spring-managed transaction deletes only corpus=synthetic rows and inserts the complete new snapshot atomically
+    returns: CTR-POLICY-EVIDENCE-001
+    adapter_local_types: [Spring AI Document, VectorStore, SearchRequest]
     adrs: [ADR-002, ADR-003]
   ADP-HIST-JDBC-001:
     name: JdbcAnalysisHistoryAdapter
@@ -249,6 +261,9 @@ infrastructure:
     name: PostgreSqlPgVector
     activation_ring: R2
     used_by: [ADP-ACT-JDBC-001, ADP-HIST-JDBC-001, ADP-POL-PGV-001]
+    r4_vector_schema: policy_vector_store managed by dedicated Flyway R4 migration
+    r4_extensions: [vector, hstore, uuid-ossp]
+    r4_vector_table_shape: [UUID id, text content, JSONB metadata, vector(384) embedding]
     adrs: [ADR-003, ADR-007]
   INF-COMPOSE-001:
     name: ComposeCheckpointTopology
@@ -270,6 +285,7 @@ infrastructure:
     technology: React TypeScript MUI TanStack Query
     activation_ring: R0
     connects_to: [ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
+    r4_policy_provenance_view: source identity, content, adapter, corpus, revision, source document, chunk position, embedding identity and similarity score when present
     adrs: [ADR-004]
 
 requirement_design:
@@ -302,8 +318,8 @@ requirement_design:
     adrs: [ADR-001, ADR-004]
     first_acceptance_ring: R4
   FR-RAG-001:
-    elements: [MOD-ANALYSIS-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-POLICY-001, CTR-POLICY-EVIDENCE-001, CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, ADP-POL-STATIC-001, ADP-POL-PGV-001]
-    adrs: [ADR-002, ADR-003]
+    elements: [CMP-UI-001, MOD-ANALYSIS-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-POLICY-001, CTR-POLICY-EVIDENCE-001, CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, ADP-POL-STATIC-001, ADP-POL-PGV-001, INF-DB-001]
+    adrs: [ADR-002, ADR-003, ADR-004]
     first_acceptance_ring: R4
   FR-HIST-001:
     elements: [MOD-ANALYSIS-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, INF-DB-001, CTR-ANALYSIS-HISTORY-CREATE-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001, CTR-RISK-SIGNAL-EVIDENCE-001, CTR-POLICY-EVIDENCE-001, CTR-ANALYSIS-MODEL-PROVENANCE-001]

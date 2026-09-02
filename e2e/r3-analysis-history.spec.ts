@@ -10,7 +10,11 @@ type Analysis = {
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
   findingsSummary: string
   recommendations: string[]
-  evidenceProvenance: Array<{ sourceIdentity: string }>
+  evidenceProvenance: Array<{
+    sourceIdentity: string
+    content: string
+    retrievalMetadata: Record<string, string>
+  }>
 }
 
 test('VFY-ANALYSIS-001 R3 deterministic analysis is retained and reviewable after reload', async ({ page }, testInfo) => {
@@ -36,15 +40,30 @@ test('VFY-ANALYSIS-001 R3 deterministic analysis is retained and reviewable afte
   expect(completed.riskLevel).toBe('MEDIUM')
   expect(completed.findingsSummary.length).toBeGreaterThan(0)
   expect(completed.recommendations.length).toBeGreaterThan(0)
-  expect(completed.evidenceProvenance.map(evidence => evidence.sourceIdentity))
-    .toContain('synthetic-policy:r3-review-baseline')
+  const staticPolicy = completed.evidenceProvenance.find(
+    evidence => evidence.sourceIdentity === 'synthetic-policy:r3-review-baseline')
+  expect(staticPolicy).toBeDefined()
+  expect(staticPolicy?.retrievalMetadata).toMatchObject({
+    adapter: 'static',
+    corpus: 'synthetic',
+    revision: 'r3',
+  })
 
   await expect(page.getByTestId('analysis-result')).toBeVisible()
   await expect(page.getByTestId('analysis-result').getByTestId('analysis-risk-level')).toHaveText('MEDIUM')
   await expect(page.getByTestId('analysis-findings')).toContainText('Deterministic offline baseline')
-  await expect(page.getByTestId(`analysis-history-${completed.analysisId}`)).toContainText('r3-demo-operator')
-  await expect(page.getByTestId(`analysis-history-${completed.analysisId}`)).toContainText('MEDIUM')
-  await expect(page.getByTestId(`analysis-history-${completed.analysisId}`))
+  const currentGrounding = page.getByTestId('analysis-result').getByTestId('analysis-grounding-evidence')
+  await expect(currentGrounding).toContainText('adapter: static')
+  await expect(currentGrounding).toContainText('corpus: synthetic')
+  await expect(currentGrounding).toContainText('revision: r3')
+  await expect(currentGrounding).toContainText('synthetic-policy:r3-review-baseline')
+  await expect(currentGrounding).toContainText('Escalation remains a human decision')
+
+  const retainedAnalysis = page.getByTestId(`analysis-history-${completed.analysisId}`)
+  await expect(retainedAnalysis).toContainText('r3-demo-operator')
+  await expect(retainedAnalysis).toContainText('MEDIUM')
+  await expect(retainedAnalysis.getByTestId('analysis-grounding-evidence')).toContainText('adapter: static')
+  await expect(retainedAnalysis.getByTestId('analysis-grounding-evidence'))
     .toContainText('synthetic-policy:r3-review-baseline')
 
   await page.screenshot({ path: testInfo.outputPath('r3-analysis-history.png'), fullPage: true })
@@ -60,7 +79,11 @@ test('VFY-ANALYSIS-001 R3 deterministic analysis is retained and reviewable afte
 
   const history = await historyResponse.json() as Analysis[]
   expect(history.map(entry => entry.analysisId)).toContain(completed.analysisId)
-  await expect(page.getByTestId(`analysis-history-${completed.analysisId}`)).toBeVisible()
-  await expect(page.getByTestId(`analysis-history-${completed.analysisId}`)).toContainText('r3-demo-operator')
-  await expect(page.getByTestId(`analysis-history-${completed.analysisId}`)).toContainText(completed.findingsSummary)
+  const reloadedAnalysis = page.getByTestId(`analysis-history-${completed.analysisId}`)
+  await expect(reloadedAnalysis).toBeVisible()
+  await expect(reloadedAnalysis).toContainText('r3-demo-operator')
+  await expect(reloadedAnalysis).toContainText(completed.findingsSummary)
+  await expect(reloadedAnalysis.getByTestId('analysis-grounding-evidence')).toContainText('adapter: static')
+  await expect(reloadedAnalysis.getByTestId('analysis-grounding-evidence'))
+    .toContainText('Escalation remains a human decision')
 })

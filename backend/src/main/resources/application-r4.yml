@@ -1,0 +1,20 @@
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/r4-migration
+specgraph:
+  policy:
+    corpus-index: classpath:policy/synthetic/index.txt
+    top-k: 3
+    similarity-threshold: 0.35
+    vector-table: policy_vector_store
+    chunking:
+      chunk-size: 180
+      min-chunk-size-chars: 80
+      min-chunk-length-to-embed: 20
+      max-num-chunks: 20
+    embedding:
+      dimensions: 384
+      model-identity: all-MiniLM-L6-v2
+      tokenizer-uri: https://raw.githubusercontent.com/spring-projects/spring-ai/v2.0.1/models/spring-ai-transformers/src/main/resources/onnx/all-MiniLM-L6-v2/tokenizer.json
+      model-uri: https://media.githubusercontent.com/media/spring-projects/spring-ai/refs/tags/v2.0.1/models/spring-ai-transformers/src/main/resources/onnx/all-MiniLM-L6-v2/model.onnx
+      cache-directory: ${SPECGRAPH_EMBEDDING_CACHE:/tmp/specgraph-embedding-model}

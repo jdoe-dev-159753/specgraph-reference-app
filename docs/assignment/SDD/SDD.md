@@ -78,7 +78,7 @@ The central outbound ports are:
 | --- | --- | --- |
 | `CustomerActivityPort` | load one project-owned `CustomerSnapshot` | synthetic R1, Spring JDBC R2+ |
 | `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | explicit no-op R4 baseline, optional Bayesian/statistical/graph adapters later |
-| `PolicyKnowledgePort` | return project-owned `PolicyEvidence` | static deterministic evidence R3, pgvector R4 |
+| `PolicyKnowledgePort` | return project-owned `PolicyEvidence` | static deterministic evidence R3; Spring AI pgvector retrieval under the R4 profile |
 | `AnalysisModelPort` | consume one project-owned `AnalysisEvidenceEnvelope` and return structured result plus model provenance | deterministic R3/R4 baseline, optional live provider later |
 | `AnalysisHistoryPort` | persist/list/inspect validated analysis history | Spring JDBC R3+ |
 
@@ -104,7 +104,7 @@ Stable contracts include `CustomerSnapshot`, activity/risk projections, the seal
 
 The pivot standardizes the mechanics that really are common, namely artifact kind, stable artifact identity and provider-neutral metadata, while preserving variant-specific typed payloads. `RiskSignalEvidence` retains detector identity, signal identity and score; `PolicyEvidence` retains retrieved source identity and content; `AnalysisModelProvenance` retains backend and model identities. A common transport/persistence family therefore does not imply common semantic authority. Source `risk_assessments` remain source truth; detector evidence is derived; policy evidence is retrieved context; model/backend provenance describes advisory execution.
 
-`AnalysisEvidenceEnvelope` is the application-owned boundary passed to advisory analysis models. It keeps three semantic layers distinguishable: persisted customer/source-risk facts in `CustomerSnapshot`, optional derived detector signals in `RiskSignalEvidence`, and retrieved policy knowledge in `PolicyEvidence`. Its members remain strongly typed collections rather than a generic `List<AnalysisPipelineArtifact>`, so the compiler also enforces which artifact variants are legal at each stage. Provider- or library-specific context classes do not cross this boundary.
+`AnalysisEvidenceEnvelope` is the application-owned boundary passed to advisory analysis models. It keeps three semantic layers distinguishishable: persisted customer/source-risk facts in `CustomerSnapshot`, optional derived detector signals in `RiskSignalEvidence`, and retrieved policy knowledge in `PolicyEvidence`. Its members remain strongly typed collections rather than a generic `List<AnalysisPipelineArtifact>`, so the compiler also enforces which artifact variants are legal at each stage. Provider- or library-specific context classes do not cross this boundary.
 
 `AnalysisResult` is constrained to a structured risk level `LOW | MEDIUM | HIGH`, a non-empty findings summary and non-empty recommendations. `AnalysisModelOutput` couples that validated application result shape to project-owned backend/model provenance without exposing provider SDK types.
 
@@ -134,7 +134,7 @@ The detector stage and analysis-model stage are therefore intentionally differen
 
 `CON-AI-002` is a design constraint, not merely a testing convention: **the default configuration does not transmit customer/activity/policy content to an external AI provider**. External transmission requires an explicitly selected live-provider adapter and data permitted for that provider. Merely placing a provider dependency on the classpath does not activate transmission.
 
-## 7. Relational persistence
+## 7. Relational and vector persistence
 
 R2 activates PostgreSQL 17 behind `CustomerActivityPort` using Spring Framework `JdbcClient`. Flyway is the sole schema/migration authority. Explicit SQL maps source relations into project-owned projections; no ORM lifecycle competes with Flyway.
 
@@ -145,6 +145,10 @@ Multi-query customer aggregate reads execute under PostgreSQL `REPEATABLE READ`,
 R3 adds project-owned `analysis_history` through Flyway and `JdbcAnalysisHistoryAdapter`. Only a validated analysis whose persistence succeeds is represented as completed retained history.
 
 The R4 analysis-chain foundation extends each history row with separately serialized detector and model provenance. Existing pre-R4 rows receive an explicit deterministic legacy model identity during migration rather than an unreadable empty object. Policy/retrieval evidence remains in its existing provenance field; detector/model metadata does not mutate source risk tables.
+
+The R4 profile also activates the policy vector store without changing the R3/default database contract. A dedicated Flyway R4 migration creates the PostgreSQL `vector` extension and the `policy_vector_store` table with a UUID document identity, JSON metadata and `vector(384)` embedding. The HNSW index uses cosine distance. `PgVectorStore` is configured with schema initialization disabled, so Spring AI validates and uses the table while Flyway remains the sole schema authority.
+
+The synthetic demonstration policy corpus is loaded through Spring AI text splitting and then re-identified deterministically before insertion. `SyntheticPolicyCorpusLoader` hashes source identity, chunk index and chunk content with SHA-256 through the JDK `MessageDigest` implementation, projects the first 128 digest bits into an RFC-variant UUIDv8, and therefore gives the same chunk the same UUID on repeated loads. The owned `corpus=synthetic` snapshot is replaced inside one Spring-managed PostgreSQL transaction, so a failed embedding or insert rolls the delete back instead of exposing an empty corpus. Production R4 uses the local `all-MiniLM-L6-v2` transformer embedding adapter; integration verification substitutes only the embedding model with a deterministic network-free 384-dimensional test adapter while retaining the real Spring AI `PgVectorStore`, PostgreSQL vector extension, Flyway schema and retrieval SQL.
 
 ![Figure 5 - Relational persistence model](diagrams/relational-schema.svg)
 
@@ -178,7 +182,7 @@ AnalysisHttpAdapter
   -> PostgreSQL
 ```
 
-The successful R3 path is complete only after history persistence succeeds. Static policy evidence supplies deterministic grounding for R3 without claiming that R4 pgvector/RAG is already implemented.
+The successful R3 path is complete only after history persistence succeeds. Static policy evidence remains the deterministic R3/default grounding baseline. Activating the R4 profile substitutes `PgVectorPolicyAdapter` behind the same `PolicyKnowledgePort`; it does not change the use case, model boundary or source-risk authority.
 
 R4 preserves that behavior while making the complete evidence chain explicit and independently substitutable:
 
@@ -194,7 +198,7 @@ AnalysisHttpAdapter
           [default NoOpRiskSignalDetectorAdapter => []]
   -> PolicyKnowledgePort
        -> PolicyEvidence[*] implements AnalysisPipelineArtifact
-          [StaticPolicyAdapter until #119 activates pgvector retrieval]
+          [R3/default: StaticPolicyAdapter | R4: PgVectorPolicyAdapter]
   -> AnalysisEvidenceEnvelope
        [source facts | detector evidence | policy evidence remain distinct and statically typed]
   -> AnalysisModelPort
@@ -204,6 +208,8 @@ AnalysisHttpAdapter
        [policy/retrieval + detector + model provenance persisted separately]
   -> PostgreSQL
 ```
+
+`PgVectorPolicyAdapter` builds a bounded retrieval query from the newest bounded activity and source-risk windows in project-owned semantics, deliberately excluding sensitive account, PAN and wallet identifiers. Spring AI `Document` and vector-store types remain adapter-local. Retrieved chunks are translated into `PolicyEvidence` containing stable chunk identity, content and provider-neutral retrieval metadata such as corpus/revision, source document, chunk position, embedding identity and similarity score. An empty retrieval returns no evidence; the existing analysis orchestration then produces the explicit insufficient-grounding failure rather than allowing model prose to fabricate context.
 
 This composition means RAG is one context-supply stage, not the complete AI architecture. A Bayesian/statistical detector can later replace only the detector adapter; an OpenAI/live model can later replace only the analysis-model adapter. Both adapters must translate their library/provider-native results into an existing application-owned sealed record variant. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.
 
@@ -281,7 +287,7 @@ The rings activate capability maturity while preserving the same application cor
 - **R1 - mandatory synthetic customer review:** customer lookup, CARD/PAYMENT/CRYPTO and source-derived risk evidence on deterministic data.
 - **R2 - relational substitution:** Spring JDBC/PostgreSQL/Flyway/Testcontainers behind `CustomerActivityPort`; no invented new operator use case.
 - **R3 - mandatory deterministic analysis and reviewable history:** deterministic policy/model adapters, structured analysis, explicit failures, operator attribution and PostgreSQL-backed analysis history.
-- **R4 - MUST_HAVE closure:** explicit staged detector/retrieval/model/history orchestration, real policy retrieval/RAG, multi-operator authentication/authorization and related trust boundaries; optional live provider remains behind existing ports.
+- **R4 - MUST_HAVE closure:** explicit staged detector/retrieval/model/history orchestration, pgvector-backed synthetic policy retrieval with inspectable provenance, multi-operator authentication/authorization and related trust boundaries; optional live provider remains behind existing ports.
 - **R5 - hardening/demo:** reliability, observability, reviewer polish and NICE_TO_HAVE differentiation such as a concrete Bayesian detector or live-provider comparison without changing established boundaries.
 
 GitHub milestones `J1..J5` are the orthogonal delivery-timebox dimension. A day may activate more than one ring.
@@ -313,7 +319,7 @@ The design remains governed by seven accepted ADRs:
 6. Compose OCI multi-platform distribution;
 7. Spring JDBC relational adapters.
 
-The R4 analysis-chain refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, and extends persisted provenance while preserving the accepted R3 deterministic adapter and source-risk authority. Real pgvector retrieval, authenticated operator context, Bayesian detection and live/OpenAI synthesis remain substitutions or capabilities owned by their separate work nodes rather than being falsely claimed by this foundation.
+The R4 analysis-chain refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, extends persisted provenance, and now activates pgvector-backed policy retrieval behind the existing `PolicyKnowledgePort`. The R3/default static policy adapter remains available as the deterministic baseline. Authenticated operator context, Bayesian detection and live/OpenAI synthesis remain substitutions or capabilities owned by their separate work nodes rather than being falsely claimed by this retrieval increment.
 
 ## 14. Review criterion
 
@@ -326,6 +332,9 @@ A reviewer should be able to answer from this SDD without reconstructing PR hist
 - how `AnalysisPipelineArtifact` acts as a sealed tagged-union equivalent whose concrete record type is the compile-time discriminant for detector, retrieval and model/backend provenance artifacts;
 - why the pivot shares mechanics without introducing nullable payload branches or erasing stage-specific types;
 - how the executable chain composes `CustomerSnapshot -> RiskSignalDetectorPort -> PolicyKnowledgePort -> AnalysisEvidenceEnvelope -> AnalysisModelPort -> AnalysisHistoryPort`;
+- how the R4 profile substitutes `PgVectorPolicyAdapter` for the R3 static policy adapter without changing `PolicyKnowledgePort` or exposing Spring AI `Document` values;
+- how deterministic chunk identities, Flyway-owned pgvector schema, local embeddings and Testcontainers verification make retrieval reproducible and independently testable from a live LLM;
+- why an empty vector retrieval cannot be silently replaced by fabricated model context;
 - why RAG is one grounding/context stage rather than the whole analysis architecture;
 - how a future Bayesian detector and optional OpenAI adapter substitute independently behind project-owned ports;
 - why external AI transmission is opt-in and absent from default deterministic execution;
