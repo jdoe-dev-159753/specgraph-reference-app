@@ -11,17 +11,17 @@ start
 :Request analysis for selected customer;
 
 |React operator UI|
-:Submit protected analysis request;
+:Submit protected analysis request with CSRF token;
 
-|Security / HTTP adapter|
+|Spring Security / HTTP adapter|
 if (Authenticated?) then (no)
-  :Reject / redirect;
+  :Return HTTP 401;
   |React operator UI|
   :Display authentication required;
   |Customer Care Operator|
   stop
 else (yes)
-  :Attach OperatorId;
+  :Resolve OperatorId through\nOperatorContextPort;
 endif
 
 |Analysis application|
@@ -86,7 +86,7 @@ else (yes)
 endif
 
 |History adapter|
-:Persist completed result plus\npolicy, detector and model provenance;
+:Persist completed result plus\noperator, policy, detector and model provenance;
 if (Persistence succeeds?) then (no)
   :Return persistence failure;
   |Analysis application|

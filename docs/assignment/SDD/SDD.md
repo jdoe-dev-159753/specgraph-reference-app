@@ -72,22 +72,23 @@ Hexagonal dependency direction remains strict. Spring MVC, Spring Security, Spri
 
 ## 4. Ports, adapters and restrained GoF pattern use
 
-The central outbound ports are:
+The central project-owned ports are:
 
 | Port | Responsibility | Activated behavior |
 | --- | --- | --- |
+| `OperatorContextPort` | expose current operator state and require an authenticated project-owned `OperatorId` where the use case demands it | deterministic R3/default attribution; Spring Security-backed context under `r4` / `r4-auth` |
 | `CustomerActivityPort` | load one project-owned `CustomerSnapshot` | synthetic R1, Spring JDBC R2+ |
 | `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | explicit no-op R4 baseline, optional Bayesian/statistical/graph adapters later |
 | `PolicyKnowledgePort` | return project-owned `PolicyEvidence` | static deterministic evidence R3; Spring AI pgvector retrieval under the R4 profile |
 | `AnalysisModelPort` | consume one project-owned `AnalysisEvidenceEnvelope` and return structured result plus model provenance | deterministic R3/R4 baseline, optional live provider later |
 | `AnalysisHistoryPort` | persist/list/inspect validated analysis history | Spring JDBC R3+ |
 
-The primary adapters are `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `SyntheticActivityAdapter`, `JdbcCustomerActivityAdapter`, `NoOpRiskSignalDetectorAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, and `JdbcAnalysisHistoryAdapter`.
+The primary adapters are `OperatorSessionHttpAdapter`, `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `DeterministicOperatorContextAdapter`, `SpringSecurityOperatorContextAdapter`, `SyntheticActivityAdapter`, `JdbcCustomerActivityAdapter`, `NoOpRiskSignalDetectorAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, and `JdbcAnalysisHistoryAdapter`.
 
 The inception-selected GoF roles remain intentionally limited:
 
 - **Adapter:** translates framework/provider/storage/model APIs to project-owned ports.
-- **Strategy:** selects interchangeable activity, detector, policy or analysis-model behavior behind stable ports.
+- **Strategy:** selects interchangeable identity-context, activity, detector, policy or analysis-model behavior behind stable ports.
 - **Facade/application service:** exposes one coarse-grained use case while hiding multi-port orchestration. `AnalysisService` owns the evidence-to-analysis chain.
 
 Hexagonal architecture is the dependency style containing these roles; it is not itself a Strategy pattern. New patterns are not added to inflate vocabulary.
@@ -98,7 +99,9 @@ Hexagonal architecture is the dependency style containing these roles; it is not
 
 ## 5. Project-owned contracts
 
-Stable contracts include `CustomerSnapshot`, activity/risk projections, the sealed `AnalysisPipelineArtifact` pivot, `RiskSignalEvidence`, `PolicyEvidence`, `AnalysisEvidenceEnvelope`, `AnalysisResult`, `AnalysisModelProvenance`, `AnalysisModelOutput`, `OperatorId`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`.
+Stable contracts include `CustomerSnapshot`, activity/risk projections, the sealed `AnalysisPipelineArtifact` pivot, `RiskSignalEvidence`, `PolicyEvidence`, `AnalysisEvidenceEnvelope`, `AnalysisResult`, `AnalysisModelProvenance`, `AnalysisModelOutput`, `OperatorId`, the sealed `OperatorContext`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`.
+
+`OperatorContext` is the application-owned identity pivot. It is a sealed interface with exactly `Authenticated(OperatorId)` and `Unauthenticated` variants. There is no `authenticated` Boolean paired with a nullable operator identity. `OperatorContextPort.requireAuthenticated()` exhaustively maps the authenticated variant to `OperatorId` and rejects the unauthenticated variant. Spring Security `Authentication`, sessions and authorities remain adapter-local and never enter the application contracts or persisted history model.
 
 `AnalysisPipelineArtifact` is the common application-owned pivot for derived analysis-stage artifacts crossing hexagonal adapter boundaries. It is a Java sealed interface whose permitted record variants are exactly `RiskSignalEvidence`, `PolicyEvidence`, and `AnalysisModelProvenance`. The concrete record type is the discriminant. `kind()` and `artifactIdentity()` are derived exhaustively from that concrete type; there is no mutable external tag paired with a generic payload and no design in which two or three irrelevant payload fields must be `null`. Adding a fourth artifact variant must extend the sealed hierarchy and therefore makes exhaustive pattern switches fail compilation until the new variant is handled deliberately.
 
@@ -110,7 +113,7 @@ The pivot standardizes the mechanics that really are common, namely artifact kin
 
 `AnalysisHistoryEntry` adds generated analysis identity, customer identity, operator attribution, generation time, structured result, policy/retrieval provenance, detector provenance and model/backend provenance. These provenance families remain separate typed fields for semantic clarity while their values participate in the same sealed `AnalysisPipelineArtifact` family. They are not flattened into one untyped metadata bag.
 
-Persistence rows, pgvector `Document` values, statistical-library result classes and provider response classes do not become members of these contracts. Adapters must translate them into the corresponding project-owned record variant before the application core sees them.
+Persistence rows, pgvector `Document` values, Spring Security principal/authentication values, statistical-library result classes and provider response classes do not become members of these contracts. Adapters must translate them into the corresponding project-owned contract before the application core sees them.
 
 ![Figure 4a - UML Class diagram - project-owned contracts](diagrams/domain-contracts.svg)
 
@@ -188,6 +191,8 @@ R4 preserves that behavior while making the complete evidence chain explicit and
 
 ```text
 AnalysisHttpAdapter
+  -> OperatorContextPort.requireAuthenticated()
+       -> OperatorId
   -> AnalysisUseCase
   -> AnalysisService
   -> CustomerActivityPort
@@ -205,7 +210,7 @@ AnalysisHttpAdapter
        -> AnalysisModelOutput
           [validated AnalysisResult + AnalysisModelProvenance implements AnalysisPipelineArtifact]
   -> AnalysisHistoryPort
-       [policy/retrieval + detector + model provenance persisted separately]
+       [operator + policy/retrieval + detector + model provenance persisted separately]
   -> PostgreSQL
 ```
 
@@ -217,9 +222,15 @@ This composition means RAG is one context-supply stage, not the complete AI arch
 
 [PlantUML source](diagrams/activity-grounded-analysis.puml) | [Orchestration sequence](diagrams/sequence-analysis.svg) | [Adapter sequence](diagrams/sequence-analysis-adapters.svg)
 
-R3 requires operator **attribution** in persisted provenance but deliberately does not activate R4 authentication/authorization. The R3/R4 deterministic HTTP/application boundary currently supplies a deterministic project-owned `OperatorId` for offline verification. R4 authentication work replaces that deterministic attribution source with real authenticated multi-operator context without changing the history contract.
+R3 requires operator **attribution** in persisted provenance but deliberately does not activate authentication. Under non-R4 profiles, `DeterministicOperatorContextAdapter` supplies the project-owned `OperatorId("r3-demo-operator")` so R3 remains reproducible and backwards compatible without Spring Security becoming a mandatory dependency of the use case.
 
-R3 list/inspect operations therefore prove persistent reviewable history, while authorization of those operations remains a separate R4 acceptance obligation.
+R4 and the dedicated `r4-auth` verification profile substitute `SpringSecurityOperatorContextAdapter` behind the same `OperatorContextPort`. The adapter translates Spring Security `Authentication` into `OperatorContext.Authenticated(OperatorId)` and reports `OperatorContext.Unauthenticated` otherwise. `AnalysisHttpAdapter` requests the current authenticated operator through the project-owned port; the existing `AnalysisUseCase` and `AnalysisHistoryEntry` signatures do not change.
+
+`R4SecurityConfiguration` defines two deterministic demonstration users, `operator-alpha` and `operator-beta`, whose repository-defined demo passwords are BCrypt encoded at startup. HTTP form processing is confined to `/api/session/login`; invalid credentials return `401`. `/api/session/logout` invalidates the authenticated session. CSRF remains enabled through an HTTP-session token repository, including login, logout and state-changing analysis requests. `GET /api/session` is the public bootstrap endpoint and returns a discriminated `AUTHENTICATED` or `UNAUTHENTICATED` session view plus the current CSRF token. Static UI resources and health remain public; customer/activity/risk/analysis/history endpoints under `/api/**` require authentication.
+
+The React client mirrors the same type discipline with `LEGACY | SECURED` runtime modes and `AUTHENTICATED | UNAUTHENTICATED` secured-session variants. In secured mode, customer search and analysis/history navigation are not rendered until authentication succeeds; logout clears customer/history query state before returning to the login view.
+
+The `r4-auth` profile exists only to prove the real Spring Security boundary independently from pgvector and ONNX startup. It keeps the deterministic/static policy path while activating authentication. The full `r4` profile composes that same security boundary with `PgVectorPolicyAdapter`. The isolated `r4-auth-ci` workflow is verification infrastructure, not a fourth published application checkpoint: it builds the exact candidate image, runs PostgreSQL, starts the image with `SPRING_PROFILES_ACTIVE=r4-auth`, and executes `VFY-AUTH-001` across anonymous rejection, invalid login, both operators, logout and persisted per-operator history attribution.
 
 ![Figure 8 - UML Activity diagram - analysis history review](diagrams/activity-history-review.svg)
 
@@ -227,8 +238,10 @@ R3 list/inspect operations therefore prove persistent reviewable history, while 
 
 ## 10. Failure and degraded behavior
 
-`NFR-RES-001` maps explicitly to the analysis module and detector/policy/model/history boundaries. These failure modes terminate without a false completed/history state:
+`NFR-RES-001` maps explicitly to the identity, analysis and detector/policy/model/history boundaries. These failure modes terminate without a false authenticated/completed/history state:
 
+- unauthenticated access to protected capabilities;
+- invalid operator credentials;
 - customer not found;
 - detector adapter failure;
 - insufficient policy grounding;
@@ -237,7 +250,7 @@ R3 list/inspect operations therefore prove persistent reviewable history, while 
 - structurally invalid model output;
 - persistence failure.
 
-Stage ordering is fail-closed. A detector failure stops before policy retrieval/model execution/history persistence. Missing policy evidence means no successfully grounded model execution. Invalid structured output cannot reach history persistence. Failed persistence cannot be reported as retained history.
+Authentication is fail-closed before protected application work. Anonymous API access returns `401`; invalid login does not create an authenticated operator context. CSRF remains required for authenticated state-changing requests. Analysis stage ordering is also fail-closed: a detector failure stops before policy retrieval/model execution/history persistence. Missing policy evidence means no successfully grounded model execution. Invalid structured output cannot reach history persistence. Failed persistence cannot be reported as retained history.
 
 ![Figure 9 - UML Activity diagram - failure behavior](diagrams/activity-failure-behavior.svg)
 
@@ -262,14 +275,15 @@ The published Compose OCI tag `ghcr.io/jdoe-dev-159753/specgraph-reference-app-c
 
 Accepted source checkpoints are preserved through `demo/r0`, `demo/r1`, `demo/r2` and `demo/r3`. A failed publication leaves the previous `:demo` tag untouched. Repository source state and registry publication state are therefore intentionally not conflated.
 
-The complete J2 reviewer contract publishes R0, R1, PostgreSQL-backed R2 and deterministic analysis/history R3 side by side. Until that publication has passed its remote proof, the source candidate remains independently runnable without pretending the registry already contains it.
+The complete J2 reviewer contract publishes R0, R1, PostgreSQL-backed R2 and deterministic analysis/history R3 side by side. J2 publication is complete before R4 work advances the source application. Focused R4 verification profiles may run additional exact-head containers in CI, but they do not become published checkpoints or alter the last-known-good Compose contract until the complete R4 ring is accepted as one coherent reviewer capability.
 
 Communication semantics:
 
 - browser <-> embedded Tomcat: HTTP through the host-published checkpoint port;
 - embedded Tomcat <-> built React assets: same-process static-resource serving;
 - React <-> Spring MVC `/api/*`: same-origin HTTP;
-- R2/R3 Spring Boot <-> PostgreSQL: JDBC/PostgreSQL protocol on the private Compose network;
+- R2/R3/R4 Spring Boot <-> PostgreSQL: JDBC/PostgreSQL protocol on the private runtime network;
+- browser <-> Spring Security session boundary: same-origin HTTP session cookie + CSRF token for state-changing requests;
 - optional Spring Boot <-> live AI provider: HTTPS only when explicitly configured;
 - module/port calls: in-process.
 
@@ -287,7 +301,7 @@ The rings activate capability maturity while preserving the same application cor
 - **R1 - mandatory synthetic customer review:** customer lookup, CARD/PAYMENT/CRYPTO and source-derived risk evidence on deterministic data.
 - **R2 - relational substitution:** Spring JDBC/PostgreSQL/Flyway/Testcontainers behind `CustomerActivityPort`; no invented new operator use case.
 - **R3 - mandatory deterministic analysis and reviewable history:** deterministic policy/model adapters, structured analysis, explicit failures, operator attribution and PostgreSQL-backed analysis history.
-- **R4 - MUST_HAVE closure:** explicit staged detector/retrieval/model/history orchestration, pgvector-backed synthetic policy retrieval with inspectable provenance, multi-operator authentication/authorization and related trust boundaries; optional live provider remains behind existing ports.
+- **R4 - MUST_HAVE closure:** explicit staged detector/retrieval/model/history orchestration, pgvector-backed synthetic policy retrieval with inspectable provenance, real Spring Security multi-operator authentication, protected application capabilities and related trust boundaries; optional live provider remains behind existing ports.
 - **R5 - hardening/demo:** reliability, observability, reviewer polish and NICE_TO_HAVE differentiation such as a concrete Bayesian detector or live-provider comparison without changing established boundaries.
 
 GitHub milestones `J1..J5` are the orthogonal delivery-timebox dimension. A day may activate more than one ring.
@@ -305,7 +319,7 @@ GitHub milestones `J1..J5` are the orthogonal delivery-timebox dimension. A day 
 | Retrieve real relevant policy knowledge / RAG | MUST_HAVE | R4 |
 | Authenticate/authorize real operators | MUST_HAVE | R4 |
 
-The R3 history activation does not claim R4 security. Authentication and authorization remain a separate acceptance dimension even though the persisted history contract already records an operator identity.
+The R3 history activation supplies deterministic attribution without authentication. The R4 identity substitution now proves authenticated multi-operator attribution behind the same project-owned history contract; the final combined R4 acceptance still requires the authenticated and pgvector-grounded paths to be demonstrated together.
 
 ## 13. ADR consistency
 
@@ -319,7 +333,7 @@ The design remains governed by seven accepted ADRs:
 6. Compose OCI multi-platform distribution;
 7. Spring JDBC relational adapters.
 
-The R4 analysis-chain refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, extends persisted provenance, and now activates pgvector-backed policy retrieval behind the existing `PolicyKnowledgePort`. The R3/default static policy adapter remains available as the deterministic baseline. Authenticated operator context, Bayesian detection and live/OpenAI synthesis remain substitutions or capabilities owned by their separate work nodes rather than being falsely claimed by this retrieval increment.
+The R4 refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, extends persisted provenance, activates pgvector-backed policy retrieval behind `PolicyKnowledgePort`, and now activates Spring Security-backed operator context behind `OperatorContextPort`. The R3/default static policy and deterministic operator-context adapters remain available as deterministic baselines. Bayesian detection and live/OpenAI synthesis remain later substitutions rather than being falsely claimed by the required R4 path.
 
 ## 14. Review criterion
 
@@ -328,6 +342,10 @@ A reviewer should be able to answer from this SDD without reconstructing PR hist
 - what the system boundary and four application modules are;
 - where framework/provider/storage/model-library types stop;
 - which ports and adapters are stable and which ring activates them;
+- how `OperatorContext` and `OperatorContextPort` keep Spring Security principals/sessions outside the application contracts while preserving persisted `OperatorId` attribution;
+- why authenticated/unauthenticated state is represented as sealed variants rather than a nullable identity;
+- how R4 protects `/api/**`, exposes only the session bootstrap/login plus health/static resources publicly, and retains CSRF for state-changing requests;
+- why the `r4-auth` verification profile is not itself a published R4 checkpoint;
 - why source risk evidence, optional derived detector signals, retrieved policy evidence and generated explanation have different authority;
 - how `AnalysisPipelineArtifact` acts as a sealed tagged-union equivalent whose concrete record type is the compile-time discriminant for detector, retrieval and model/backend provenance artifacts;
 - why the pivot shares mechanics without introducing nullable payload branches or erasing stage-specific types;
@@ -339,8 +357,8 @@ A reviewer should be able to answer from this SDD without reconstructing PR hist
 - how a future Bayesian detector and optional OpenAI adapter substitute independently behind project-owned ports;
 - why external AI transmission is opt-in and absent from default deterministic execution;
 - how R2 preserves exact PostgreSQL source semantics and snapshot consistency;
-- how deterministic analysis is validated, persisted and reloaded without pretending R4 authentication already exists;
-- how `NFR-RES-001` prevents false completed/history state at detector, grounding, model and persistence boundaries;
+- how deterministic analysis is validated, persisted and reloaded with either deterministic R3 attribution or authenticated R4 attribution without changing the history contract;
+- how `NFR-RES-001` prevents false authenticated/completed/history state at identity, detector, grounding, model and persistence boundaries;
 - how source and last-known-good published checkpoint states differ;
 - how the complete J2 publication preserves R0-R3 as independent reviewer checkpoints;
 - how R0-R5 extend one architecture concentrically.

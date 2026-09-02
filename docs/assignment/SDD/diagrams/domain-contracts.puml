@@ -6,6 +6,35 @@ skinparam linetype polyline
 skinparam nodesep 25
 skinparam ranksep 40
 
+package "Identity contracts" {
+  class OperatorId <<project value>> {
+    operatorIdentity
+  }
+  interface OperatorContext <<sealed project contract>> {
+    authenticated | unauthenticated variant
+  }
+  class AuthenticatedOperatorContext <<record>> {
+    operatorId : OperatorId
+  }
+  class UnauthenticatedOperatorContext <<record>>
+  interface OperatorContextPort <<project port>> {
+    current() : OperatorContext
+    requireAuthenticated() : OperatorId
+  }
+
+  OperatorContext <|.. AuthenticatedOperatorContext
+  OperatorContext <|.. UnauthenticatedOperatorContext
+  AuthenticatedOperatorContext "1" *-- "1" OperatorId
+  OperatorContextPort ..> OperatorContext
+  OperatorContextPort ..> OperatorId
+
+  note right of OperatorContext
+    Closed identity-state union.
+    No nullable operator identity.
+    Spring Security types remain adapter-local.
+  end note
+}
+
 package "Customer review contracts" {
   class CustomerSnapshot <<project contract>> {
     customerIdentity
@@ -22,6 +51,7 @@ package "Customer review contracts" {
     familyDetails
   }
   class RiskEvidence <<project contract>> {
+    assessmentId
     transactionId
     ruleIdentity
     ruleName
@@ -83,9 +113,6 @@ package "Analysis orchestration and history contracts" {
     result : AnalysisResult
     provenance : AnalysisModelProvenance
   }
-  class OperatorId <<project value>> {
-    operatorIdentity
-  }
   class AnalysisHistoryCreateCommand <<project command>> {
     customerIdentity
     operatorIdentity : OperatorId
@@ -133,9 +160,10 @@ package "Analysis orchestration and history contracts" {
 
 note bottom
   UML Class diagram: application-owned contracts are the stable pivot across hexagonal adapters.
-  Source truth remains CustomerSnapshot/RiskEvidence. Detector evidence, retrieval evidence,
-  and model/backend provenance share a sealed typed artifact family without sharing authority.
-  Persistence relations, Spring/pgvector/statistical-library/provider response types do not
-  become members of this contract model.
+  Authentication state is a sealed project-owned OperatorContext; Spring Security types stop at
+  adapters. Source truth remains CustomerSnapshot/RiskEvidence. Detector evidence, retrieval
+  evidence and model/backend provenance share a sealed typed artifact family without sharing
+  authority. Persistence relations and provider/framework response types do not become members
+  of this contract model.
 end note
 @enduml

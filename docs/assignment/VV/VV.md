@@ -32,7 +32,7 @@ The baseline currently defines ten stable obligations. This table is a human rea
 | Obligation | Concern | Primary evidence level |
 | --- | --- | --- |
 | `VFY-CUSTOMER-READ-001` | Customer lookup, CARD/PAYMENT/CRYPTO activity and risk evidence on the operator dashboard | focused UI E2E + HTTP acceptance + port/integration |
-| `VFY-AUTH-001` | Multiple authenticated operators and protected capabilities | Spring Security integration + HTTP acceptance |
+| `VFY-AUTH-001` | Multiple authenticated operators and protected capabilities | Spring Security integration + HTTP acceptance + focused browser E2E |
 | `VFY-ANALYSIS-CONTRACT-001` | Structured risk level, findings and recommendations | contract/unit + acceptance |
 | `VFY-RAG-001` | Relevant policy grounding, explicit absent-grounding behavior and provenance | port/integration + failure-path acceptance |
 | `VFY-HISTORY-001` | Persisted analysis and authenticated later review with operator/time attribution | PostgreSQL integration + acceptance |
@@ -58,15 +58,21 @@ Each stable project-owned port receives contract tests that can run against the 
 
 Use real infrastructure at boundaries where the design depends on infrastructure semantics: Spring Security, HTTP serialization, Spring JDBC/Flyway/PostgreSQL, pgvector retrieval and analysis-history persistence. Integration tests verify boundaries, not framework internals.
 
+For R4 identity, integration evidence exercises the real Spring Security filter chain, HTTP session, BCrypt-backed local demonstration users, CSRF repository and PostgreSQL-backed analysis history. The application core remains observable through `OperatorContextPort`/`OperatorId`; tests do not replace that seam with SecurityContext-specific application contracts merely because the boundary implementation is Spring Security.
+
 ### Acceptance verification
 
 Acceptance scenarios are derived from SRS acceptance criteria and exercise observable behavior through the highest practical public boundary. They remain distinct from implementation-specific test names.
 
 The dashboard criteria `AC-CUST-001`, `AC-ACT-001`, `AC-ACT-002` and `AC-RISK-001` explicitly concern what an operator can select and see. `VFY-CUSTOMER-READ-001` therefore requires focused UI/E2E evidence in addition to API acceptance. A healthy API cannot by itself prove that the React route, selection action or rendering presents the required activity and risk information. API-level acceptance remains sufficient where browser rendering adds no semantic evidence.
 
+`VFY-AUTH-001` likewise requires browser evidence because authentication changes operator-visible navigation and session state. The focused R4 auth acceptance path must demonstrate an anonymous `401`, invalid credential rejection, successful login for at least two distinct operators, protected customer/analysis navigation, logout, and distinct persisted operator attribution. The proof runs against the exact candidate application image with real PostgreSQL under the `r4-auth` verification profile. This profile isolates the authentication seam from pgvector/ONNX startup for focused verification; it is not a published R4 checkpoint and does not substitute for the later complete authenticated + grounded R4 acceptance flow.
+
 ### Architecture verification
 
 Mechanically check dependency direction and forbidden coupling: project-owned domain/application contracts must not depend on Spring, JDBC or provider-specific types, and adapter substitution must remain possible behind the declared ports. Spring Modulith/architecture checks are executable evidence for the modular-monolith boundary, not a substitute for behavioral tests.
+
+For identity, the architectural ratchet is the same rule applied to security: Spring Security `Authentication`, `SecurityContext`, session and authority types stay inside the security/web adapter boundary. Application analysis receives only the project-owned `OperatorId` selected through the sealed `OperatorContext`/`OperatorContextPort` contract.
 
 ### Failure-path verification
 
@@ -74,6 +80,9 @@ Negative behavior is first-class evidence. Authentication rejection, unknown cus
 
 In particular, failure injection must demonstrate that:
 
+- unauthenticated access cannot invoke protected customer/analysis/history capabilities;
+- invalid credentials do not create authenticated operator state;
+- state-changing secured requests preserve CSRF enforcement rather than disabling it to simplify the demo;
 - absent relevant policy evidence is explicit and does not fabricate grounding provenance;
 - model/provider failure does not create a completed history entry;
 - invalid structured output is rejected before persistence;
@@ -82,6 +91,8 @@ In particular, failure injection must demonstrate that:
 ### Deterministic baseline verification
 
 Mandatory acceptance must run without a live external LLM. The deterministic/static adapters are therefore verification infrastructure, not merely demo shortcuts. Live-provider checks, when configured, are supplemental and may never become the sole proof of mandatory behavior.
+
+The R4 `r4-auth` verification profile intentionally combines real authentication with the deterministic/static analysis path. This proves operator security without introducing either an external model dependency or an accidental requirement that the focused auth suite download an embedding model. The complete R4 acceptance later composes the same identity boundary with real pgvector retrieval.
 
 ### Delivery verification
 
@@ -95,6 +106,8 @@ The four source delivery requirements are part of the controlled baseline rather
 The executable demo path uses the same packaged Docker Compose topology as application CI. React is compiled ahead of time and embedded in the Spring Boot executable JAR; the running application container is Java 21 + Spring Boot + embedded Tomcat serving the UI and `/api/*` from one origin. Node/Vite are build-time tooling and are not part of the persistent R1 runtime.
 
 For source-checkout development and verification, the project-owned Compose/scripts start the exact application image and wait for its healthcheck before browser acceptance runs. For reviewer distribution, the published Compose OCI artifact resolves the same checkpoint images and is started with the documented `docker compose -f oci://... up -d --wait` contract. These are distribution/entry-point variants of the same application topology, not competing runtime designs. Later rings may add mandatory services such as PostgreSQL behind that Compose contract without reintroducing a separate frontend server.
+
+Focused R4 verification may run exact-head candidate containers outside the published Compose checkpoint set when that isolation improves fault localization, as `r4-auth-ci` does for authentication. Such a container is verification infrastructure only. It cannot be presented as a reviewer checkpoint or advance the last-known-good `:demo` contract before the complete R4 topology and its combined acceptance are ready.
 
 Browser-reachable host names and host ports remain deployment configuration. The R0/R1 local defaults are the documented reviewer ports; a dedicated Docker-capable demonstration host may override the browser-reachable host/port through the project-owned demo configuration without changing container-internal service semantics. DNS, TLS termination, reverse proxying and router forwarding are not implicit acceptance prerequisites and require separate evidence if deliberately introduced.
 
@@ -110,7 +123,7 @@ A human reviewer validates concerns that automation cannot prove economically: d
 
 Implementation PRs satisfy obligations by adding executable evidence carrying the stable obligation/requirement IDs. Until that happens, generated current-status views shall report the obligation as missing/pending from executable evidence. The durable strategy remains unchanged merely because a test temporarily fails or passes.
 
-The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `CustomerActivityPort`, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology.
+The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `OperatorContextPort`, `CustomerActivityPort`, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology.
 
 ![Verification evidence flow](diagrams/verification-evidence-flow.svg)
 
@@ -134,10 +147,10 @@ The app must not implement a second generic RTM renderer or pytest marker framew
 Evidence should be cheap to reproduce and close to the behavior it proves:
 
 - unit/property evidence: normal test runner output plus markers;
-- HTTP/security evidence: integration/acceptance tests;
+- HTTP/security evidence: Spring Security integration plus exact-head browser acceptance where session/navigation semantics are operator-visible;
 - database evidence: migration + repository/integration tests against real PostgreSQL where semantics matter;
 - architecture evidence: deterministic dependency/import/module checks;
-- UI evidence: focused E2E assertions for dashboard acceptance plus human review of comprehensibility;
+- UI evidence: focused E2E assertions for dashboard and authentication acceptance plus human review of comprehensibility;
 - provider evidence: deterministic adapter for mandatory baseline, optional live-provider smoke evidence separately tagged;
 - deployment evidence: clean-checkout Compose startup/readiness and the same documented browser-ready demo path locally or on the configured Docker VM;
 - delivery evidence: repository artifact/link checks plus focused human validation for the demo and reviewer-facing summaries.
@@ -152,7 +165,7 @@ This V&V baseline is complete when:
 - every SRS delivery requirement has one or more stable verification obligations;
 - every SRS acceptance criterion is linked to at least one obligation;
 - invariants and safety constraints that need independent verification are linked explicitly;
-- dashboard acceptance criteria that require operator-visible behavior include focused UI/E2E evidence;
+- dashboard and authentication acceptance criteria that require operator-visible behavior include focused UI/E2E evidence;
 - obligations name the intended evidence level without pretending executable tests already exist;
 - current verification status can later be derived from executable evidence rather than edited into this document;
 - the strategy is understandable from `VV.md` without opening YAML merely to discover what is meant to be verified;

@@ -7,7 +7,7 @@ import dev.specgraph.reference.analysis.AnalysisResult;
 import dev.specgraph.reference.analysis.AnalysisUseCase;
 import dev.specgraph.reference.analysis.PolicyEvidence;
 import dev.specgraph.reference.analysis.RiskSignalEvidence;
-import dev.specgraph.reference.identity.OperatorId;
+import dev.specgraph.reference.identity.OperatorContextPort;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -24,17 +24,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/customers/{customerId}/analyses")
 final class AnalysisHttpAdapter {
-    private static final OperatorId R3_DEMO_OPERATOR = new OperatorId("r3-demo-operator");
-
     private final AnalysisUseCase analysis;
+    private final OperatorContextPort operatorContext;
 
-    AnalysisHttpAdapter(AnalysisUseCase analysis) {
+    AnalysisHttpAdapter(AnalysisUseCase analysis, OperatorContextPort operatorContext) {
         this.analysis = analysis;
+        this.operatorContext = operatorContext;
     }
 
     @PostMapping
     ResponseEntity<AnalysisResponse> analyze(@PathVariable UUID customerId) {
-        AnalysisHistoryEntry completed = analysis.analyze(customerId, R3_DEMO_OPERATOR);
+        AnalysisHistoryEntry completed = analysis.analyze(customerId, operatorContext.requireAuthenticated());
         return ResponseEntity.status(HttpStatus.CREATED).body(AnalysisResponse.from(completed));
     }
 

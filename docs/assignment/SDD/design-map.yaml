@@ -102,6 +102,14 @@ contracts:
     owner: MOD-IDENTITY-001
     contains: [operator_identity]
     invariants: [INV-HIST-001]
+  CTR-OPERATOR-CONTEXT-001:
+    name: OperatorContext
+    owner: MOD-IDENTITY-001
+    java_shape: sealed_interface
+    discriminant: concrete_record_type
+    sealed_permits: [Authenticated with CTR-OPERATOR-ID-001, Unauthenticated]
+    prohibited_shapes: [nullable_operator_identity, Spring_Security_principal]
+    activation_ring: R4
   CTR-ANALYSIS-HISTORY-CREATE-001:
     name: AnalysisHistoryCreateCommand
     owner: MOD-ANALYSIS-001
@@ -114,6 +122,16 @@ contracts:
     invariants: [INV-HIST-001]
 
 ports:
+  PRT-OPERATOR-CONTEXT-001:
+    name: OperatorContextPort
+    owner: MOD-IDENTITY-001
+    direction: outbound_boundary
+    returns: CTR-OPERATOR-CONTEXT-001
+    authenticated_projection: CTR-OPERATOR-ID-001
+    implementation_adapters: [ADP-OPCTX-DET-001, ADP-AUTH-SPRING-001]
+    activation_ring: R3
+    acceptance_ring: R4
+    adrs: [ADR-001, ADR-004]
   PRT-ACTIVITY-001:
     name: CustomerActivityPort
     owner: MOD-CUSTOMER-001
@@ -171,16 +189,44 @@ adapters:
     package: dev.specgraph.reference.analysis.web
     technology: Spring MVC
     activation_ring: R3
-    connects_to: [MOD-ANALYSIS-001]
+    requires_operator_from: PRT-OPERATOR-CONTEXT-001
+    connects_to: [MOD-ANALYSIS-001, MOD-IDENTITY-001]
+    adrs: [ADR-001, ADR-004]
+  ADP-SESSION-HTTP-001:
+    name: OperatorSessionHttpAdapter
+    kind: inbound
+    owner: MOD-IDENTITY-001
+    package: dev.specgraph.reference.identity.web
+    technology: Spring MVC
+    activation_ring: R4
+    profiles: [r4, r4-auth]
+    exposes: [typed session bootstrap, CSRF token view]
+    connects_to: [PRT-OPERATOR-CONTEXT-001]
+    adrs: [ADR-001, ADR-004]
+  ADP-OPCTX-DET-001:
+    name: DeterministicOperatorContextAdapter
+    kind: outbound_boundary
+    owner: MOD-IDENTITY-001
+    implements: PRT-OPERATOR-CONTEXT-001
+    activation_ring: R3
+    profiles: [default_non_r4]
+    operator_identity: r3-demo-operator
+    responsibility: preserve deterministic R3 attribution without activating authentication
     adrs: [ADR-001, ADR-004]
   ADP-AUTH-SPRING-001:
-    name: SpringSecurityOperatorAdapter
-    kind: inbound_boundary
+    name: SpringSecurityOperatorContextAdapter
+    kind: outbound_boundary
     owner: MOD-IDENTITY-001
+    package: dev.specgraph.reference.identity.security
     technology: Spring Security
+    implements: PRT-OPERATOR-CONTEXT-001
     activation_ring: R4
+    profiles: [r4, r4-auth]
+    adapter_local_types: [Authentication, SecurityContext]
+    security_configuration: [HTTP session, BCrypt demo credentials, CSRF enabled, 401 REST entry point]
+    demo_operators: [operator-alpha, operator-beta]
     connects_to: [MOD-IDENTITY-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
-    adrs: [ADR-004]
+    adrs: [ADR-001, ADR-004]
   ADP-ACT-SYN-001:
     name: SyntheticActivityAdapter
     kind: outbound
@@ -278,13 +324,16 @@ infrastructure:
     published_j2_services: [r0, r1, postgres, r2, r3]
     source_j2_services: [r0, r1, postgres, r2, r3]
     checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080, R2 host 8082 to container 8080, R3 host 8083 to container 8080]
+    r4_auth_verification_profile: exact-head candidate container on host 8084 with SPRING_PROFILES_ACTIVE=r4-auth; verification-only, not a published checkpoint
     operating_modes: [side_by_side_default, direct_checkpoint_debug, detached_persistent]
     adrs: [ADR-004, ADR-005, ADR-006]
   CMP-UI-001:
     name: OperatorDashboard
     technology: React TypeScript MUI TanStack Query
     activation_ring: R0
-    connects_to: [ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
+    connects_to: [ADP-SESSION-HTTP-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
+    runtime_session_types: [LEGACY, SECURED_AUTHENTICATED, SECURED_UNAUTHENTICATED]
+    r4_auth_view: login, authenticated operator identity, logout, protected customer and analysis navigation
     r4_policy_provenance_view: source identity, content, adapter, corpus, revision, source document, chunk position, embedding identity and similarity score when present
     adrs: [ADR-004]
 
@@ -314,7 +363,7 @@ requirement_design:
     adrs: [ADR-002]
     first_acceptance_ring: R3
   FR-AUTH-001:
-    elements: [CMP-UI-001, ADP-AUTH-SPRING-001, MOD-IDENTITY-001, CTR-OPERATOR-ID-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
+    elements: [CMP-UI-001, MOD-IDENTITY-001, CTR-OPERATOR-ID-001, CTR-OPERATOR-CONTEXT-001, PRT-OPERATOR-CONTEXT-001, ADP-SESSION-HTTP-001, ADP-AUTH-SPRING-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
     adrs: [ADR-001, ADR-004]
     first_acceptance_ring: R4
   FR-RAG-001:
@@ -330,19 +379,19 @@ requirement_design:
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-REP-001:
-    elements: [INF-COMPOSE-001, ADP-ACT-SYN-001, ADP-DETECTOR-NOOP-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
+    elements: [INF-COMPOSE-001, ADP-ACT-SYN-001, ADP-DETECTOR-NOOP-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001, ADP-OPCTX-DET-001]
     adrs: [ADR-002, ADR-004, ADR-005, ADR-006]
     first_acceptance_ring: R3
   NFR-VER-001:
-    elements: [CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-ACTIVITY-001, PRT-DETECTOR-001, PRT-MODEL-001, PRT-POLICY-001, ADP-ACT-SYN-001, ADP-DETECTOR-NOOP-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
+    elements: [CTR-ANALYSIS-PIPELINE-ARTIFACT-001, CTR-OPERATOR-CONTEXT-001, PRT-OPERATOR-CONTEXT-001, PRT-ACTIVITY-001, PRT-DETECTOR-001, PRT-MODEL-001, PRT-POLICY-001, ADP-OPCTX-DET-001, ADP-AUTH-SPRING-001, ADP-ACT-SYN-001, ADP-DETECTOR-NOOP-001, ADP-MODEL-DET-001, ADP-POL-STATIC-001]
     adrs: [ADR-001, ADR-002, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-RES-001:
-    elements: [MOD-ANALYSIS-001, PRT-DETECTOR-001, PRT-POLICY-001, PRT-MODEL-001, PRT-HISTORY-001, ADP-DETECTOR-NOOP-001, ADP-POL-STATIC-001, ADP-MODEL-DET-001, ADP-HIST-JDBC-001]
-    adrs: [ADR-002, ADR-003, ADR-007]
+    elements: [MOD-IDENTITY-001, PRT-OPERATOR-CONTEXT-001, ADP-AUTH-SPRING-001, MOD-ANALYSIS-001, PRT-DETECTOR-001, PRT-POLICY-001, PRT-MODEL-001, PRT-HISTORY-001, ADP-DETECTOR-NOOP-001, ADP-POL-STATIC-001, ADP-MODEL-DET-001, ADP-HIST-JDBC-001]
+    adrs: [ADR-001, ADR-002, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-SEC-001:
-    elements: [ADP-AUTH-SPRING-001, MOD-IDENTITY-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
+    elements: [CMP-UI-001, MOD-IDENTITY-001, CTR-OPERATOR-CONTEXT-001, PRT-OPERATOR-CONTEXT-001, ADP-SESSION-HTTP-001, ADP-AUTH-SPRING-001, ADP-CUST-HTTP-001, ADP-ANALYSIS-HTTP-001]
     adrs: [ADR-001, ADR-004]
     first_acceptance_ring: R4
   CON-AI-002:
@@ -362,10 +411,6 @@ first_vertical_slice:
     - requiring PostgreSQL or an external LLM for R1 acceptance
 
 design_gaps:
-  GAP-AUTH-001:
-    source_ambiguity: AMB-AUTH-001
-    needed_by_ring: R4
-    question: local demo credential storage and seeding mechanism
   GAP-RAG-001:
     source_ambiguity: AMB-RAG-001
     needed_by_ring: R4

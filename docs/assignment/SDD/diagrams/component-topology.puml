@@ -8,14 +8,19 @@ skinparam nodesep 38
 skinparam ranksep 45
 
 actor "Customer Care\nOperator" as Operator
-interface "Protected HTTP/JSON API" as WebApi
+interface "HTTP/JSON API" as WebApi
 
 package "Web client" {
   component "Operator Dashboard\nCMP-UI-001\nReact / TypeScript" as UI
 }
 
 package "Spring Boot modular monolith" as Backend {
-  component "Spring Security Boundary\nADP-AUTH-SPRING-001\nMUST_HAVE activation" as Auth
+  component "Spring Security Filter Chain\nR4 / r4-auth profiles" as SecurityFilter
+
+  package "identity module" as IdentityModule {
+    component "Operator Session HTTP Adapter\nADP-SESSION-HTTP-001\n<<GoF Adapter>>" as SessionHttp
+    interface "OperatorContextPort\nPRT-OPERATOR-CONTEXT-001\n<<Strategy seam>>" as OperatorContextPort
+  }
 
   package "customer module" as CustomerModule {
     component "Customer Review HTTP Adapter\nADP-CUST-HTTP-001\n<<GoF Adapter>>" as CustomerHttp
@@ -34,21 +39,21 @@ package "Spring Boot modular monolith" as Backend {
     interface "AnalysisModelPort\nPRT-MODEL-001\n<<Strategy seam>>" as ModelPort
     interface "AnalysisHistoryPort\nPRT-HISTORY-001" as HistoryPort
   }
-
-  package "identity module" as IdentityModule {
-    component "Identity Module\nMOD-IDENTITY-001" as Identity
-  }
 }
 
-package "Replaceable outbound adapters" as Adapters {
+package "Replaceable boundary/outbound adapters" as Adapters {
+  component "Deterministic Operator Context\nADP-OPCTX-DET-001\nR3/default\n<<GoF Adapter>>" as OperatorDet
+  component "Spring Security Operator Context\nADP-AUTH-SPRING-001\nR4 / r4-auth\n<<GoF Adapter>>" as OperatorSecurity
   component "Synthetic Activity\nADP-ACT-SYN-001\nR0/R1\n<<GoF Adapter>>" as ActivitySynthetic
   component "Spring JDBC Activity\nADP-ACT-JDBC-001\nR2\n<<GoF Adapter>>" as ActivityJdbc
-  component "Static Policy\nADP-POL-STATIC-001\npre-R4 seam\n<<GoF Adapter>>" as PolicyStatic
+  component "Static Policy\nADP-POL-STATIC-001\nR3/default\n<<GoF Adapter>>" as PolicyStatic
   component "pgvector Policy\nADP-POL-PGV-001\nR4\n<<GoF Adapter>>" as PolicyPg
-  component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3\n<<GoF Adapter>>" as ModelDet
+  component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3+\n<<GoF Adapter>>" as ModelDet
   component "Spring AI Model\nADP-MODEL-AI-001\nR4 optional\n<<GoF Adapter>>" as ModelAi
-  component "Spring JDBC Analysis History\nADP-HIST-JDBC-001\nR4\n<<GoF Adapter>>" as HistoryJdbc
+  component "Spring JDBC Analysis History\nADP-HIST-JDBC-001\nR3+\n<<GoF Adapter>>" as HistoryJdbc
 
+  OperatorDet -[hidden]right-> OperatorSecurity
+  OperatorSecurity -[hidden]right-> ActivitySynthetic
   ActivitySynthetic -[hidden]right-> ActivityJdbc
   ActivityJdbc -[hidden]right-> PolicyStatic
   PolicyStatic -[hidden]right-> PolicyPg
@@ -61,18 +66,22 @@ component "External AI provider" as Provider <<external>>
 
 Operator --> UI
 UI --> WebApi : HTTP/JSON
-WebApi --> Auth : protected routes when R4 activated
-WebApi --> CustomerHttp : customer review route
-WebApi --> AnalysisHttp : analysis/history routes when activated
-Auth --> Identity
-Auth --> CustomerHttp : authenticated operator context
-Auth --> AnalysisHttp : authenticated operator context
+WebApi --> SecurityFilter : R4 request filtering
+SecurityFilter --> SessionHttp : session bootstrap/login/logout
+SecurityFilter --> CustomerHttp : authenticated customer routes
+SecurityFilter --> AnalysisHttp : authenticated analysis/history routes
+
+SessionHttp --> OperatorContextPort : current session view
+AnalysisHttp --> OperatorContextPort : requireAuthenticated()
+OperatorContextPort --> OperatorDet : default/R3
+OperatorContextPort ..> OperatorSecurity : R4 substitution
+OperatorSecurity --> SecurityFilter : translate Authentication/SecurityContext
 
 CustomerHttp --> Customer
 Customer --> Risk : public RiskEvidence contract
 Customer --> ActivityPort
 
-AnalysisHttp --> Analysis
+AnalysisHttp --> Analysis : analyze(customerId, OperatorId)
 Analysis --> Customer : customer/activity context
 Analysis --> PolicyPort
 Analysis --> ModelPort
@@ -89,13 +98,13 @@ HistoryPort ..> HistoryJdbc
 ActivityJdbc --> Db : Spring JDBC
 PolicyPg --> Db : pgvector retrieval adapter
 HistoryJdbc --> Db : Spring JDBC
-ModelAi ..> Provider : HTTPS
+ModelAi ..> Provider : HTTPS only when explicitly selected
 
 note bottom of Backend
-  The four packages are the Spring Modulith application modules. HTTP is an adapter role,
-  not a fifth horizontal module: each inbound adapter lives inside the module whose use case
-  it drives. GoF Adapter labels identify boundary translation roles; Strategy seams identify
-  interchangeable implementations; the analysis application service acts as a Facade over
-  orchestration. Structural presence does not imply first acceptance.
+  The four packages are the Spring Modulith application modules. Spring Security remains an
+  adapter/runtime boundary: Authentication, SecurityContext and session types stop before
+  OperatorContextPort. The application sees only OperatorContext/OperatorId. GoF Adapter labels
+  identify boundary translation roles; Strategy seams identify interchangeable implementations;
+  the analysis application service acts as a Facade over orchestration.
 end note
 @enduml
