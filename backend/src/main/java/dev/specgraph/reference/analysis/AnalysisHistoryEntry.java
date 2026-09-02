@@ -12,13 +12,17 @@ public record AnalysisHistoryEntry(
         OperatorId operatorId,
         Instant generatedAt,
         AnalysisResult result,
-        List<PolicyEvidence> evidenceProvenance) {
+        List<PolicyEvidence> evidenceProvenance,
+        List<RiskSignalEvidence> detectorProvenance,
+        AnalysisModelProvenance modelProvenance) {
     public AnalysisHistoryEntry {
         Objects.requireNonNull(analysisId, "analysisId");
         Objects.requireNonNull(customerId, "customerId");
         Objects.requireNonNull(operatorId, "operatorId");
         Objects.requireNonNull(generatedAt, "generatedAt");
         Objects.requireNonNull(result, "result");
-        evidenceProvenance = List.copyOf(evidenceProvenance);
+        evidenceProvenance = List.copyOf(Objects.requireNonNull(evidenceProvenance, "evidenceProvenance"));
+        detectorProvenance = List.copyOf(Objects.requireNonNull(detectorProvenance, "detectorProvenance"));
+        Objects.requireNonNull(modelProvenance, "modelProvenance");
     }
 }
