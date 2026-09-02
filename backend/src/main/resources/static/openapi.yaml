@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Customer Activity Analytics API
-  version: r4-multi-operator
-  description: Reviewer-facing R4 contract for authenticated customer review and the staged evidence-to-analysis pipeline. The deterministic offline model remains the default while retrieval, detector and model provenance stay separate.
+  version: r4-grounded-safety
+  description: Reviewer-facing R4 contract for authenticated customer review and the staged evidence-to-analysis pipeline. Retained analyses carry model/backend/prompt provenance plus typed references to the exact source, detector and retrieved-policy evidence accepted by the grounding validator.
 paths:
   /api/session:
     get:
@@ -86,7 +86,7 @@ paths:
         - $ref: '#/components/parameters/CsrfToken'
       responses:
         '201':
-          description: Validated analysis completed and persisted with authenticated operator attribution
+          description: Validated grounded analysis completed and persisted with authenticated operator attribution
           content:
             application/json:
               schema:
@@ -108,7 +108,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AnalysisProblem'
         '502':
-          description: Detector, grounding, model execution, or structured-result validation failed.
+          description: Detector, grounding, model execution, structured-result validation, or evidence-reference validation failed.
           content:
             application/problem+json:
               schema:
@@ -384,14 +384,33 @@ components:
           type: object
           additionalProperties:
             type: string
+    AnalysisEvidenceReference:
+      type: object
+      required: [kind, evidenceIdentity]
+      description: Typed pointer to an exact input artifact accepted by the grounding validator. The pointer carries identity, not evidence payload or semantic authority.
+      properties:
+        kind:
+          type: string
+          enum: [ACTIVITY, SOURCE_RISK, DETECTOR_SIGNAL, POLICY_RETRIEVAL]
+        evidenceIdentity:
+          type: string
+          minLength: 1
     AnalysisModelProvenance:
       type: object
-      required: [backendIdentity, modelIdentity, metadata]
+      required: [backendIdentity, modelIdentity, promptIdentity, evidenceReferences, metadata]
       properties:
         backendIdentity:
           type: string
         modelIdentity:
           type: string
+        promptIdentity:
+          type: string
+        evidenceReferences:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AnalysisEvidenceReference'
         metadata:
           type: object
           additionalProperties:

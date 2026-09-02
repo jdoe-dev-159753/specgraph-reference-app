@@ -14,9 +14,10 @@ import org.junit.jupiter.api.Test;
 @Tag("VFY-CUSTOMER-READ-001")
 @Tag("VFY-ANALYSIS-001")
 @Tag("VFY-AUTH-001")
+@Tag("VFY-FAILURE-PATHS-001")
 class OpenApiContractTests {
     @Test
-    void r4ContractRetainsTypedCustomerAnalysisAndExposesSessionSecurity() {
+    void r4ContractRetainsTypedCustomerAnalysisSessionSecurityAndGroundingReferences() {
         URL contract = Thread.currentThread().getContextClassLoader().getResource("static/openapi.yaml");
         assertThat(contract).as("packaged R4 OpenAPI contract").isNotNull();
 
@@ -26,7 +27,7 @@ class OpenApiContractTests {
         OpenAPI api = result.getOpenAPI();
         assertThat(api).isNotNull();
         assertThat(api.getOpenapi()).startsWith("3.0");
-        assertThat(api.getInfo().getVersion()).isEqualTo("r4-multi-operator");
+        assertThat(api.getInfo().getVersion()).isEqualTo("r4-grounded-safety");
         assertThat(api.getPaths()).containsKeys(
                 "/api/session",
                 "/api/session/login",
@@ -105,13 +106,20 @@ class OpenApiContractTests {
         assertThat(detectorEvidence.getRequired()).containsAll(Set.of(
                 "detectorIdentity", "signalIdentity", "score", "provenance"));
 
+        Schema<?> evidenceReference = api.getComponents().getSchemas().get("AnalysisEvidenceReference");
+        assertThat(evidenceReference.getRequired()).containsAll(Set.of("kind", "evidenceIdentity"));
+        assertThat(evidenceReference.getProperties().get("kind").getEnum().stream().map(String::valueOf).toList())
+                .containsExactly("ACTIVITY", "SOURCE_RISK", "DETECTOR_SIGNAL", "POLICY_RETRIEVAL");
+
         Schema<?> modelProvenance = api.getComponents().getSchemas().get("AnalysisModelProvenance");
         assertThat(modelProvenance.getRequired()).containsAll(Set.of(
-                "backendIdentity", "modelIdentity", "metadata"));
+                "backendIdentity", "modelIdentity", "promptIdentity", "evidenceReferences", "metadata"));
+        assertThat(modelProvenance.getProperties().get("evidenceReferences").getItems().get$ref())
+                .isEqualTo("#/components/schemas/AnalysisEvidenceReference");
 
         Schema<?> problem = api.getComponents().getSchemas().get("AnalysisProblem");
         assertThat(problem.getProperties().get("reason").getEnum().stream().map(String::valueOf).toList())
-                .contains("DETECTOR_FAILURE");
+                .contains("DETECTOR_FAILURE", "INVALID_RESULT");
 
         Schema<?> activity = api.getComponents().getSchemas().get("Activity");
         assertThat(activity.getOneOf()).extracting(Schema::get$ref).containsExactlyInAnyOrder(
