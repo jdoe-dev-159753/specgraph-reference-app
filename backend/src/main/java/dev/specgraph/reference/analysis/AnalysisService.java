@@ -12,16 +12,19 @@ import org.springframework.stereotype.Service;
 @Service
 final class AnalysisService implements AnalysisUseCase {
     private final CustomerActivityPort customerActivity;
+    private final RiskSignalDetectorPort riskSignalDetector;
     private final PolicyKnowledgePort policyKnowledge;
     private final AnalysisModelPort analysisModel;
     private final AnalysisHistoryPort analysisHistory;
 
     AnalysisService(
             CustomerActivityPort customerActivity,
+            RiskSignalDetectorPort riskSignalDetector,
             PolicyKnowledgePort policyKnowledge,
             AnalysisModelPort analysisModel,
             AnalysisHistoryPort analysisHistory) {
         this.customerActivity = customerActivity;
+        this.riskSignalDetector = riskSignalDetector;
         this.policyKnowledge = policyKnowledge;
         this.analysisModel = analysisModel;
         this.analysisHistory = analysisHistory;
@@ -34,24 +37,39 @@ final class AnalysisService implements AnalysisUseCase {
                         AnalysisFailureException.Reason.CUSTOMER_NOT_FOUND,
                         "Customer " + customerId + " was not found"));
 
-        List<PolicyEvidence> evidence;
+        List<RiskSignalEvidence> detectorEvidence;
         try {
-            evidence = List.copyOf(policyKnowledge.retrieveRelevant(snapshot));
+            detectorEvidence = List.copyOf(riskSignalDetector.detect(snapshot));
+        } catch (RuntimeException exception) {
+            throw new AnalysisFailureException(
+                    AnalysisFailureException.Reason.DETECTOR_FAILURE,
+                    "Risk-signal detector execution failed",
+                    exception);
+        }
+
+        List<PolicyEvidence> policyEvidence;
+        try {
+            policyEvidence = List.copyOf(policyKnowledge.retrieveRelevant(snapshot));
         } catch (RuntimeException exception) {
             throw new AnalysisFailureException(
                     AnalysisFailureException.Reason.GROUNDING_FAILURE,
                     "Policy evidence retrieval failed",
                     exception);
         }
-        if (evidence.isEmpty()) {
+        if (policyEvidence.isEmpty()) {
             throw new AnalysisFailureException(
                     AnalysisFailureException.Reason.INSUFFICIENT_GROUNDING,
                     "No relevant policy evidence was available for the analysis");
         }
 
-        AnalysisResult result;
+        AnalysisEvidenceEnvelope evidence = new AnalysisEvidenceEnvelope(
+                snapshot,
+                detectorEvidence,
+                policyEvidence);
+
+        AnalysisModelOutput output;
         try {
-            result = analysisModel.analyze(snapshot, evidence);
+            output = analysisModel.analyze(evidence);
         } catch (InvalidAnalysisResultException exception) {
             throw new AnalysisFailureException(
                     AnalysisFailureException.Reason.INVALID_RESULT,
@@ -63,18 +81,20 @@ final class AnalysisService implements AnalysisUseCase {
                     "Analysis model execution failed",
                     exception);
         }
-        if (result == null) {
+        if (output == null) {
             throw new AnalysisFailureException(
                     AnalysisFailureException.Reason.INVALID_RESULT,
-                    "Analysis model returned no structured result");
+                    "Analysis model returned no structured output");
         }
 
         AnalysisHistoryCreateCommand command = new AnalysisHistoryCreateCommand(
                 customerId,
                 operatorId,
                 Instant.now(),
-                result,
-                evidence);
+                output.result(),
+                policyEvidence,
+                detectorEvidence,
+                output.provenance());
         try {
             return analysisHistory.persist(command);
         } catch (RuntimeException exception) {
