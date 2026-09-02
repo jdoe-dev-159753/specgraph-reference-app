@@ -67,7 +67,7 @@ test('VFY-R4-LIVE-001 composes Bayesian signals, pgvector grounding and OpenAI s
     response.url().endsWith(`/api/customers/${seededCustomer}/analyses`) &&
     response.request().method() === 'POST')
 
-  await page.getByRole('button', { name: 'Run deterministic analysis' }).click()
+  await page.getByRole('button', { name: 'Run analysis' }).click()
   const response = await responsePromise
   expect(response.status()).toBe(201)
   const analysis = await response.json() as Analysis
