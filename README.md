@@ -51,13 +51,11 @@ The ring number describes **capability maturity**. Detector/backend choice is an
 | `8084` | **R4 baseline** | no-op | **pgvector + local MiniLM** | deterministic | no |
 | `8085` | **R4 Bayesian** | **Bayesian beta-binomial** | **same pgvector + local MiniLM** | deterministic | no |
 | `8086` | R4 local, optional | configured detector(s) | same RAG | LM Studio/local model | no, planned in #251 |
-| `8087` | R4 external, optional | configured detector(s) | same RAG | OpenAI | yes, only when deliberately funded/configured |
+| `8087` | R4 external, optional | configured detector(s) | same RAG | OpenAI | yes, optional only |
 
-R4 variants use the same application revision and stable application ports. Each Compose project gets its own network, PostgreSQL/pgvector state and analysis history so experiments do not contaminate each other.
+The canonical demo runtime is **`watch-infra-01`**, a Linux Docker host. Run the following from a repository checkout on that host. Each R4 Compose project gets its own network, PostgreSQL/pgvector state and analysis history, so experiments do not contaminate each other.
 
-### Run the two free R4 variants now
-
-Bash / Linux / WSL, baseline on port 8084:
+Baseline on port 8084:
 
 ```bash
 docker compose -p specgraph-r4-baseline -f compose.r4.yaml up -d --build --wait
@@ -70,47 +68,34 @@ R4_PORT=8085 R4_PROFILES=r4,bayesian-detector \
   docker compose -p specgraph-r4-bayesian -f compose.r4.yaml up -d --build --wait
 ```
 
-Open:
+Open from a machine that can reach the Docker host:
 
 ```text
-R4 baseline: http://localhost:8084/
-R4 Bayesian: http://localhost:8085/
+R4 baseline: http://watch-infra-01:8084/
+R4 Bayesian: http://watch-infra-01:8085/
 ```
 
-PowerShell, baseline:
-
-```powershell
-docker compose -p specgraph-r4-baseline -f compose.r4.yaml up -d --build --wait
-```
-
-PowerShell, Bayesian variant:
-
-```powershell
-$env:R4_PORT = "8085"
-$env:R4_PROFILES = "r4,bayesian-detector"
-docker compose -p specgraph-r4-bayesian -f compose.r4.yaml up -d --build --wait
-Remove-Item Env:R4_PORT
-Remove-Item Env:R4_PROFILES
-```
+Use the host IP instead if local DNS does not resolve `watch-infra-01`.
 
 Stop either experiment independently:
 
 ```bash
 docker compose -p specgraph-r4-baseline -f compose.r4.yaml down -v
-docker compose -p specgraph-r4-bayesian -f compose.r4.yaml down -v
+R4_PORT=8085 R4_PROFILES=r4,bayesian-detector \
+  docker compose -p specgraph-r4-bayesian -f compose.r4.yaml down -v
 ```
 
-The `R4_PROFILES` switch is a deliberate transitional demo seam. [#163](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/163) owns the final typed process-level detector/backend selection factory so the same gallery eventually becomes configuration such as `deterministic | local | openai` without profile strings leaking into architecture contracts.
+`R4_PROFILES` is a deliberate transitional demo seam. [#163](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/163) owns the final typed process-level detector/backend selection factory. [#224](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/224) owns Composite detector composition and [#254](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/254) owns optional calibrated late fusion/ensemble evidence.
 
-A more detailed copy/paste gallery, including the Windows path and reserved local/external variants, lives in [docs/reviewer/r4-gallery.md](docs/reviewer/r4-gallery.md).
+A more detailed copy/paste gallery lives in [docs/reviewer/r4-gallery.md](docs/reviewer/r4-gallery.md).
 
 ## Reviewer screenshots and demo fallback
 
-Browser screenshots are executable evidence, not mockups. The repository already has authentic CI captures for R1, R2, R3 and deterministic R4 retained by the application/demo workflows. They will be promoted into a durable repository-owned reviewer gallery under [docs/reviewer](docs/reviewer/README.md) rather than linking ephemeral workflow or sandbox URLs.
+Browser screenshots are executable evidence, not mockups. Authentic CI captures for R1, R2, R3 and deterministic R4 are retained by the workflows and tracked in [docs/reviewer/screenshot-manifest.md](docs/reviewer/screenshot-manifest.md). `r4-gallery-ci` additionally executes the baseline and Bayesian R4 configurations separately, asserts their detector/retrieval/model provenance, and only then retains the Playwright screenshot artifact.
 
-The screenshot promotion manifest records the exact source runs and customer scenarios: [docs/reviewer/screenshot-manifest.md](docs/reviewer/screenshot-manifest.md).
+Selected artifact PNGs are promoted unchanged into the repository-owned `docs/reviewer/screenshots/` gallery with exact run/SHA/customer provenance. This keeps the README independent of expiring workflow-artifact links.
 
-The same reviewer directory also defines a short **recorded fallback walkthrough** for presentation day. The live demo remains preferred, but a source-SHA-labelled recording can show R0 through the parallel R4 variants if live infrastructure or networking fails: [docs/reviewer/demo-fallback.md](docs/reviewer/demo-fallback.md).
+The same reviewer directory defines a short **recorded fallback walkthrough** for presentation day. The live demo remains preferred, but a source-SHA-labelled recording can show R0 through the parallel R4 variants if live infrastructure fails: [docs/reviewer/demo-fallback.md](docs/reviewer/demo-fallback.md).
 
 ## Published reviewer demo
 
@@ -179,13 +164,7 @@ Run R4 baseline:
 docker compose -p specgraph-r4-baseline -f compose.r4.yaml up -d --build --wait
 ```
 
-Then open:
-
-```text
-R4: http://localhost:8084/
-```
-
-Run the accepted frozen R2 source checkpoint instead of rebuilding the current checkout under the R2 service name:
+Run the accepted frozen R2 source checkpoint instead of rebuilding the current R3 checkout under the R2 service name:
 
 ```bash
 git worktree add --detach .checkpoints/r2 demo/r2
@@ -222,7 +201,7 @@ The PostgreSQL fixture is a small set of coherent reviewer stories, not random t
 | `33333333-3333-3333-3333-333333333333` | conventional baseline followed by growing cross-border payments and new crypto activity |
 | `44444444-4444-4444-4444-444444444444` | mixed anomaly story with repeated card declines, high-value cross-border movement and crypto evidence |
 
-R3/R4 use the same source evidence and add structured analysis, policy-evidence provenance, operator attribution and persistent history. R4 can additionally emit independently attributable detector evidence. A reload can therefore review the previously persisted analysis instead of manufacturing a second transient answer.
+R3 uses the same source evidence and adds a deterministic structured analysis result (`LOW | MEDIUM | HIGH`), policy-evidence provenance, operator attribution and persistent history. R4 uses the same source truth while adding authentication, local vector retrieval and optional Stage-1 detector evidence.
 
 ## Fresh source checkout
 
@@ -261,13 +240,13 @@ concentric reviewer topology
   R0 :8080
   R1 :8081
   R2 :8082 ----\
-  R3 :8083 -----+--> PostgreSQL where required
-  R4 :8084 ----/     + pgvector for R4 grounding
+  R3 :8083 -----+--> PostgreSQL / pgvector where required
+  R4 :8084+ ----/
 ```
 
 The application is a modular monolith with hexagonal boundaries. Project-owned application/domain contracts remain inside the framework boundary; HTTP/UI and persistence/model/knowledge/history implementations are adapters behind those contracts.
 
-The customer-read path is:
+The R2 customer-read path is:
 
 ```text
 CustomerReviewHttpAdapter
@@ -278,7 +257,7 @@ CustomerReviewHttpAdapter
         -> PostgreSQL
 ```
 
-The mature analysis path is:
+The mature R4 analysis path is:
 
 ```text
 AnalysisHttpAdapter
@@ -287,9 +266,8 @@ AnalysisHttpAdapter
         -> CustomerActivityPort
         -> RiskSignalDetectorPort
         -> PolicyKnowledgePort
-        -> AnalysisEvidenceEnvelope
         -> AnalysisModelPort
-        -> structured-result + grounding validation
+        -> grounding/reference validation
         -> AnalysisHistoryPort
         -> PostgreSQL
 ```
@@ -306,7 +284,7 @@ The delivery rings describe capability maturity, not calendar days. GitHub miles
 - **R1:** MANDATORY synthetic customer/activity/risk review.
 - **R2:** PostgreSQL/Flyway relational substitution behind the stable customer activity port.
 - **R3:** MANDATORY deterministic structured analysis plus persistent reviewable analysis history.
-- **R4:** MUST_HAVE real policy retrieval/grounding, multi-operator authentication/authorization, detector evidence and related trust boundaries.
+- **R4:** MUST_HAVE real policy retrieval/grounding, multi-operator authentication/authorization and related trust boundaries.
 - **R5:** hardening, reviewer/demo quality and NICE_TO_HAVE differentiation.
 
 Authentication is deliberately not allowed to block the mandatory centre merely because its structural seam exists earlier.
@@ -340,7 +318,5 @@ problem evidence
 AI can assist implementation and review, but deterministic claims remain mechanically testable. GitHub-native issue hierarchy, dependencies, PR ownership, lifecycle and typed Project metadata represent work state instead of prose surrogates.
 
 ## Confidentiality and reuse
-
-The default application path requires no external AI provider and does not transmit the analysis envelope to an external model. The R4 retrieval embedding model is local. External Stage-3 synthesis is an explicit optional adapter choice, and #251 tracks a fully local LM Studio Stage-3 alternative.
 
 The durable repository identity is generic. Proprietary assignment text and employer-specific naming are not required for the application architecture or reusable engineering method. Reusable mechanisms belong in the harness rather than being accumulated here as bespoke application infrastructure.
