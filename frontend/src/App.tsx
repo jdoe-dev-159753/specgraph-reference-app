@@ -54,6 +54,53 @@ function formatAmount(amount: string) {
   return `${sign}${grouped}.${fraction.padEnd(2, '0')}`
 }
 
+function GroundingEvidence({ evidence }: { evidence: PolicyEvidence[] }) {
+  if (evidence.length === 0) {
+    return <Typography color="text.secondary">No policy grounding evidence retained.</Typography>
+  }
+
+  return (
+    <Stack spacing={1.5} data-testid="analysis-grounding-evidence">
+      {evidence.map(item => {
+        const metadata = item.retrievalMetadata
+        const sourceDocument = metadata.sourceDocument ?? item.sourceIdentity
+        const chunkPosition = metadata.chunkIndex
+          ? `chunk ${metadata.chunkIndex}${metadata.totalChunks ? `/${metadata.totalChunks}` : ''}`
+          : null
+        const similarity = metadata.similarityScore
+        return (
+          <Paper
+            key={item.sourceIdentity}
+            variant="outlined"
+            data-testid={`policy-evidence-${item.sourceIdentity}`}
+            sx={{ p: 1.5 }}
+          >
+            <Stack direction="row" spacing={1} useFlexGap sx={{ mb: 1, flexWrap: 'wrap' }}>
+              {metadata.adapter && <Chip label={`adapter: ${metadata.adapter}`} size="small" variant="outlined" />}
+              {metadata.corpus && <Chip label={`corpus: ${metadata.corpus}`} size="small" variant="outlined" />}
+              {metadata.revision && <Chip label={`revision: ${metadata.revision}`} size="small" variant="outlined" />}
+              {metadata.embeddingModel && <Chip label={`embeddingModel: ${metadata.embeddingModel}`} size="small" variant="outlined" />}
+              {similarity && <Chip label={`similarity: ${similarity}`} size="small" variant="outlined" />}
+            </Stack>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {sourceDocument}{chunkPosition ? ` · ${chunkPosition}` : ''}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.75 }}>{item.content}</Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 0.75, display: 'block', fontFamily: 'monospace', overflowWrap: 'anywhere' }}
+            >
+              {item.sourceIdentity}
+              {metadata.embeddingModel ? ` · embedding ${metadata.embeddingModel}` : ''}
+            </Typography>
+          </Paper>
+        )
+      })}
+    </Stack>
+  )
+}
+
 async function loadCustomer(request: Request): Promise<CustomerSnapshot> {
   const response = await fetch(`/api/customers/${request.customerId}`)
   if (response.status === 404) throw new Error('Customer not found')
@@ -260,7 +307,7 @@ export default function App() {
                   <Box>
                     <Typography variant="h5">Deterministic analysis</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                      Offline R3 baseline. Policy evidence is synthetic and escalation remains a human decision.
+                      Offline deterministic model. Policy grounding remains synthetic, inspectable and separate from source risk evidence.
                     </Typography>
                   </Box>
                   <Button
@@ -289,8 +336,10 @@ export default function App() {
                     ))}
                   </List>
                   <Typography variant="caption" color="text.secondary">
-                    Operator {analysis.data.operatorId} · {new Date(analysis.data.generatedAt).toLocaleString()} · evidence {analysis.data.evidenceProvenance.map(item => item.sourceIdentity).join(', ')}
+                    Operator {analysis.data.operatorId} · {new Date(analysis.data.generatedAt).toLocaleString()}
                   </Typography>
+                  <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Grounding evidence</Typography>
+                  <GroundingEvidence evidence={analysis.data.evidenceProvenance} />
                 </Box>
               )}
 
@@ -316,8 +365,11 @@ export default function App() {
                       </Stack>
                       <Typography variant="body2" sx={{ mt: 1 }}>{entry.findingsSummary}</Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {entry.recommendations.join(' · ')} · evidence {entry.evidenceProvenance.map(item => item.sourceIdentity).join(', ')}
+                        {entry.recommendations.join(' · ')}
                       </Typography>
+                      <Box sx={{ mt: 1.5 }}>
+                        <GroundingEvidence evidence={entry.evidenceProvenance} />
+                      </Box>
                     </ListItem>
                   ))}
                 </List>

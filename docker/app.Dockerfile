@@ -23,7 +23,9 @@ RUN mvn -B -DskipTests package \
 
 # Only the runtime base varies by TARGETPLATFORM. Avoid target-architecture RUN
 # instructions so linux/amd64 + linux/arm64 manifests need no QEMU emulation.
-FROM eclipse-temurin:21-jre-alpine
+# Use a glibc-based JRE because the activated R4 local transformer path loads
+# ONNX Runtime native libraries that are not compatible with Alpine/musl.
+FROM eclipse-temurin:21-jre-noble
 ENV HOME=/tmp
 WORKDIR /app
 COPY --chown=10001:10001 --from=application-build /tmp/app.jar /app/app.jar

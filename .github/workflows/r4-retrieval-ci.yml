@@ -1,0 +1,140 @@
+name: r4-retrieval-ci
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker/**'
+      - 'compose.r4.yaml'
+      - '.github/workflows/r4-retrieval-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-r4-retrieval:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      COMPOSE_PROJECT_NAME: specgraph-r4-retrieval-${{ github.run_id }}
+      APP_R4_IMAGE: specgraph-reference-app:r4-retrieval-${{ github.event.pull_request.head.sha || github.sha }}
+      R4_PORT: '18084'
+    steps:
+      - name: Clean container-owned outputs before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints'
+
+      - name: Recover malformed persistent workspace
+        run: |
+          if ! git -C "$GITHUB_WORKSPACE" rev-parse --git-dir >/dev/null 2>&1; then
+            echo "Restoring Git identity in persistent workspace: $GITHUB_WORKSPACE"
+            git -C "$GITHUB_WORKSPACE" init
+            git -C "$GITHUB_WORKSPACE" remote add origin "https://github.com/${GITHUB_REPOSITORY}"
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact validated source revision
+        run: |
+          checked_out_sha="$(git rev-parse HEAD)"
+          echo "Expected source SHA: $SOURCE_SHA"
+          echo "Checked-out SHA:     $checked_out_sha"
+          test "$checked_out_sha" = "$SOURCE_SHA"
+
+      - name: Ratchet repository-owned R4 deployment contract
+        run: |
+          docker compose -f compose.r4.yaml config --quiet
+          test "$(docker compose -f compose.r4.yaml config --images postgres)" = "pgvector/pgvector:0.8.6-pg17"
+          docker compose -f compose.r4.yaml config | grep -q 'SPRING_PROFILES_ACTIVE: r4'
+
+      - name: Verify exact-head R4 retrieval under shared-host lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v flock >/dev/null
+          command -v python3 >/dev/null
+
+          lock_file=/tmp/specgraph-r4-retrieval.lock
+          exec 9>"$lock_file"
+          echo "Waiting for shared Docker-host R4 retrieval lock: $lock_file"
+          flock 9
+          echo "Acquired shared Docker-host R4 retrieval lock"
+
+          cleanup() {
+            docker compose -f compose.r4.yaml down -v --remove-orphans || true
+          }
+          trap cleanup EXIT
+
+          # A rerun of this exact workflow/run may have left only its own
+          # Compose project behind. Reclaim that exact project after acquiring
+          # the host lock; never sweep another run by a partial name match.
+          docker ps -aq \
+            --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+            | xargs -r docker rm -f || true
+          docker network ls -q \
+            --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+            | xargs -r docker network rm || true
+          docker volume ls -q \
+            --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+            | xargs -r docker volume rm -f || true
+
+          docker compose -f compose.r4.yaml up -d --build
+
+          for attempt in $(seq 1 120); do
+            if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 120 ]; then
+              docker compose -f compose.r4.yaml logs r4 postgres
+              exit 1
+            fi
+            sleep 2
+          done
+
+          curl -fsS "http://127.0.0.1:${R4_PORT}/api/customers/11111111-1111-1111-1111-111111111111" >/dev/null
+
+          analysis_response="$(mktemp)"
+          analysis_status="$(curl -sS -o "$analysis_response" -w '%{http_code}' \
+            -X POST \
+            "http://127.0.0.1:${R4_PORT}/api/customers/44444444-4444-4444-4444-444444444444/analyses")"
+          if [ "$analysis_status" != "201" ]; then
+            echo "Expected R4 analysis HTTP 201, got ${analysis_status}"
+            cat "$analysis_response"
+            docker compose -f compose.r4.yaml logs r4 postgres
+            exit 1
+          fi
+
+          python3 - "$analysis_response" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              payload = json.load(handle)
+
+          evidence = payload.get("evidenceProvenance")
+          if not isinstance(evidence, list) or not evidence:
+              raise SystemExit("R4 analysis returned no policy evidence")
+
+          pgvector = [
+              item
+              for item in evidence
+              if isinstance(item, dict)
+              and isinstance(item.get("retrievalMetadata"), dict)
+              and item["retrievalMetadata"].get("adapter") == "pgvector"
+          ]
+          if not pgvector:
+              raise SystemExit("R4 analysis did not retain pgvector provenance")
+
+          if not any(
+              item["retrievalMetadata"].get("embeddingModel") == "all-MiniLM-L6-v2"
+              for item in pgvector
+          ):
+              raise SystemExit("R4 analysis did not retain configured embedding-model provenance")
+
+          if not any(item.get("sourceIdentity") and item.get("content") for item in pgvector):
+              raise SystemExit("R4 analysis retained no concrete pgvector evidence chunk")
+          PY
