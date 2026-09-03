@@ -32,7 +32,7 @@ CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.
 REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
 CANONICAL_WORKFLOW_NAME = re.compile(r"^name: ([a-z0-9]+(?:-[a-z0-9]+)*)$")
 CANONICAL_ROOT_KEY = re.compile(
-    r"^(?:run-name|on|permissions|env|defaults|concurrency|jobs):(?:\s|$)"
+    r"^(run-name|on|permissions|env|defaults|concurrency|jobs):(?:\s|$)"
 )
 ONE_SHOT_WORKFLOW = re.compile(
     r"(?<![A-Za-z0-9])(?:pr|pull(?:[^A-Za-z0-9]+request)?|issue|discovery|story|fix)"
@@ -210,14 +210,20 @@ def canonical_workflow_name_violations(filename: str, text: str) -> list[str]:
             f"must equal filename stem {expected!r}"
         ]
 
+    seen_root_keys = {"name"}
     for line in text.splitlines()[1:]:
         if not line or line.lstrip().startswith("#") or line[0].isspace():
             continue
-        if not CANONICAL_ROOT_KEY.match(line):
+        root_key = CANONICAL_ROOT_KEY.match(line)
+        if not root_key:
             return [
                 f"{filename}: non-canonical or unknown top-level YAML key is forbidden: "
                 f"{line!r}"
             ]
+        key = root_key.group(1)
+        if key in seen_root_keys:
+            return [f"{filename}: duplicate top-level YAML key is forbidden: {key}"]
+        seen_root_keys.add(key)
     return []
 
 
