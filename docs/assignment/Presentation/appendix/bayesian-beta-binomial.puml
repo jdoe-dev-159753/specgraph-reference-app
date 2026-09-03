@@ -1,0 +1,38 @@
+@startuml
+title Appendix — Bayesian Beta-binomial review-elevation signal
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam wrapWidth 220
+
+rectangle "Customer activities" as input
+rectangle "Transparent binary mapping\nELEVATED if:\nstatus != completed\nOR CRYPTO\nOR PAYMENT receiver != CH" as mapping
+rectangle "Observed counts\nn activities\nk elevated" as counts
+rectangle "Prior\np ~ Beta(1,4)\nmean = 0.20" as prior
+rectangle "Conjugate update\np | data ~ Beta(1+k, 4+n-k)" as posterior
+rectangle "Reference question\nP(p > 0.40 | data)" as threshold
+rectangle "RiskSignalEvidence\nposterior-review-elevation-rate\nscore in [0,1] + provenance" as output
+
+input --> mapping
+mapping --> counts
+counts --> posterior
+prior --> posterior
+posterior --> threshold
+threshold --> output
+
+note bottom of posterior
+Worked example:
+1 elevated / 1 observation
+raw ratio = 100%
+posterior = Beta(2,4)
+posterior mean ~= 33.3%
+P(p > 0.40) = 0.33696
+end note
+
+note bottom of output
+Derived Stage-1 evidence only.
+Synthetic heuristic, not production AML calibration.
+Source risk facts remain unchanged.
+end note
+@enduml
