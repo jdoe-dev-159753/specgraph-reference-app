@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "${script_dir}/.." && pwd)"
 variant="${1:-baseline}"
 port="${2:-8084}"
 backend="${3:-deterministic}"
@@ -31,20 +33,9 @@ if [[ "${backend}" == "openai" && -z "${OPENAI_API_KEY:-}" ]]; then
 fi
 
 project="specgraph-r4-${variant}"
-external_transmission=false
-if [[ "${backend}" == "openai" ]]; then
-  external_transmission=true
-fi
 
 R4_PORT="${port}" \
 SPECGRAPH_ANALYSIS_BACKEND="${backend}" \
-docker compose -p "${project}" -f compose.r4.yaml up --build -d --wait
+docker compose -p "${project}" -f "${repo_root}/compose.r4.yaml" up --build -d --wait
 
-printf '%s\n' \
-  "R4 variant ready" \
-  "  project=${project}" \
-  "  url=http://localhost:${port}/" \
-  "  ring=R4" \
-  "  stage3.backend=${backend}" \
-  "  externalTransmission=${external_transmission}" \
-  "  persistence=isolated-compose-project"
+bash "${script_dir}/r4-variant-manifest.sh" "${variant}" "${port}" "${backend}"

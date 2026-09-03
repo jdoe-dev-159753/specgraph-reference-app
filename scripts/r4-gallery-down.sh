@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-bash scripts/r4-variant-down.sh baseline
-bash scripts/r4-variant-down.sh external || true
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+bash "${script_dir}/r4-variant-down.sh" baseline
+bash "${script_dir}/r4-variant-down.sh" external || true

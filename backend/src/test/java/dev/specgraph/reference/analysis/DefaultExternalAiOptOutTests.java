@@ -21,8 +21,9 @@ final class DefaultExternalAiOptOutTests extends PostgresIntegrationTestSupport 
 
     @Test
     void defaultRuntimeDisablesEveryOpenAiModelFamilyAndCreatesNoChatModel() {
+        assertThat(environment.getProperty("specgraph.analysis.backend")).isEqualTo("deterministic");
+        assertThat(environment.getProperty("spring.ai.model.chat")).isEqualTo("deterministic");
         assertThat(List.of(
-                environment.getProperty("spring.ai.model.chat"),
                 environment.getProperty("spring.ai.model.embedding"),
                 environment.getProperty("spring.ai.model.image"),
                 environment.getProperty("spring.ai.model.moderation"),
