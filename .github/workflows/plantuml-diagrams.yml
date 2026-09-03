@@ -34,10 +34,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
           persist-credentials: false
+      - name: Assert exact source revision
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
       - name: Render controlled diagram sources
         run: bash scripts/render_plantuml.sh
       - name: Reject stale or missing generated SVGs
@@ -60,6 +66,8 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
+      - name: Assert immutable dispatch revision
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - name: Render controlled diagram sources
         run: bash scripts/render_plantuml.sh
       - name: Package regenerated SVGs and apply-ready patch
