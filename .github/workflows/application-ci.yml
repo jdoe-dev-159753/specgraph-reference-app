@@ -39,6 +39,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      MAVEN_CACHE_VOLUME: ${{ github.event_name == 'pull_request' && format('specgraph-maven-cache-pr-{0}', github.event.pull_request.number) || 'specgraph-maven-cache-fast-main' }}
     steps:
       - name: Clean container-owned outputs before checkout
         run: |
@@ -64,7 +65,7 @@ jobs:
           docker run --rm
           --network host
           -v /var/run/docker.sock:/var/run/docker.sock
-          -v specgraph-maven-cache:/root/.m2
+          -v "$MAVEN_CACHE_VOLUME:/root/.m2"
           -v "$PWD/backend:/workspace"
           -w /workspace
           maven:3.9-eclipse-temurin-21
