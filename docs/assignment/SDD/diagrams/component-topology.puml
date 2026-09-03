@@ -35,6 +35,7 @@ package "Spring Boot modular monolith" as Backend {
   package "analysis module" as AnalysisModule {
     component "Analysis HTTP Adapter\nADP-ANALYSIS-HTTP-001\nR3+\n<<GoF Adapter>>" as AnalysisHttp
     component "Analysis Application\nMOD-ANALYSIS-001\napplication-service facade" as Analysis
+    interface "RiskSignalDetectorPort\nPRT-DETECTOR-001\n<<Strategy seam>>" as DetectorPort
     interface "PolicyKnowledgePort\nPRT-POLICY-001\n<<Strategy seam>>" as PolicyPort
     interface "AnalysisModelPort\nPRT-MODEL-001\n<<Strategy seam>>" as ModelPort
     interface "AnalysisHistoryPort\nPRT-HISTORY-001" as HistoryPort
@@ -46,6 +47,9 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   component "Spring Security Operator Context\nADP-AUTH-SPRING-001\nR4 / r4-auth\n<<GoF Adapter>>" as OperatorSecurity
   component "Synthetic Activity\nADP-ACT-SYN-001\nR0/R1\n<<GoF Adapter>>" as ActivitySynthetic
   component "Spring JDBC Activity\nADP-ACT-JDBC-001\nR2\n<<GoF Adapter>>" as ActivityJdbc
+  component "No-op Risk Signal Detector\nADP-DETECTOR-NOOP-001\nR4/default\n<<GoF Adapter>>" as DetectorNoOp
+  component "Bayesian Risk Signal Detector\nADP-DETECTOR-BAYES-001\nbayesian-detector\n<<GoF Adapter>>" as DetectorBayes
+  component "Fuzzy Risk Signal Detector\nADP-DETECTOR-FUZZY-001\nfuzzy-detector\n<<GoF Adapter>>" as DetectorFuzzy
   component "Static Policy\nADP-POL-STATIC-001\nR3/default\n<<GoF Adapter>>" as PolicyStatic
   component "pgvector Policy\nADP-POL-PGV-001\nR4\n<<GoF Adapter>>" as PolicyPg
   component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3+\n<<GoF Adapter>>" as ModelDet
@@ -55,8 +59,12 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   OperatorDet -[hidden]right-> OperatorSecurity
   OperatorSecurity -[hidden]right-> ActivitySynthetic
   ActivitySynthetic -[hidden]right-> ActivityJdbc
-  ActivityJdbc -[hidden]right-> PolicyStatic
+  ActivityJdbc -[hidden]down-> DetectorNoOp
+  DetectorNoOp -[hidden]right-> DetectorBayes
+  DetectorBayes -[hidden]right-> DetectorFuzzy
+  DetectorFuzzy -[hidden]right-> PolicyStatic
   PolicyStatic -[hidden]right-> PolicyPg
+  PolicyPg -[hidden]down-> ModelDet
   ModelDet -[hidden]right-> ModelAi
   ModelAi -[hidden]right-> HistoryJdbc
 }
@@ -83,12 +91,16 @@ Customer --> ActivityPort
 
 AnalysisHttp --> Analysis : analyze(customerId, OperatorId)
 Analysis --> Customer : customer/activity context
+Analysis --> DetectorPort
 Analysis --> PolicyPort
 Analysis --> ModelPort
 Analysis --> HistoryPort
 
 ActivityPort --> ActivitySynthetic
 ActivityPort ..> ActivityJdbc
+DetectorPort --> DetectorNoOp : default
+DetectorPort ..> DetectorBayes : selectable
+DetectorPort ..> DetectorFuzzy : selectable
 PolicyPort --> PolicyStatic
 PolicyPort ..> PolicyPg
 ModelPort --> ModelDet
@@ -103,8 +115,9 @@ ModelAi ..> Provider : HTTPS only when explicitly selected
 note bottom of Backend
   The four packages are the Spring Modulith application modules. Spring Security remains an
   adapter/runtime boundary: Authentication, SecurityContext and session types stop before
-  OperatorContextPort. The application sees only OperatorContext/OperatorId. GoF Adapter labels
-  identify boundary translation roles; Strategy seams identify interchangeable implementations;
-  the analysis application service acts as a Facade over orchestration.
+  OperatorContextPort. Detector implementations also stop behind the project-owned
+  RiskSignalDetectorPort and emit only derived RiskSignalEvidence. GoF Adapter labels identify
+  boundary translation roles; Strategy seams identify interchangeable implementations; the
+  analysis application service acts as a Facade over orchestration.
 end note
 @enduml

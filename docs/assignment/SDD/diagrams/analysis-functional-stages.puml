@@ -17,7 +17,7 @@ package "STAGE 1 — PRIMITIVE SIGNAL ANALYSIS" as stage1 {
   interface "RiskSignalDetectorPort" as detectorPort
   rectangle "Deterministic / rules\nconstant, explainable baseline" as rules
   rectangle "Bayesian / sequential\nprobabilistic inference\nApache Commons Math adapter" as bayes
-  rectangle "Fuzzy logic\ngraded rule inference\npermissive JVM adapter TBD" as fuzzy
+  rectangle "Fuzzy logic\ngraded rule inference\nproject-owned minimal adapter" as fuzzy
   rectangle "Random Forest / Extra Trees\nclassical learned ML\nTribuo adapter candidate" as forest
   rectangle "Optional anomaly / graph\nclassical statistical/graph methods" as anomaly
   rectangle "Canonical RiskSignalEvidence\ntyped derived artifacts\nnever source truth" as signals

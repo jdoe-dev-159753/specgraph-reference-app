@@ -9,8 +9,6 @@ on:
       - 'docker/**'
       - '.dockerignore'
       - 'compose.r4.yaml'
-      - 'docs/reviewer/**'
-      - 'README.md'
       - '.github/workflows/r4-gallery-ci.yml'
   workflow_dispatch:
 

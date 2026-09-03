@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  * rate. The output is derived evidence only and never mutates or replaces source risk facts.
  */
 @Component
-@Profile("bayesian-detector")
+@Profile("bayesian-detector & !fuzzy-detector")
 final class BayesianSequentialRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     static final String DETECTOR_IDENTITY = "beta-binomial-review-elevation-v1";
     static final String SIGNAL_IDENTITY = "posterior-review-elevation-rate";
