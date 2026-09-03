@@ -32,6 +32,7 @@ REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`
 YAML_MAPPING_KEY = re.compile(
     r"^(\s*)(?:\"((?:\\.|[^\"])*)\"|'((?:''|[^'])*)'|([A-Za-z0-9_.-]+))\s*:\s*(.*)$"
 )
+YAML_SEQUENCE_ENTRY = re.compile(r"^(\s*)-\s+(.*)$")
 ONE_SHOT_WORKFLOW = re.compile(
     r"(?<![A-Za-z0-9])(?:pr|pull(?:[^A-Za-z0-9]+request)?|issue|discovery|story|fix)"
     r"[^A-Za-z0-9]*\d+(?![A-Za-z0-9])",
@@ -345,20 +346,25 @@ def extract_workflow_name(text: str) -> str:
     """Read the resolved top-level YAML name scalar without a YAML dependency."""
     lines = text.splitlines()
     mapping_lines: list[tuple[int, int, str, str]] = []
+    sequence_lines: list[tuple[int, int, str]] = []
     for index, line in enumerate(lines):
         if not line.strip() or line.lstrip().startswith(("#", "---", "%")):
             continue
         match = YAML_MAPPING_KEY.match(line)
-        if not match:
+        if match:
+            indent = len(match.group(1).replace("\t", "    "))
+            if match.group(2) is not None:
+                key = _plain_yaml_scalar(f'"{match.group(2)}"')
+            elif match.group(3) is not None:
+                key = _plain_yaml_scalar(f"'{match.group(3)}'")
+            else:
+                key = match.group(4)
+            mapping_lines.append((index, indent, key, match.group(5)))
             continue
-        indent = len(match.group(1).replace("\t", "    "))
-        if match.group(2) is not None:
-            key = _plain_yaml_scalar(f'"{match.group(2)}"')
-        elif match.group(3) is not None:
-            key = _plain_yaml_scalar(f"'{match.group(3)}'")
-        else:
-            key = match.group(4)
-        mapping_lines.append((index, indent, key, match.group(5)))
+        sequence = YAML_SEQUENCE_ENTRY.match(line)
+        if sequence:
+            indent = len(sequence.group(1).replace("\t", "    "))
+            sequence_lines.append((index, indent, sequence.group(2)))
 
     if not mapping_lines:
         return ""
@@ -366,7 +372,11 @@ def extract_workflow_name(text: str) -> str:
     root_entries = [item for item in mapping_lines if item[1] == root_indent]
 
     anchors: dict[str, str] = {}
-    for index, indent, _, raw_value in mapping_lines:
+    scalar_entries = [
+        (index, indent, raw_value)
+        for index, indent, _, raw_value in mapping_lines
+    ] + sequence_lines
+    for index, indent, raw_value in scalar_entries:
         value = _extract_yaml_scalar(lines, index, indent, raw_value)
         anchor = re.match(r"&([A-Za-z0-9_-]+)(?:\s+)(.+)$", value, re.DOTALL)
         if anchor:
