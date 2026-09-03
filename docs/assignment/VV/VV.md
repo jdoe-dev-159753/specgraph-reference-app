@@ -92,6 +92,8 @@ In particular, failure injection must demonstrate that:
 
 Mandatory acceptance must run without a live external LLM. The deterministic/static adapters are therefore verification infrastructure, not merely demo shortcuts. Live-provider checks, when configured, are supplemental and may never become the sole proof of mandatory behavior.
 
+Stage-3 selection verification treats `specgraph.analysis.backend` as the single authoritative dimension. It proves the no-credential deterministic default, explicit OpenAI selection without activating unrelated model families, configuration-binding rejection of unknown values, and fail-closed `local` selection until #251 provides that adapter. Provider credentials and model settings must not select a backend implicitly. Compose/script evidence additionally checks that parallel R4 variants use distinct Compose projects, ports and PostgreSQL state and that their manifest reports the selected backend and external-transmission expectation truthfully.
+
 The R4 `r4-auth` verification profile intentionally combines real authentication with the deterministic/static analysis path. This proves operator security without introducing either an external model dependency or an accidental requirement that the focused auth suite download an embedding model. The complete R4 acceptance later composes the same identity boundary with real pgvector retrieval.
 
 ### Delivery verification
@@ -151,7 +153,7 @@ Evidence should be cheap to reproduce and close to the behavior it proves:
 - database evidence: migration + repository/integration tests against real PostgreSQL where semantics matter, including high-density fixtures that prove filtering/count/`LIMIT`/`OFFSET` occurs before activity/history payloads cross the operator boundary;
 - architecture evidence: deterministic dependency/import/module checks;
 - UI evidence: focused E2E assertions for dashboard and authentication acceptance plus human review of comprehensibility;
-- provider evidence: deterministic adapter for mandatory baseline, optional live-provider smoke evidence separately tagged;
+- provider evidence: typed factory/configuration tests, deterministic no-credential integration, explicit OpenAI selection separately tagged, and fail-closed unsupported/invalid selection;
 - deployment evidence: clean-checkout Compose startup/readiness and the same documented browser-ready demo path locally or on the configured Docker VM;
 - delivery evidence: repository artifact/link checks plus focused human validation for the demo and reviewer-facing summaries.
 

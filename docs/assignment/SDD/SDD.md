@@ -81,7 +81,7 @@ The central project-owned ports are:
 | `CustomerReviewQueryPort` | load one bounded operator-facing activity/risk page without changing complete-snapshot semantics | synthetic bounded projection R1; filtered/count/`LIMIT`/`OFFSET` Spring JDBC R2+ |
 | `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | explicit no-op R4 baseline; selectable Bayesian and fuzzy leaves; further statistical/graph/classical-ML adapters later |
 | `PolicyKnowledgePort` | return project-owned `PolicyEvidence` | static deterministic evidence R3; Spring AI pgvector retrieval under the R4 profile |
-| `AnalysisModelPort` | consume one project-owned `AnalysisEvidenceEnvelope` and return structured result plus model provenance | deterministic R3/R4 baseline, optional live provider later |
+| `AnalysisModelPort` | consume one project-owned `AnalysisEvidenceEnvelope` and return structured result plus model provenance | typed process selection: deterministic default or explicit OpenAI; local identity reserved until #251 |
 | `AnalysisHistoryPort` | persist validated history, retain complete-list compatibility, and expose bounded page queries for operator review | in-memory baseline; Spring JDBC count/`LIMIT`/`OFFSET` R3+ |
 
 The primary adapters are `OperatorSessionHttpAdapter`, `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `DeterministicOperatorContextAdapter`, `SpringSecurityOperatorContextAdapter`, `SyntheticActivityAdapter`, `JdbcCustomerActivityAdapter`, `NoOpRiskSignalDetectorAdapter`, `BayesianSequentialRiskSignalDetectorAdapter`, `FuzzyRiskSignalDetectorAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, and `JdbcAnalysisHistoryAdapter`.
@@ -91,6 +91,7 @@ The inception-selected GoF roles remain intentionally limited:
 - **Adapter:** translates framework/provider/storage/model APIs to project-owned ports.
 - **Strategy:** selects interchangeable identity-context, activity, detector, policy or analysis-model behavior behind stable ports.
 - **Facade/application service:** exposes one coarse-grained use case while hiding multi-port orchestration. `AnalysisService` owns the evidence-to-analysis chain.
+- **Factory/registry:** `AnalysisBackendFactory` resolves exactly one typed `AnalysisBackendId` to the selected `AnalysisModelPort` strategy without provider conditionals in `AnalysisService`.
 
 Hexagonal architecture is the dependency style containing these roles; it is not itself a Strategy pattern. New patterns are not added to inflate vocabulary.
 
@@ -132,7 +133,7 @@ The R3 deterministic analysis may synthesize customer context, source risk evide
 
 R4 activates the project-owned `RiskSignalDetectorPort` as an explicit stage in the chain. Its default `NoOpRiskSignalDetectorAdapter` deliberately emits no additional signals, so introducing the seam does not change the accepted deterministic R3 risk decision. `BayesianSequentialRiskSignalDetectorAdapter` and `FuzzyRiskSignalDetectorAdapter` are now selectable Stage-1 leaves behind the same port. The Bayesian leaf emits transparent synthetic-demo Beta-binomial review-elevation probability evidence; the fuzzy leaf emits deterministic graded review-elevation evidence from bounded project-owned membership functions and versioned rules. Both translate only into `RiskSignalEvidence` and explicitly retain synthetic/demo limitations in provenance. Further statistical, graph and classical-ML implementations may substitute behind the same port when justified by data and benchmark evidence. No detector output overwrites source `risk_assessments`.
 
-The detector stage and analysis-model stage are therefore intentionally different. A detector may estimate or rank a suspicious pattern from activity evidence; `AnalysisModelPort` receives those derived signals together with source evidence and retrieved policy context and produces bounded advisory synthesis. The OpenAI/Spring AI adapter, when explicitly enabled later, receives the same `AnalysisEvidenceEnvelope` as the deterministic model rather than a provider-specific side channel.
+The detector stage and analysis-model stage are therefore intentionally different. A detector may estimate or rank a suspicious pattern from activity evidence; `AnalysisModelPort` receives those derived signals together with source evidence and retrieved policy context and produces bounded advisory synthesis. The OpenAI/Spring AI adapter, when explicitly selected, receives the same `AnalysisEvidenceEnvelope` as the deterministic model rather than a provider-specific side channel.
 
 [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md) owns this decision and compares candidate detector families.
 
@@ -210,6 +211,7 @@ AnalysisHttpAdapter
   -> AnalysisEvidenceEnvelope
        [source facts | detector evidence | policy evidence remain distinct and statically typed]
   -> AnalysisModelPort
+       [AnalysisBackendFactory: deterministic default | explicit OpenAI | local reserved]
        -> AnalysisModelOutput
           [validated AnalysisResult + AnalysisModelProvenance implements AnalysisPipelineArtifact]
   -> AnalysisHistoryPort
@@ -219,7 +221,9 @@ AnalysisHttpAdapter
 
 `PgVectorPolicyAdapter` builds a bounded retrieval query from the newest bounded activity and source-risk windows in project-owned semantics, deliberately excluding sensitive account, PAN and wallet identifiers. Spring AI `Document` and vector-store types remain adapter-local. Retrieved chunks are translated into `PolicyEvidence` containing stable chunk identity, content and provider-neutral retrieval metadata such as corpus/revision, source document, chunk position, embedding identity and similarity score. An empty retrieval returns no evidence; the existing analysis orchestration then produces the explicit insufficient-grounding failure rather than allowing model prose to fabricate context.
 
-This composition means RAG is one context-supply stage, not the complete AI architecture. The implemented Bayesian or fuzzy detector can replace only the Stage-1 detector adapter; further statistical/classical-ML/graph detectors may be added later. An OpenAI/live model can later replace only the analysis-model adapter. All adapters translate library/provider-native results into existing application-owned sealed record variants. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.
+This composition means RAG is one context-supply stage, not the complete AI architecture. The implemented Bayesian or fuzzy detector can replace only the Stage-1 detector adapter; further statistical/classical-ML/graph detectors may be added later. Deterministic and OpenAI Stage-3 strategies are selected independently through `specgraph.analysis.backend`; `local` is a reserved identifier that fails closed until #251 provides its adapter. All adapters translate library/provider-native results into existing application-owned sealed record variants. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.
+
+`AnalysisBackendId` is the application-owned Stage-3 selection contract. Spring Boot property, command-line and environment precedence converge on `specgraph.analysis.backend`, with `SPECGRAPH_ANALYSIS_BACKEND` as its environment projection and `deterministic` as the safe default. Provider settings such as `OPENAI_API_KEY` and `OPENAI_MODEL` configure the OpenAI leaf but do not select it. `AnalysisBackendFactory` keeps adapter suppliers lazy, publishes one selected `@Primary AnalysisModelPort`, and fails startup for unknown, unavailable or reserved selections instead of silently falling back.
 
 ![Figure 7 - UML Activity diagram - grounded analysis](diagrams/activity-grounded-analysis.svg)
 
@@ -273,6 +277,10 @@ Checkpoint host ports are deliberately independent so rings can be compared with
 - R1: host `8081` -> container Tomcat `8080`;
 - R2: host `8082` -> container Tomcat `8080`, private PostgreSQL dependency;
 - R3: host `8083` -> container Tomcat `8080`, same PostgreSQL infrastructure plus analysis history.
+- R4 baseline: host `8084` -> the current R4 artifact with `backend=deterministic`;
+- R4 external variant: host `8087` -> the same artifact with explicit `backend=openai`, only when a credential is deliberately supplied.
+
+The repository-owned `r4-variant-*` scripts invoke `compose.r4.yaml` with a distinct Compose project per variant, so application network and PostgreSQL state remain isolated. `r4-gallery-*` exposes the deterministic baseline and optional external variant as parallel R4 configurations, not additional delivery rings. The manifest records port, ring, Compose project, Stage-3 backend, expected external-transmission mode and persistence isolation. The Linux Docker host is the canonical execution environment for this gallery.
 
 The published Compose OCI tag `ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo` is a **last-known-good artifact**. It advances only after publication resolves immutable R0/R1/R2/R3/PostgreSQL image digests, binds the complete five-image set into the retained Compose identity, pulls the remote Compose artifact again and passes executable browser verification.
 
@@ -287,7 +295,7 @@ Communication semantics:
 - React <-> Spring MVC `/api/*`: same-origin HTTP;
 - R2/R3/R4 Spring Boot <-> PostgreSQL: JDBC/PostgreSQL protocol on the private runtime network;
 - browser <-> Spring Security session boundary: same-origin HTTP session cookie + CSRF token for state-changing requests;
-- optional Spring Boot <-> live AI provider: HTTPS only when explicitly configured;
+- optional Spring Boot <-> live AI provider: HTTPS only when `specgraph.analysis.backend=openai` is explicitly selected;
 - module/port calls: in-process.
 
 No event broker, Redis, separate identity service, WebSocket tier or reverse proxy is introduced without a requirement.
@@ -336,7 +344,7 @@ The design remains governed by seven accepted ADRs:
 6. Compose OCI multi-platform distribution;
 7. Spring JDBC relational adapters.
 
-The R4 refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, extends persisted provenance, activates pgvector-backed policy retrieval behind `PolicyKnowledgePort`, and now activates Spring Security-backed operator context behind `OperatorContextPort`. The R3/default static policy and deterministic operator-context adapters remain available as deterministic baselines. Bayesian and fuzzy Stage-1 detection are implemented optional substitutions; Random Forest/graph detector families and live/OpenAI synthesis remain later substitutions rather than being falsely claimed by the required R4 path.
+The R4 refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, extends persisted provenance, activates pgvector-backed policy retrieval behind `PolicyKnowledgePort`, and activates Spring Security-backed operator context behind `OperatorContextPort`. The R3/default static policy and deterministic operator-context adapters remain available as deterministic baselines. Bayesian and fuzzy Stage-1 detection are implemented optional substitutions; deterministic and OpenAI Stage-3 implementations are process-selectable behind the same model port, while Random Forest/graph detector families and the local Stage-3 adapter remain later substitutions rather than being falsely claimed by the required R4 path.
 
 ## 14. Review criterion
 
@@ -357,7 +365,8 @@ A reviewer should be able to answer from this SDD without reconstructing PR hist
 - how deterministic chunk identities, Flyway-owned pgvector schema, local embeddings and Testcontainers verification make retrieval reproducible and independently testable from a live LLM;
 - why an empty vector retrieval cannot be silently replaced by fabricated model context;
 - why RAG is one grounding/context stage rather than the whole analysis architecture;
-- how implemented Bayesian/fuzzy detectors and an optional future OpenAI adapter substitute independently behind project-owned ports;
+- how implemented Bayesian/fuzzy detectors and typed deterministic/OpenAI Stage-3 selection substitute independently behind project-owned ports;
+- why credentials configure a provider leaf but never select it, and why unknown or reserved Stage-3 selections fail closed;
 - why external AI transmission is opt-in and absent from default deterministic execution;
 - how R2 preserves exact PostgreSQL source semantics and snapshot consistency;
 - why complete `CustomerActivityPort` snapshot semantics remain separate from bounded `CustomerReviewQueryPort` operator queries, and how PostgreSQL filtering/count/`LIMIT`/`OFFSET` avoids loading an unbounded customer history;

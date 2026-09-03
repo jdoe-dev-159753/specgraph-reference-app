@@ -14,7 +14,7 @@
 
 **A runnable reference application for specification-driven, AI-assisted software engineering.**
 
-The application lets a Customer Care operator inspect deterministic CARD, PAYMENT and CRYPTO activity plus source-shaped risk evidence. R2 replaces the synthetic activity adapter with PostgreSQL/Flyway persistence behind the same project-owned `CustomerActivityPort`. R3 adds deterministic structured analysis and persistent reviewable analysis history behind provider-neutral ports. R4 later adds real policy retrieval/grounding and multi-operator authentication/authorization.
+The application lets a Customer Care operator inspect deterministic CARD, PAYMENT and CRYPTO activity plus source-shaped risk evidence. R2 replaces the synthetic activity adapter with PostgreSQL/Flyway persistence behind the same project-owned `CustomerActivityPort`. R3 adds deterministic structured analysis and persistent reviewable analysis history behind provider-neutral ports. R4 adds real policy retrieval/grounding and multi-operator authentication/authorization; the same R4 application artifact can select its Stage-3 backend explicitly at process startup.
 
 ## Published reviewer demo
 
@@ -76,6 +76,22 @@ Then open:
 ```text
 R3: http://localhost:8083/
 ```
+
+On the Linux Docker host, launch the current R4 baseline with deterministic Stage 3 and isolated PostgreSQL state:
+
+```bash
+./scripts/r4-variant-up.sh baseline 8084 deterministic
+```
+
+OpenAI is an explicit opt-in using the same application artifact. A credential configures that adapter but never selects it implicitly:
+
+```bash
+OPENAI_API_KEY=... ./scripts/r4-variant-up.sh external 8087 openai
+```
+
+`./scripts/r4-gallery-up.sh` starts the deterministic `8084` baseline and adds the `8087` OpenAI variant only when `OPENAI_API_KEY` is present. Distinct Compose project names isolate each variant's network and PostgreSQL state. Inspect the declared variants with `./scripts/r4-gallery-manifest.sh`, and stop them with `./scripts/r4-gallery-down.sh`.
+
+`specgraph.analysis.backend` is the authoritative typed selector (`deterministic | openai | local`), projected from `SPECGRAPH_ANALYSIS_BACKEND`; `deterministic` is the no-credential default. `local` is reserved and fails closed until the local adapter owned by #251 is implemented. Unknown values also fail during configuration binding.
 
 Run the accepted frozen R2 source checkpoint instead of rebuilding the current R3 checkout under the R2 service name:
 
