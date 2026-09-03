@@ -6,6 +6,7 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'docker/**'
+      - 'scripts/ci/**'
       - 'compose.r4.yaml'
       - '.github/workflows/r4-retrieval-ci.yml'
 
@@ -18,7 +19,6 @@ jobs:
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       COMPOSE_PROJECT_NAME: specgraph-r4-retrieval-${{ github.run_id }}
-      APP_R4_IMAGE: specgraph-reference-app:r4-retrieval-${{ github.event.pull_request.head.sha || github.sha }}
       R4_PORT: '18084'
     steps:
       - name: Clean container-owned outputs before checkout
@@ -50,6 +50,12 @@ jobs:
           docker compose -f compose.r4.yaml config --quiet
           test "$(docker compose -f compose.r4.yaml config --images postgres)" = "pgvector/pgvector:0.8.6-pg17"
           docker compose -f compose.r4.yaml config | grep -q 'SPRING_PROFILES_ACTIVE: r4'
+
+      - name: Reuse or build immutable exact-head application image
+        run: |
+          image="$(bash scripts/ci/ensure-app-image.sh \
+            "specgraph-reference-app:r4-${SOURCE_SHA}" . "$SOURCE_SHA")"
+          echo "APP_R4_IMAGE=$image" >> "$GITHUB_ENV"
 
       - name: Verify exact-head R4 retrieval under shared-host lock
         shell: bash
@@ -84,7 +90,7 @@ jobs:
             --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
             | xargs -r docker volume rm -f || true
 
-          docker compose -f compose.r4.yaml up -d --build
+          docker compose -f compose.r4.yaml up -d --no-build
 
           for attempt in $(seq 1 120); do
             if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null; then
