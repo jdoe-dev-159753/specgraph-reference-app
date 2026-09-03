@@ -261,6 +261,45 @@ def _plain_yaml_scalar(value: str) -> str:
         return value[1:-1].replace("''", "'")
     return value
 
+def _double_quoted_scalar_is_closed(value: str) -> bool:
+    escaped = False
+    for char in value[1:]:
+        if escaped:
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == '"':
+            return True
+    return False
+
+
+def _complete_double_quoted_scalar(
+    lines: list[str], index: int, root_indent: int, value: str
+) -> str:
+    if not value.startswith('"') or _double_quoted_scalar_is_closed(value):
+        return value
+
+    combined = value
+    for continuation in lines[index + 1 :]:
+        if not continuation.strip():
+            if combined.endswith("\\"):
+                combined = combined[:-1]
+            else:
+                combined += "\n"
+            continue
+        continuation_indent = len(continuation) - len(continuation.lstrip(" "))
+        if continuation_indent <= root_indent:
+            break
+        piece = continuation.strip()
+        if combined.endswith("\\"):
+            combined = combined[:-1] + piece
+        else:
+            combined += " " + piece
+        if _double_quoted_scalar_is_closed(combined):
+            break
+    return combined
+
+
 def extract_workflow_name(text: str) -> str:
     """Read the top-level YAML `name` scalar without adding a YAML dependency."""
     lines = text.splitlines()
@@ -286,7 +325,9 @@ def extract_workflow_name(text: str) -> str:
     for index, indent, key, raw_value in mapping_lines:
         if indent != root_indent or key != "name":
             continue
-        value = raw_value.strip()
+        value = _complete_double_quoted_scalar(
+            lines, index, root_indent, raw_value.strip()
+        )
         block_header = _strip_yaml_inline_comment(value)
         block = re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", block_header)
         if not block:

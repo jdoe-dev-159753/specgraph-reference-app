@@ -156,6 +156,22 @@ class DurableWorkflowTests(unittest.TestCase):
                     any("one-shot workflow identity" in finding for finding in findings)
                 )
 
+    def test_multiline_double_quoted_yaml_names_are_rejected(self):
+        escaped = 'name: "issue-' + chr(92) + '\n  42-proof"\n'
+        folded = 'name: "issue-\n  42-proof"\n'
+        for workflow, expected in (
+            (escaped, "issue-42-proof"),
+            (folded, "issue- 42-proof"),
+        ):
+            with self.subTest(workflow=workflow):
+                self.assertEqual(expected, guard.extract_workflow_name(workflow))
+                findings = guard.workflow_inventory_violations(
+                    {"proof.yml": workflow}, "proof.yml\n"
+                )
+                self.assertTrue(
+                    any("one-shot workflow identity" in finding for finding in findings)
+                )
+
     def test_full_pull_request_identities_are_rejected(self):
         workflows = {"pull-request-42-proof.yml": "name: durable-looking-name\n"}
         findings = guard.workflow_inventory_violations(workflows, "pull-request-42-proof.yml\n")
