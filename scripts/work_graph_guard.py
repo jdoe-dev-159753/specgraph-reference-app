@@ -183,8 +183,39 @@ def parse_durable_workflow_manifest(text: str) -> set[str]:
     }
 
 
+def _strip_yaml_inline_comment(value: str) -> str:
+    """Strip a YAML comment marker only when it is outside quoted scalar text."""
+    single = False
+    double = False
+    escaped = False
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if double:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                double = False
+        elif single:
+            if char == "'":
+                if index + 1 < len(value) and value[index + 1] == "'":
+                    index += 1
+                else:
+                    single = False
+        elif char == '"':
+            double = True
+        elif char == "'":
+            single = True
+        elif char == "#" and (index == 0 or value[index - 1].isspace()):
+            return value[:index].rstrip()
+        index += 1
+    return value.rstrip()
+
+
 def _plain_yaml_scalar(value: str) -> str:
-    value = value.strip()
+    value = _strip_yaml_inline_comment(value.strip())
     if not value:
         return ""
     if value[0] == '"' and value.endswith('"'):
@@ -194,9 +225,6 @@ def _plain_yaml_scalar(value: str) -> str:
             return value[1:-1]
     if value[0] == "'" and value.endswith("'"):
         return value[1:-1].replace("''", "'")
-    comment = re.search(r"\s+#", value)
-    if comment:
-        value = value[: comment.start()].rstrip()
     return value
 
 
@@ -224,7 +252,7 @@ def extract_workflow_name(text: str) -> str:
         if indent != root_indent or key != "name":
             continue
         value = raw_value.strip()
-        block_header = re.sub(r"\s+#.*$", "", value).rstrip()
+        block_header = _strip_yaml_inline_comment(value)
         block = re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", block_header)
         if not block:
             return _plain_yaml_scalar(value)
