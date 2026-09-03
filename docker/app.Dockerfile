@@ -40,6 +40,8 @@ LABEL org.opencontainers.image.revision="${SOURCE_REVISION}" \
 ENV HOME=/tmp
 WORKDIR /app
 COPY --chown=10001:10001 --from=application-build /tmp/app.jar /app/app.jar
+RUN mkdir -p /tmp/specgraph-embedding-model \
+    && chown 10001:10001 /tmp/specgraph-embedding-model
 USER 10001:10001
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
