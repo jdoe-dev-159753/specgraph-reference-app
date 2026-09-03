@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 ARG SOURCE_ROOT=.
 ARG SOURCE_REVISION=unknown
+ARG BUILD_RECIPE_SHA256=unknown
 
 # Java bytecode and browser assets are platform-neutral, so compile them once on
 # the builder architecture instead of emulating the target runtime architecture.
@@ -32,8 +33,10 @@ RUN --mount=type=cache,id=specgraph-maven,target=/root/.m2 \
 FROM eclipse-temurin:21-jre-noble
 ARG SOURCE_ROOT
 ARG SOURCE_REVISION
+ARG BUILD_RECIPE_SHA256
 LABEL org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      io.specgraph.source-root="${SOURCE_ROOT}"
+      io.specgraph.source-root="${SOURCE_ROOT}" \
+      io.specgraph.build-recipe-sha256="${BUILD_RECIPE_SHA256}"
 ENV HOME=/tmp
 WORKDIR /app
 COPY --chown=10001:10001 --from=application-build /tmp/app.jar /app/app.jar
