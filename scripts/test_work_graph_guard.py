@@ -163,6 +163,22 @@ class DurableWorkflowTests(unittest.TestCase):
         findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
         self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
 
+    def test_commented_quoted_workflow_names_are_rejected(self):
+        for workflow in (
+            'name: "issue-42-proof" # display name\n',
+            "name: 'story-43-proof' # display name\n",
+        ):
+            with self.subTest(workflow=workflow):
+                workflows = {"proof.yml": workflow}
+                findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
+                self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
+    def test_hash_inside_quoted_workflow_name_is_preserved(self):
+        self.assertEqual(
+            "release #42 notes",
+            guard.extract_workflow_name('name: "release #42 notes" # display name\n'),
+        )
+
     def test_literal_block_with_indented_root_is_rejected(self):
         workflows = {"proof.yml": "  name: |\n    Issue 42 validation\n  on:\n    workflow_dispatch:\n"}
         findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
