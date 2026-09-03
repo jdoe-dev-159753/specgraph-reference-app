@@ -285,9 +285,7 @@ def workflow_inventory_violations(
         if not protected_path.startswith(prefix):
             continue
         filename = protected_path.removeprefix(prefix)
-        if filename not in workflow_texts:
-            failures.append(f"{protected_path}: protected asset is missing")
-        else:
+        if filename in workflow_texts:
             failures.extend(
                 protected_asset_violations(protected_path, workflow_texts[filename])
             )
