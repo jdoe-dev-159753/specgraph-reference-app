@@ -130,6 +130,21 @@ class DurableWorkflowTests(unittest.TestCase):
         findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
         self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
 
+    def test_human_readable_numbered_workflow_names_are_rejected(self):
+        for workflow_name in ("PR #42 proof", "Issue 42 validation", "discovery #219 fix"):
+            with self.subTest(workflow_name=workflow_name):
+                workflows = {"proof.yml": f"name: {workflow_name}\n"}
+                findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
+                self.assertTrue(
+                    any("one-shot workflow identity" in finding for finding in findings)
+                )
+
+    def test_unrelated_fix_word_without_number_is_allowed(self):
+        workflows = {"repair.yml": "name: fix flaky cache reuse\n"}
+        self.assertEqual(
+            [], guard.workflow_inventory_violations(workflows, "repair.yml\n")
+        )
+
     def test_workflow_contract_change_detection(self):
         self.assertTrue(
             guard.pr_changes_workflow_contract([".github/workflows/new-proof.yml"])
