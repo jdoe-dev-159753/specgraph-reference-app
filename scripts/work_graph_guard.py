@@ -22,7 +22,17 @@ MIN_REVIEWED_SHA_PREFIX = 10
 WORKFLOW_DIR = ".github/workflows"
 DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
-TRUSTED_GUARD_WORKFLOW_SHA256 = frozenset({"f15bad4b691b95abb8b0cf7f2e3b6976dc3ca3d9ad5323097aacb53f394a5fae"})
+PROTECTED_ASSET_SHA256 = {
+    ".github/workflows/work-graph-guard.yml": frozenset(
+        {"f15bad4b691b95abb8b0cf7f2e3b6976dc3ca3d9ad5323097aacb53f394a5fae"}
+    ),
+    ".github/workflows/work-graph-guard-tests.yml": frozenset(
+        {"0e6865bb537e7b837ff47ec501a09b8e2a06d674fc391740b89a7ccd6c5b767c"}
+    ),
+    "scripts/test_work_graph_guard.py": frozenset(
+        {"9c41fe1b4ffa3bb0aa59dffbd923b1baaecb6c731b49f31522b0ac6ba383f05b"}
+    ),
+}
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -231,18 +241,22 @@ def canonical_workflow_name_violations(filename: str, text: str) -> list[str]:
 
 
 
-def trusted_guard_workflow_contract_violations(text: str) -> list[str]:
-    """Pin the complete privileged workflow so YAML overrides cannot weaken it."""
+def protected_asset_violations(path: str, text: str) -> list[str]:
+    """Pin complete guard-chain assets so overrides and no-op changes fail closed."""
+    allowed = PROTECTED_ASSET_SHA256.get(path)
+    if allowed is None:
+        return [f"{path}: protected asset has no digest policy"]
+    if not 1 <= len(allowed) <= 2:
+        return [f"{path}: protected digest allowlist must contain one or two entries"]
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-    if actual in TRUSTED_GUARD_WORKFLOW_SHA256:
+    if actual in allowed:
         return []
     return [
-        "work-graph-guard.yml: privileged workflow contract changed "
-        f"(allowed sha256 values {sorted(TRUSTED_GUARD_WORKFLOW_SHA256)}, got {actual}); "
-        "rotate safely in two PRs: first preauthorize the reviewed future digest "
-        "while retaining the current digest, then change the workflow in a second PR; "
-        "remove the retired digest only after the workflow change merges"
+        f"{path}: protected asset changed (allowed sha256 values {sorted(allowed)}, "
+        f"got {actual}); rotate safely in two PRs: first preauthorize the reviewed "
+        "future digest while retaining the current digest, then change the asset in "
+        "a second PR; remove the retired digest only after that change merges"
     ]
 
 
@@ -266,10 +280,20 @@ def workflow_inventory_violations(
             + "; parameterize/reuse an existing durable workflow or deliberately update the manifest"
         )
 
+    for protected_path in sorted(PROTECTED_ASSET_SHA256):
+        prefix = f"{WORKFLOW_DIR}/"
+        if not protected_path.startswith(prefix):
+            continue
+        filename = protected_path.removeprefix(prefix)
+        if filename not in workflow_texts:
+            failures.append(f"{protected_path}: protected asset is missing")
+        else:
+            failures.extend(
+                protected_asset_violations(protected_path, workflow_texts[filename])
+            )
+
     for filename, text in sorted(workflow_texts.items()):
         failures.extend(canonical_workflow_name_violations(filename, text))
-        if filename == "work-graph-guard.yml":
-            failures.extend(trusted_guard_workflow_contract_violations(text))
         workflow_name = extract_workflow_name(text)
         if ONE_SHOT_WORKFLOW.search(filename) or (
             workflow_name != UNRESOLVED_WORKFLOW_NAME
@@ -283,7 +307,9 @@ def workflow_inventory_violations(
 
 def pr_changes_workflow_contract(changed_paths) -> bool:
     return any(
-        path == DURABLE_WORKFLOW_MANIFEST or path.startswith(f"{WORKFLOW_DIR}/")
+        path == DURABLE_WORKFLOW_MANIFEST
+        or path.startswith(f"{WORKFLOW_DIR}/")
+        or path in PROTECTED_ASSET_SHA256
         for path in changed_paths
     )
 
@@ -326,6 +352,14 @@ def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> Non
         workflow_texts[name] = decode_contents_payload(payload, f"{WORKFLOW_DIR}/{name}")
 
     inventory_failures = workflow_inventory_violations(workflow_texts, manifest_text)
+    for protected_path in sorted(PROTECTED_ASSET_SHA256):
+        if protected_path.startswith(f"{WORKFLOW_DIR}/"):
+            continue
+        payload = api(f"/repos/{REPO}/contents/{protected_path}?ref={ref}")
+        protected_text = decode_contents_payload(payload, protected_path)
+        inventory_failures.extend(
+            protected_asset_violations(protected_path, protected_text)
+        )
     for finding in inventory_failures:
         failures.append(f"pull request #{pr_number}: {finding}")
 
