@@ -72,9 +72,45 @@ class OpenApiContractTests {
         var customerOperation = api.getPaths().get("/api/customers/{customerId}").getGet();
         assertThat(customerOperation).isNotNull();
         assertThat(customerOperation.getSecurity()).isNotEmpty();
-        assertThat(customerOperation.getResponses()).containsKeys("200", "401", "404");
+        assertThat(customerOperation.getParameters()).extracting(parameter -> parameter.get$ref()).containsExactly(
+                "#/components/parameters/CustomerId",
+                "#/components/parameters/Page",
+                "#/components/parameters/CustomerReviewPageSize",
+                "#/components/parameters/CustomerReviewActivityType",
+                "#/components/parameters/CustomerReviewStatus",
+                "#/components/parameters/CustomerReviewCreatedFrom",
+                "#/components/parameters/CustomerReviewCreatedTo");
+        assertThat(customerOperation.getResponses()).containsKeys("200", "400", "401", "404");
         assertThat(customerOperation.getResponses().get("200").getContent().get("application/json").getSchema().get$ref())
-                .isEqualTo("#/components/schemas/CustomerSnapshot");
+                .isEqualTo("#/components/schemas/CustomerReviewPage");
+
+        assertIntegerParameter(api, "Page", "page", 0, 0, null);
+        assertIntegerParameter(api, "CustomerReviewPageSize", "pageSize", 50, 1, 200);
+        assertIntegerParameter(api, "AnalysisHistoryPageSize", "pageSize", 20, 1, 100);
+        assertThat(api.getComponents()
+                        .getParameters()
+                        .get("CustomerReviewActivityType")
+                        .getSchema()
+                        .getEnum()
+                        .stream()
+                        .map(String::valueOf)
+                        .toList())
+                .containsExactly("CARD", "PAYMENT", "CRYPTO");
+        assertThat(api.getComponents().getParameters().get("CustomerReviewStatus").getSchema().getType())
+                .isEqualTo("string");
+        assertThat(api.getComponents().getParameters().get("CustomerReviewCreatedFrom").getSchema().getFormat())
+                .isEqualTo("date-time");
+        assertThat(api.getComponents().getParameters().get("CustomerReviewCreatedTo").getSchema().getFormat())
+                .isEqualTo("date-time");
+
+        Schema<?> customerReviewPage = api.getComponents().getSchemas().get("CustomerReviewPage");
+        assertThat(customerReviewPage.getRequired()).containsAll(Set.of(
+                "customerId", "activities", "riskEvidence", "page", "pageSize", "totalActivities",
+                "totalRiskEvidence", "totalPages", "hasPrevious", "hasNext"));
+        assertThat(customerReviewPage.getProperties().get("activities").getItems().get$ref())
+                .isEqualTo("#/components/schemas/Activity");
+        assertThat(customerReviewPage.getProperties().get("riskEvidence").getItems().get$ref())
+                .isEqualTo("#/components/schemas/RiskEvidence");
 
         var analysisCollection = api.getPaths().get("/api/customers/{customerId}/analyses");
         assertThat(analysisCollection.getPost()).isNotNull();
@@ -87,7 +123,21 @@ class OpenApiContractTests {
                 .isEqualTo("#/components/schemas/Analysis");
         assertThat(analysisCollection.getGet()).isNotNull();
         assertThat(analysisCollection.getGet().getSecurity()).isNotEmpty();
-        assertThat(analysisCollection.getGet().getResponses()).containsKeys("200", "401");
+        assertThat(analysisCollection.getGet().getParameters()).extracting(parameter -> parameter.get$ref())
+                .containsExactly(
+                        "#/components/parameters/CustomerId",
+                        "#/components/parameters/Page",
+                        "#/components/parameters/AnalysisHistoryPageSize");
+        assertThat(analysisCollection.getGet().getResponses()).containsKeys("200", "400", "401");
+        var historyHeaders = analysisCollection.getGet().getResponses().get("200").getHeaders();
+        assertThat(historyHeaders).containsOnlyKeys(
+                "X-Page", "X-Page-Size", "X-Total-Count", "X-Total-Pages", "X-Has-Previous", "X-Has-Next");
+        assertThat(historyHeaders.get("X-Page").getSchema().getType()).isEqualTo("integer");
+        assertThat(historyHeaders.get("X-Page-Size").getSchema().getMaximum()).isEqualByComparingTo("100");
+        assertThat(historyHeaders.get("X-Total-Count").getSchema().getFormat()).isEqualTo("int64");
+        assertThat(historyHeaders.get("X-Total-Pages").getSchema().getFormat()).isEqualTo("int64");
+        assertThat(historyHeaders.get("X-Has-Previous").getSchema().getType()).isEqualTo("boolean");
+        assertThat(historyHeaders.get("X-Has-Next").getSchema().getType()).isEqualTo("boolean");
 
         Schema<?> analysis = api.getComponents().getSchemas().get("Analysis");
         assertThat(analysis.getRequired()).containsAll(Set.of(
@@ -171,6 +221,29 @@ class OpenApiContractTests {
         assertThat(type.getEnum().stream().map(String::valueOf).toList()).containsExactly(expectedType);
         Schema<?> details = inline.getProperties().get("details");
         assertThat(details.get$ref()).isEqualTo("#/components/schemas/" + detailsSchema);
+    }
+
+    private static void assertIntegerParameter(
+            OpenAPI api,
+            String componentName,
+            String parameterName,
+            int defaultValue,
+            int minimum,
+            Integer maximum) {
+        var parameter = api.getComponents().getParameters().get(componentName);
+        assertThat(parameter).as(componentName).isNotNull();
+        assertThat(parameter.getName()).isEqualTo(parameterName);
+        assertThat(parameter.getIn()).isEqualTo("query");
+        assertThat(parameter.getRequired()).isFalse();
+        assertThat(parameter.getSchema().getType()).isEqualTo("integer");
+        assertThat(parameter.getSchema().getFormat()).isEqualTo("int32");
+        assertThat(String.valueOf(parameter.getSchema().getDefault())).isEqualTo(Integer.toString(defaultValue));
+        assertThat(parameter.getSchema().getMinimum()).isEqualByComparingTo(Integer.toString(minimum));
+        if (maximum == null) {
+            assertThat(parameter.getSchema().getMaximum()).isNull();
+        } else {
+            assertThat(parameter.getSchema().getMaximum()).isEqualByComparingTo(Integer.toString(maximum));
+        }
     }
 
     private static void assertClosedDetailsSchema(OpenAPI api, String schemaName) {

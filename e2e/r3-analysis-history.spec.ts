@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { runHighVolumeReviewScenario } from './high-volume-review'
 
 const seededCustomer = '11111111-1111-1111-1111-111111111111'
 
@@ -86,4 +87,8 @@ test('VFY-ANALYSIS-001 R3 deterministic analysis is retained and reviewable afte
   await expect(reloadedAnalysis.getByTestId('analysis-grounding-evidence')).toContainText('adapter: static')
   await expect(reloadedAnalysis.getByTestId('analysis-grounding-evidence'))
     .toContainText('Escalation remains a human decision')
+})
+
+test('VFY-CUSTOMER-READ-001 R3 candidate browser keeps dense review bounded', async ({ page }) => {
+  await runHighVolumeReviewScenario(page)
 })

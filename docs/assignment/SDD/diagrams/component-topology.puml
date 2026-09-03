@@ -25,6 +25,7 @@ package "Spring Boot modular monolith" as Backend {
   package "customer module" as CustomerModule {
     component "Customer Review HTTP Adapter\nADP-CUST-HTTP-001\n<<GoF Adapter>>" as CustomerHttp
     component "Customer Application\nMOD-CUSTOMER-001" as Customer
+    interface "CustomerReviewQueryPort\nPRT-CUSTOMER-REVIEW-001\n<<Bounded query seam>>" as CustomerReviewPort
     interface "CustomerActivityPort\nPRT-ACTIVITY-001\n<<Strategy seam>>" as ActivityPort
   }
 
@@ -89,10 +90,11 @@ OperatorSecurity --> SecurityFilter : translate Authentication/SecurityContext
 
 CustomerHttp --> Customer
 Customer --> Risk : public RiskEvidence contract
-Customer --> ActivityPort
+Customer --> CustomerReviewPort : bounded operator page
 
 AnalysisHttp --> Analysis : analyze(customerId, OperatorId)
-Analysis --> Customer : customer/activity context
+Analysis --> Customer : complete customer/activity context
+Customer --> ActivityPort : complete snapshot for internal consumers
 Analysis --> DetectorPort
 Analysis --> PolicyPort
 Analysis --> ModelPort
@@ -100,6 +102,8 @@ Analysis --> HistoryPort
 
 ActivityPort --> ActivitySynthetic
 ActivityPort ..> ActivityJdbc
+CustomerReviewPort --> ActivitySynthetic
+CustomerReviewPort ..> ActivityJdbc
 DetectorNoOp ..> DetectorPort : implements
 DetectorBayes ..> DetectorPort : implements
 DetectorFuzzy ..> DetectorPort : implements
@@ -129,6 +133,8 @@ note bottom of Backend
   is the typed Stage-1 selection authority; legacy detector profiles are bootstrap aliases only
   when that property is absent. Spring owns bean lifecycle, the factory/registry resolves leaves
   or the bounded Composite, and child failure fails Stage 1 rather than disappearing silently.
+  CustomerReviewQueryPort bounds the operator surface independently of the complete
+  CustomerActivityPort snapshot used by analysis.
   GoF Adapter labels identify boundary translation roles; Strategy seams identify interchangeable
   implementations; the analysis application service acts as a Facade over orchestration.
 end note

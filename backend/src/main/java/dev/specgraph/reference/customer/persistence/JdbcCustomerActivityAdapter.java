@@ -2,11 +2,15 @@ package dev.specgraph.reference.customer.persistence;
 
 import dev.specgraph.reference.customer.Activity;
 import dev.specgraph.reference.customer.CustomerActivityPort;
+import dev.specgraph.reference.customer.CustomerReviewPage;
+import dev.specgraph.reference.customer.CustomerReviewQuery;
+import dev.specgraph.reference.customer.CustomerReviewQueryPort;
 import dev.specgraph.reference.customer.CustomerSnapshot;
 import dev.specgraph.reference.risk.RiskEvidence;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -21,14 +25,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @Primary
-class JdbcCustomerActivityAdapter implements CustomerActivityPort {
+class JdbcCustomerActivityAdapter implements CustomerActivityPort, CustomerReviewQueryPort {
     private static final String CUSTOMER_EXISTS_SQL = """
             SELECT customer_id
             FROM customers
             WHERE customer_id = :customerId
             """;
 
-    private static final String ACTIVITIES_SQL = """
+    private static final String ACTIVITY_SELECT = """
             SELECT
                 t.transaction_id,
                 t.activity_type::text AS activity_type,
@@ -59,11 +63,14 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
             LEFT JOIN card_activity c ON c.transaction_id = t.transaction_id
             LEFT JOIN payment_activity p ON p.transaction_id = t.transaction_id
             LEFT JOIN crypto_activity x ON x.transaction_id = t.transaction_id
+            """;
+
+    private static final String ACTIVITIES_SQL = ACTIVITY_SELECT + """
             WHERE t.customer_id = :customerId
             ORDER BY t.created_at, t.transaction_id
             """;
 
-    private static final String RISK_EVIDENCE_SQL = """
+    private static final String RISK_EVIDENCE_SELECT = """
             SELECT
                 ra.assessment_id,
                 ra.transaction_id,
@@ -74,6 +81,9 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
             FROM risk_assessments ra
             JOIN risk_rules rr ON rr.rule_id = ra.rule_id
             JOIN transactions t ON t.transaction_id = ra.transaction_id
+            """;
+
+    private static final String RISK_EVIDENCE_SQL = RISK_EVIDENCE_SELECT + """
             WHERE t.customer_id = :customerId
             ORDER BY ra.triggered_at, ra.assessment_id
             """;
@@ -91,12 +101,7 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
     @Override
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Optional<CustomerSnapshot> loadSnapshot(UUID customerId) {
-        boolean customerExists = !jdbc.sql(CUSTOMER_EXISTS_SQL)
-                .param("customerId", customerId)
-                .query((rs, rowNum) -> rs.getObject("customer_id", UUID.class))
-                .list()
-                .isEmpty();
-        if (!customerExists) {
+        if (!customerExists(customerId)) {
             return Optional.empty();
         }
 
@@ -110,6 +115,112 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
                 .list();
 
         return Optional.of(new CustomerSnapshot(customerId, activities, riskEvidence));
+    }
+
+    @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Optional<CustomerReviewPage> loadReviewPage(UUID customerId, CustomerReviewQuery query) {
+        if (!customerExists(customerId)) {
+            return Optional.empty();
+        }
+
+        String filters = reviewFilters(query, "t");
+        String countActivitiesSql = "SELECT COUNT(*) FROM transactions t WHERE t.customer_id = :customerId" + filters;
+        long totalActivities = bindReviewParameters(jdbc.sql(countActivitiesSql), customerId, query, false)
+                .query(Long.class)
+                .single();
+
+        String activitiesSql = ACTIVITY_SELECT
+                + " WHERE t.customer_id = :customerId"
+                + filters
+                + " ORDER BY t.created_at, t.transaction_id LIMIT :pageSize OFFSET :offset";
+        List<Activity> activities = bindReviewParameters(jdbc.sql(activitiesSql), customerId, query, true)
+                .query(this::mapActivity)
+                .list();
+
+        String countRiskSql = """
+                SELECT COUNT(*)
+                FROM risk_assessments ra
+                JOIN transactions t ON t.transaction_id = ra.transaction_id
+                WHERE t.customer_id = :customerId
+                """ + filters;
+        long totalRiskEvidence = bindReviewParameters(jdbc.sql(countRiskSql), customerId, query, false)
+                .query(Long.class)
+                .single();
+
+        String pageFilters = reviewFilters(query, "page_tx");
+        String pageRiskSql = RISK_EVIDENCE_SELECT + """
+                JOIN (
+                    SELECT page_tx.transaction_id
+                    FROM transactions page_tx
+                    WHERE page_tx.customer_id = :customerId
+                """ + pageFilters + """
+                    ORDER BY page_tx.created_at, page_tx.transaction_id
+                    LIMIT :pageSize OFFSET :offset
+                ) review_page ON review_page.transaction_id = ra.transaction_id
+                ORDER BY ra.triggered_at, ra.assessment_id
+                """;
+        List<RiskEvidence> riskEvidence = bindReviewParameters(jdbc.sql(pageRiskSql), customerId, query, true)
+                .query(this::mapRiskEvidence)
+                .list();
+
+        return Optional.of(new CustomerReviewPage(
+                customerId,
+                activities,
+                riskEvidence,
+                query.page(),
+                query.pageSize(),
+                totalActivities,
+                totalRiskEvidence));
+    }
+
+    private boolean customerExists(UUID customerId) {
+        return !jdbc.sql(CUSTOMER_EXISTS_SQL)
+                .param("customerId", customerId)
+                .query((rs, rowNum) -> rs.getObject("customer_id", UUID.class))
+                .list()
+                .isEmpty();
+    }
+
+    private String reviewFilters(CustomerReviewQuery query, String alias) {
+        StringBuilder filters = new StringBuilder();
+        if (query.activityType() != null) {
+            filters.append(" AND ").append(alias).append(".activity_type::text = :activityType");
+        }
+        if (query.status() != null) {
+            filters.append(" AND LOWER(").append(alias).append(".status) = LOWER(:status)");
+        }
+        if (query.createdFrom() != null) {
+            filters.append(" AND ").append(alias).append(".created_at >= :createdFrom");
+        }
+        if (query.createdTo() != null) {
+            filters.append(" AND ").append(alias).append(".created_at < :createdTo");
+        }
+        return filters.toString();
+    }
+
+    private JdbcClient.StatementSpec bindReviewParameters(
+            JdbcClient.StatementSpec statement,
+            UUID customerId,
+            CustomerReviewQuery query,
+            boolean includePage) {
+        JdbcClient.StatementSpec bound = statement.param("customerId", customerId);
+        if (query.activityType() != null) {
+            bound = bound.param("activityType", query.activityType().name());
+        }
+        if (query.status() != null) {
+            bound = bound.param("status", query.status());
+        }
+        if (query.createdFrom() != null) {
+            bound = bound.param("createdFrom", sourceLocalDateTime(query.createdFrom()));
+        }
+        if (query.createdTo() != null) {
+            bound = bound.param("createdTo", sourceLocalDateTime(query.createdTo()));
+        }
+        if (includePage) {
+            bound = bound.param("pageSize", query.pageSize()).param("offset", query.offset());
+        }
+        return bound;
     }
 
     private Activity mapActivity(ResultSet rs, int rowNum) throws SQLException {
@@ -182,8 +293,12 @@ class JdbcCustomerActivityAdapter implements CustomerActivityPort {
                 rs.getBigDecimal("score_contribution"));
     }
 
-    private java.time.Instant sourceInstant(ResultSet rs, String column) throws SQLException {
+    private Instant sourceInstant(ResultSet rs, String column) throws SQLException {
         return rs.getObject(column, LocalDateTime.class).atZone(sourceTimeZone).toInstant();
+    }
+
+    private LocalDateTime sourceLocalDateTime(Instant instant) {
+        return LocalDateTime.ofInstant(instant, sourceTimeZone);
     }
 
     private static void requireSpecialization(UUID transactionId, boolean present, String type) {

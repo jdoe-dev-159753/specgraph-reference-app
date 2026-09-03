@@ -77,11 +77,12 @@ The central project-owned ports are:
 | Port | Responsibility | Activated behavior |
 | --- | --- | --- |
 | `OperatorContextPort` | expose current operator state and require an authenticated project-owned `OperatorId` where the use case demands it | deterministic R3/default attribution; Spring Security-backed context under `r4` / `r4-auth` |
-| `CustomerActivityPort` | load one project-owned `CustomerSnapshot` | synthetic R1, Spring JDBC R2+ |
+| `CustomerActivityPort` | load one complete project-owned `CustomerSnapshot` for analysis/detector/retrieval semantics | synthetic R1, Spring JDBC R2+ |
+| `CustomerReviewQueryPort` | load one bounded operator-facing activity/risk page without changing complete-snapshot semantics | synthetic bounded projection R1; filtered/count/`LIMIT`/`OFFSET` Spring JDBC R2+ |
 | `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | typed ordered `specgraph.analysis.detectors` selection resolves `NO_OP`, Bayesian or fuzzy as one leaf or a bounded Composite; legacy detector profiles are compatibility aliases only when typed selection is absent |
 | `PolicyKnowledgePort` | return project-owned `PolicyEvidence` | static deterministic evidence R3; Spring AI pgvector retrieval under the R4 profile |
 | `AnalysisModelPort` | consume one project-owned `AnalysisEvidenceEnvelope` and return structured result plus model provenance | deterministic R3/R4 baseline, optional live provider later |
-| `AnalysisHistoryPort` | persist/list/inspect validated analysis history | Spring JDBC R3+ |
+| `AnalysisHistoryPort` | persist validated history, retain complete-list compatibility, and expose bounded page queries for operator review | in-memory baseline; Spring JDBC count/`LIMIT`/`OFFSET` R3+ |
 
 The primary adapters are `OperatorSessionHttpAdapter`, `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `DeterministicOperatorContextAdapter`, `SpringSecurityOperatorContextAdapter`, `SyntheticActivityAdapter`, `JdbcCustomerActivityAdapter`, `NoOpRiskSignalDetectorAdapter`, `BayesianSequentialRiskSignalDetectorAdapter`, `FuzzyRiskSignalDetectorAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, and `JdbcAnalysisHistoryAdapter`.
 
@@ -101,7 +102,7 @@ Hexagonal architecture is the dependency style containing these roles; it is not
 
 ## 5. Project-owned contracts
 
-Stable contracts include `CustomerSnapshot`, activity/risk projections, the sealed `AnalysisPipelineArtifact` pivot, `RiskSignalEvidence`, `PolicyEvidence`, `AnalysisEvidenceEnvelope`, `AnalysisResult`, `AnalysisModelProvenance`, `AnalysisModelOutput`, `OperatorId`, the sealed `OperatorContext`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`.
+Stable contracts include `CustomerSnapshot`, `CustomerReviewQuery`, `CustomerReviewPage`, activity/risk projections, the sealed `AnalysisPipelineArtifact` pivot, `RiskSignalEvidence`, `PolicyEvidence`, `AnalysisEvidenceEnvelope`, `AnalysisResult`, `AnalysisModelProvenance`, `AnalysisModelOutput`, `OperatorId`, the sealed `OperatorContext`, `AnalysisHistoryCreateCommand`, `AnalysisHistoryEntry`, `AnalysisHistoryQuery`, and `AnalysisHistoryPage`.
 
 `OperatorContext` is the application-owned identity pivot. It is a sealed interface with exactly `Authenticated(OperatorId)` and `Unauthenticated` variants. There is no `authenticated` Boolean paired with a nullable operator identity. `OperatorContextPort.requireAuthenticated()` exhaustively maps the authenticated variant to `OperatorId` and rejects the unauthenticated variant. Spring Security `Authentication`, sessions and authorities remain adapter-local and never enter the application contracts or persisted history model.
 
@@ -145,9 +146,9 @@ R2 activates PostgreSQL 17 behind `CustomerActivityPort` using Spring Framework 
 
 The source relation types include exact monetary `DECIMAL/NUMERIC`, bounded currency/status fields, booleans, country codes and timezone-free `TIMESTAMP`. The adapter verifies the schema contract against the migrated PostgreSQL schema and preserves monetary amounts as exact decimal values independent from currency.
 
-Multi-query customer aggregate reads execute under PostgreSQL `REPEATABLE READ`, so activities and risk evidence cannot be assembled from different committed snapshots.
+Multi-query customer aggregate reads execute under PostgreSQL `REPEATABLE READ`, so activities and risk evidence cannot be assembled from different committed snapshots. The operator-facing `CustomerReviewQueryPort` is deliberately separate from that complete-snapshot port: `JdbcCustomerActivityAdapter` applies type/status/date filters, obtains a filtered count, reads only one stable `created_at, transaction_id` page through `LIMIT/OFFSET`, and then loads source-risk evidence only for transactions present in that page. The synthetic adapter implements the same bounded contract for compatibility, but the PostgreSQL/Testcontainers path is the high-volume scalability authority.
 
-R3 adds project-owned `analysis_history` through Flyway and `JdbcAnalysisHistoryAdapter`. Only a validated analysis whose persistence succeeds is represented as completed retained history.
+R3 adds project-owned `analysis_history` through Flyway and `JdbcAnalysisHistoryAdapter`. Only a validated analysis whose persistence succeeds is represented as completed retained history. Operator-facing history review is also bounded: `AnalysisHistoryQuery` defaults to 20 entries and is capped at 100, while the JDBC adapter performs a count plus descending `LIMIT/OFFSET` page query. The HTTP body remains the historical array shape for compatibility; page/total metadata is carried in response headers.
 
 The R4 analysis-chain foundation extends each history row with separately serialized detector and model provenance. Existing pre-R4 rows receive an explicit deterministic legacy model identity during migration rather than an unreadable empty object. Policy/retrieval evidence remains in its existing provenance field; detector/model metadata does not mutate source risk tables.
 
@@ -163,9 +164,11 @@ Source `TIMESTAMP` values are wall-clock values without timezone metadata. `spec
 
 ## 8. Customer review behavior
 
-`CustomerReviewHttpAdapter -> CustomerReviewUseCase -> CustomerReviewService -> CustomerActivityPort` is the stable read path. R1 uses the synthetic adapter; R2+ substitutes `JdbcCustomerActivityAdapter` without changing the application-owned contract.
+`CustomerReviewUseCase` deliberately exposes two read semantics instead of pretending that one collection shape fits every consumer. Internal analysis-compatible callers retain `findCustomer(customerId) -> CustomerSnapshot`, which traverses the complete `CustomerActivityPort`. The operator HTTP path uses `findCustomer(customerId, CustomerReviewQuery) -> CustomerReviewPage`, which traverses `CustomerReviewQueryPort` and is bounded before data crosses the HTTP boundary. R1 uses the synthetic adapter for both semantics; R2+ uses `JdbcCustomerActivityAdapter` for both without leaking JDBC types into either project-owned contract.
 
-Unknown customers return an explicit not-found result rather than fabricated data.
+The operator query defaults to 50 activities and is capped at 200. It supports project-owned activity-type, status, and creation-time filters and preserves the established deterministic `created_at, transaction_id` ordering. `CustomerReviewPage` carries total counts and previous/next semantics; source-risk evidence in the page is scoped to the transactions actually returned. The React table keeps a bounded scroll surface with a sticky header and explicit pagination/filter controls. The unfiltered first page deliberately keeps the historical `/api/customers/{id}` URL so R1/R2 compatibility evidence remains valid.
+
+Unknown customers return an explicit not-found result rather than fabricated data. Invalid bounds or date windows fail as invalid requests rather than being silently widened.
 
 ![Figure 6 - UML Activity diagram - customer review](diagrams/activity-customer-review.svg)
 
@@ -359,7 +362,9 @@ A reviewer should be able to answer from this SDD without reconstructing PR hist
 - how implemented Bayesian/fuzzy detectors and an optional future OpenAI adapter substitute independently behind project-owned ports;
 - why external AI transmission is opt-in and absent from default deterministic execution;
 - how R2 preserves exact PostgreSQL source semantics and snapshot consistency;
-- how deterministic analysis is validated, persisted and reloaded with either deterministic R3 attribution or authenticated R4 attribution without changing the history contract;
+- why complete `CustomerActivityPort` snapshot semantics remain separate from bounded `CustomerReviewQueryPort` operator queries, and how PostgreSQL filtering/count/`LIMIT`/`OFFSET` avoids loading an unbounded customer history;
+- how customer-review pagination keeps source-risk evidence scoped to visible transactions and preserves deterministic ordering;
+- how deterministic analysis is validated, persisted and reloaded with either deterministic R3 attribution or authenticated R4 attribution while operator history review remains bounded through `AnalysisHistoryQuery`/`AnalysisHistoryPage`;
 - how `NFR-RES-001` prevents false authenticated/completed/history state at identity, detector, grounding, model and persistence boundaries;
 - how source and last-known-good published checkpoint states differ;
 - how the complete J2 publication preserves R0-R3 as independent reviewer checkpoints;

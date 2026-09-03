@@ -28,20 +28,22 @@ endif
 :Enter Customer ID;
 
 |React operator UI|
-:Request customer review;
+:Choose page and optional\ntype/status/date filters;
+:Request customer review page;
 
 |Security / HTTP adapter|
 :Authorize protected GET;
 
 |Customer / Risk application|
-:Load CustomerSnapshot\nthrough CustomerActivityPort;
+:Build CustomerReviewQuery;
+:Load bounded CustomerReviewPage\nthrough CustomerReviewQueryPort;
 
 |Activity adapter|
 if (R1 synthetic profile?) then (yes)
-  :Load deterministic synthetic\nactivity and risk evidence;
+  :Apply the same bounded query\nto deterministic synthetic evidence;
 else (R2+ relational profile)
-  :Read source relations through\nSpring JDBC / JdbcClient;
-  :Map source rows to\nActivityProjection and RiskEvidence;
+  :Count matching activities and read one stable\ncreated_at / transaction_id page with LIMIT/OFFSET;
+  :Load source RiskEvidence only for\ntransactions in the selected page;
 endif
 
 |Customer / Risk application|
@@ -52,11 +54,12 @@ if (Customer exists?) then (no)
   |Customer Care Operator|
   stop
 else (yes)
-  :Return CustomerSnapshot;
+  :Return CustomerReviewPage with\npage and total metadata;
 endif
 
 |React operator UI|
-:Render CARD, PAYMENT, CRYPTO\nactivity and risk evidence;
+:Render the bounded CARD, PAYMENT, CRYPTO\npage and page-scoped risk evidence;
+:Expose filters and explicit\nprevious/next navigation;
 
 |Customer Care Operator|
 :Review customer activity;
