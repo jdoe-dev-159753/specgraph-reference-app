@@ -167,6 +167,24 @@ class DurableWorkflowTests(unittest.TestCase):
                     )
                 )
 
+    def test_duplicate_recognized_root_keys_fail_closed(self):
+        for key, first_value, second_value in (
+            ("on", "{}", "{workflow_dispatch: {}}"),
+            ("permissions", "{}", "read-all"),
+            ("jobs", "{}", "{verify: {runs-on: ubuntu-latest}}"),
+        ):
+            with self.subTest(key=key):
+                workflow = (
+                    f"name: proof\n{key}: {first_value}\n"
+                    f"{key}: {second_value}\n"
+                )
+                findings = guard.workflow_inventory_violations(
+                    {"proof.yml": workflow}, "proof.yml\n"
+                )
+                self.assertTrue(
+                    any("duplicate top-level YAML key" in finding for finding in findings)
+                )
+
     def test_complex_yaml_content_after_canonical_name_is_irrelevant(self):
         workflow = (
             "name: proof\n"
