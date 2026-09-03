@@ -121,6 +121,41 @@ class DurableWorkflowTests(unittest.TestCase):
         )
         self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
 
+    def test_numbered_identity_markers_are_rejected(self):
+        for keyword in ("pr", "pull-request", "issue", "discovery", "story", "fix"):
+            for marker in ("no", "number", "id"):
+                filename = f"{keyword}-{marker}-42.yml"
+                with self.subTest(filename=filename):
+                    workflow_name = filename.rsplit(".", 1)[0]
+                    findings = guard.workflow_inventory_violations(
+                        {filename: f"name: {workflow_name}\n"}, f"{filename}\n"
+                    )
+                    self.assertTrue(
+                        any(
+                            "one-shot workflow identity" in finding
+                            for finding in findings
+                        )
+                    )
+
+    def test_non_marker_words_and_incomplete_ids_remain_allowed(self):
+        for workflow_name in (
+            "issue-numbering-42",
+            "story-identity-9",
+            "pull-request-idempotency-3",
+            "fix-no-cache-2",
+            "pr-not-17",
+            "issue-no",
+            "version-42",
+        ):
+            with self.subTest(workflow_name=workflow_name):
+                filename = f"{workflow_name}.yml"
+                self.assertEqual(
+                    [],
+                    guard.workflow_inventory_violations(
+                        {filename: f"name: {workflow_name}\n"}, f"{filename}\n"
+                    ),
+                )
+
     def test_name_must_equal_filename_stem(self):
         findings = guard.workflow_inventory_violations(
             {"proof.yml": "name: durable-looking-name\n"}, "proof.yml\n"
