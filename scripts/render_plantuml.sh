@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# One pinned container owns both renderer implementations: PlantUML for .puml sources
+# and the bundled Graphviz `dot` binary for the legacy .dot source. This keeps local
+# regeneration and CI on the same reproducible renderer/runtime provenance.
 PLANTUML_IMAGE="${PLANTUML_IMAGE:-plantuml/plantuml:1.2026.6@sha256:47870c1f76cfb3747bc7090bfe83013a4e3105b5a0bb1515e2baf5d3e2b3ee9d}"
 
 mapfile -d '' PLANTUML_SOURCES < <(find docs/assignment -type f -name '*.puml' -print0 | sort -z)
@@ -82,7 +85,7 @@ PY
   then
     invalid=1
   fi
-}
+done
 
 for source in "${PLANTUML_SOURCES[@]}"; do
   validate_svg "$source" "${source%.puml}.svg"
