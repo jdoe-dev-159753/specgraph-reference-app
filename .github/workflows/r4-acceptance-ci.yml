@@ -172,7 +172,7 @@ jobs:
 
           docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml stop r4
           docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml rm -f r4
-          docker compose \
+          R4_PORT=0 docker compose \
             -f compose.r4.yaml \
             -f compose.r4.ci-cache.yaml \
             -f "$offline_override" \
