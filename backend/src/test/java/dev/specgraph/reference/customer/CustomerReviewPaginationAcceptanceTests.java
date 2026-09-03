@@ -67,6 +67,14 @@ final class CustomerReviewPaginationAcceptanceTests extends PostgresIntegrationT
                 .andExpect(jsonPath("$.activities", hasSize(1)))
                 .andExpect(jsonPath("$.activities[0].type").value("PAYMENT"))
                 .andExpect(jsonPath("$.totalActivities").value(1));
+
+        mvc.perform(get("/api/customers/{id}", SEEDED_CUSTOMER_ID)
+                        .queryParam("createdFrom", "2026-08-29T00:00:00Z")
+                        .queryParam("createdTo", "2026-08-30T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activities", hasSize(1)))
+                .andExpect(jsonPath("$.activities[0].type").value("PAYMENT"))
+                .andExpect(jsonPath("$.totalActivities").value(1));
     }
 
     @Test
