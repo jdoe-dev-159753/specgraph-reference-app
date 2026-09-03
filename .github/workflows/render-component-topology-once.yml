@@ -1,0 +1,37 @@
+name: render-component-topology-once
+
+on:
+  push:
+    branches: [feat/r5-fuzzy-risk-detector]
+    paths:
+      - 'docs/assignment/SDD/diagrams/component-topology.puml'
+      - '.github/workflows/render-component-topology-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v6
+        with:
+          ref: feat/r5-fuzzy-risk-detector
+          fetch-depth: 1
+
+      - name: Render component topology with canonical PlantUML version
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            plantuml/plantuml:1.2026.6 \
+            -tsvg docs/assignment/SDD/diagrams/component-topology.puml
+          grep -q 'RiskSignalDetectorPort' docs/assignment/SDD/diagrams/component-topology.svg
+          echo '---COMPONENT_TOPOLOGY_SVG_BASE64_BEGIN---'
+          base64 -w0 docs/assignment/SDD/diagrams/component-topology.svg
+          echo
+          echo '---COMPONENT_TOPOLOGY_SVG_BASE64_END---'
