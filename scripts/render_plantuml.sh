@@ -64,18 +64,18 @@ PY
   fi
 done
 
-# A retained PlantUML-generated SVG with no sibling source is stale design evidence.
-# Hand-authored/separately sourced SVGs are intentionally ignored because they do not
-# carry PlantUML's embedded processing-instruction marker.
+# Diagram views in the controlled assignment documentation must retain an explicit
+# sibling source. PlantUML views use .puml; the legacy delivery-rings view is sourced
+# from .dot. This source/view invariant deliberately does not depend on renderer
+# metadata, so @startdot output is covered even when it carries no <?plantuml marker.
 while IFS= read -r -d '' rendered; do
-  if grep -q '<\?plantuml ' "$rendered"; then
-    source="${rendered%.svg}.puml"
-    if [[ ! -f "$source" ]]; then
-      echo "Orphaned generated PlantUML SVG without authoritative source: $rendered" >&2
-      invalid=1
-    fi
+  puml_source="${rendered%.svg}.puml"
+  dot_source="${rendered%.svg}.dot"
+  if [[ ! -f "$puml_source" && ! -f "$dot_source" ]]; then
+    echo "Orphaned controlled SVG without authoritative sibling source: $rendered" >&2
+    invalid=1
   fi
-done < <(git ls-files -z 'docs/assignment/**/*.svg')
+done < <(git ls-files -z 'docs/assignment/**/diagrams/*.svg')
 
 if (( invalid != 0 )); then
   exit 1
