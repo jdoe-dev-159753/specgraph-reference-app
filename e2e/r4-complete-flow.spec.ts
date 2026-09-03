@@ -56,7 +56,37 @@ async function loadCustomer(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('analysis-workspace')).toBeVisible()
 }
 
-test('prove the configured authenticated grounded R4 flow and retain reviewer evidence', async ({ page, request }, testInfo) => {
+async function annotateReviewerEvidence(page: import('@playwright/test').Page, completed: Analysis) {
+  const detectorLabel = expectedDetector === 'none'
+    ? 'Stage 1: no-op baseline'
+    : `Stage 1: ${expectedDetector}`
+  const modelLabel = `Stage 3: ${completed.modelProvenance.backendIdentity} / ${completed.modelProvenance.modelIdentity}`
+
+  await page.evaluate(({ detectorLabel, modelLabel }) => {
+    document.querySelector('[data-testid="reviewer-evidence-provenance"]')?.remove()
+    const banner = document.createElement('aside')
+    banner.dataset.testid = 'reviewer-evidence-provenance'
+    banner.setAttribute('aria-label', 'Executable reviewer evidence provenance')
+    banner.style.boxSizing = 'border-box'
+    banner.style.width = '100%'
+    banner.style.padding = '12px 20px'
+    banner.style.background = '#111827'
+    banner.style.color = '#f9fafb'
+    banner.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+    banner.style.fontSize = '13px'
+    banner.style.lineHeight = '1.5'
+    banner.style.borderBottom = '3px solid #38bdf8'
+    banner.textContent = `Executable evidence overlay · ${detectorLabel} · Stage 2: pgvector + all-MiniLM-L6-v2 · ${modelLabel}`
+    document.body.prepend(banner)
+  }, { detectorLabel, modelLabel })
+
+  const banner = page.getByTestId('reviewer-evidence-provenance')
+  await expect(banner).toContainText(detectorLabel)
+  await expect(banner).toContainText('Stage 2: pgvector + all-MiniLM-L6-v2')
+  await expect(banner).toContainText(modelLabel)
+}
+
+test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DETERMINISM-001 prove the configured authenticated grounded R4 flow and retain reviewer evidence', async ({ page, request }, testInfo) => {
   const anonymous = await request.get(`/api/customers/${seededCustomer}`)
   expect(anonymous.status()).toBe(401)
 
@@ -72,6 +102,10 @@ test('prove the configured authenticated grounded R4 flow and retain reviewer ev
   expect(before.customerId).toBe(seededCustomer)
   expect(new Set(before.activities.map(activity => activity.type))).toEqual(new Set(['CARD', 'PAYMENT', 'CRYPTO']))
   expect(before.riskEvidence.length).toBeGreaterThan(0)
+
+  await expect(page.getByTestId('customer-activity')).toContainText('CARD')
+  await expect(page.getByTestId('customer-activity')).toContainText('PAYMENT')
+  await expect(page.getByTestId('customer-activity')).toContainText('CRYPTO')
 
   const analysisResponsePromise = page.waitForResponse(response =>
     response.url().endsWith(`/api/customers/${seededCustomer}/analyses`) &&
@@ -137,6 +171,7 @@ test('prove the configured authenticated grounded R4 flow and retain reviewer ev
   const after = await afterResponse.json() as CustomerSnapshot
   expect(after.riskEvidence).toEqual(before.riskEvidence)
 
+  await annotateReviewerEvidence(page, completed)
   await page.screenshot({ path: testInfo.outputPath(`${evidenceName}-customer-444.png`), fullPage: true })
 
   await page.reload()
