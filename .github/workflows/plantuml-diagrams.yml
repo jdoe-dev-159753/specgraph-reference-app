@@ -1,0 +1,95 @@
+name: plantuml-diagrams
+
+on:
+  pull_request:
+    paths:
+      - 'docs/assignment/**/*.puml'
+      - 'docs/assignment/**/*.dot'
+      - 'docs/assignment/**/*.svg'
+      - 'scripts/render_plantuml.sh'
+      - '.github/workflows/plantuml-diagrams.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/assignment/**/*.puml'
+      - 'docs/assignment/**/*.dot'
+      - 'docs/assignment/**/*.svg'
+      - 'scripts/render_plantuml.sh'
+      - '.github/workflows/plantuml-diagrams.yml'
+  workflow_dispatch:
+    inputs:
+      regenerate_artifact:
+        description: 'Regenerate controlled SVGs and upload an apply-ready artifact without modifying the repository'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: plantuml-diagrams-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.regenerate_artifact != true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Assert exact source revision
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Render controlled diagram sources
+        run: bash scripts/render_plantuml.sh
+      - name: Reject stale or missing generated SVGs
+        run: |
+          if [[ -n "$(git status --porcelain -- docs/assignment)" ]]; then
+            echo 'Committed controlled diagram SVGs are stale or missing:' >&2
+            git status --short -- docs/assignment >&2
+            git diff -- docs/assignment >&2 || true
+            exit 1
+          fi
+
+  regenerate:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.regenerate_artifact == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Assert immutable dispatch revision
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Render controlled diagram sources
+        run: bash scripts/render_plantuml.sh
+      - name: Package regenerated SVGs and apply-ready patch
+        run: |
+          mkdir -p generated-diagrams
+          find docs/assignment -type f -path '*/diagrams/*.svg' -print0 \
+            | xargs -0 -r git add -N --
+          git diff --check -- docs/assignment
+          git diff --binary -- docs/assignment > generated-diagrams/regenerated-diagrams.patch
+          git status --short -- docs/assignment > generated-diagrams/status.txt
+          printf 'sourceRef=%s\nsourceSha=%s\n' "$GITHUB_REF_NAME" "$GITHUB_SHA" \
+            > generated-diagrams/source.txt
+          while IFS= read -r -d '' svg; do
+            mkdir -p "generated-diagrams/$(dirname "$svg")"
+            cp "$svg" "generated-diagrams/$svg"
+          done < <(find docs/assignment -type f -path '*/diagrams/*.svg' -print0)
+          echo 'Regeneration is intentionally non-writing.'
+          echo 'Apply regenerated changes on a normal feature branch, then commit/push so ordinary PR checks run on that exact head.'
+      - name: Upload regenerated diagram bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: controlled-diagrams-${{ github.sha }}
+          path: generated-diagrams/
+          if-no-files-found: error
+          retention-days: 7
