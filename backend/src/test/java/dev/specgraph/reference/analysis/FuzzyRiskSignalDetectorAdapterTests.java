@@ -38,7 +38,26 @@ final class FuzzyRiskSignalDetectorAdapterTests {
                 .containsEntry("crossBorderRatio", "0.500000")
                 .containsEntry("activation.R2_CROSS_BORDER", "0.800000")
                 .containsEntry("ruleSetVersion", FuzzyRiskSignalDetectorAdapter.RULE_SET_VERSION)
-                .containsEntry("defuzzification", "weighted-singleton-v1");
+                .containsEntry("defuzzification", "weighted-singleton-monotonic-v2")
+                .containsEntry("positiveConsequent", "1.000000");
+    }
+
+    @Test
+    void addingIncompleteStatusToCryptoEvidenceCannotLowerScore() {
+        RiskSignalEvidence allCompleted = onlySignal(snapshot(
+                crypto(20, "Completed"),
+                crypto(21, "Completed"),
+                crypto(22, "Completed"),
+                crypto(23, "Completed")));
+        RiskSignalEvidence oneDeclined = onlySignal(snapshot(
+                crypto(20, "Declined"),
+                crypto(21, "Completed"),
+                crypto(22, "Completed"),
+                crypto(23, "Completed")));
+
+        assertThat(oneDeclined.provenance().get("activation.R3_INCOMPLETE"))
+                .isNotEqualTo("0.000000");
+        assertThat(oneDeclined.score()).isGreaterThan(allCompleted.score());
     }
 
     @Test
@@ -55,7 +74,7 @@ final class FuzzyRiskSignalDetectorAdapterTests {
                 UUID.fromString("77777777-7777-7777-7777-777777777777"),
                 List.of(
                         foreign,
-                        crypto(11),
+                        crypto(11, "Completed"),
                         card(12, "Declined"),
                         payment(13, "CH")),
                 List.of(sourceRisk));
@@ -63,14 +82,14 @@ final class FuzzyRiskSignalDetectorAdapterTests {
 
         RiskSignalEvidence signal = onlySignal(snapshot);
 
-        assertThat(signal.score()).isBetween(0.0, 1.0).isGreaterThan(0.60);
+        assertThat(signal.score()).isBetween(0.0, 1.0).isGreaterThan(0.80);
         assertThat(signal.detectorIdentity()).isEqualTo(FuzzyRiskSignalDetectorAdapter.DETECTOR_IDENTITY);
         assertThat(signal.signalIdentity()).isEqualTo(FuzzyRiskSignalDetectorAdapter.SIGNAL_IDENTITY);
         assertThat(signal.provenance())
                 .containsEntry("cryptoRatio", "0.250000")
                 .containsEntry("incompleteRatio", "0.250000")
                 .containsEntry("sourceRiskDensity", "0.250000")
-                .containsEntry("implementation", "project-owned-minimal-fuzzy-inference-v1")
+                .containsEntry("implementation", "project-owned-minimal-fuzzy-inference-v2")
                 .containsEntry("demoLimitation", "synthetic heuristic; not production AML calibration");
         assertThat(signal.provenance().get("activation.R5_CROSS_BORDER_WITH_SOURCE_RISK"))
                 .isNotEqualTo("0.000000");
@@ -106,13 +125,13 @@ final class FuzzyRiskSignalDetectorAdapterTests {
                         "BANK_TRANSFER", "CH00-SYNTHETIC", receiverCountry + "00-SYNTHETIC", receiverCountry));
     }
 
-    private Activity crypto(int suffix) {
+    private Activity crypto(int suffix, String status) {
         return new Activity(
                 id(suffix),
                 Activity.ActivityType.CRYPTO,
                 new BigDecimal("1.00"),
                 "ETH",
-                "Completed",
+                status,
                 time(suffix),
                 new Activity.CryptoDetails(
                         "Ethereum", "0xfrom", "0xto", "synthetic-hash-" + suffix, "Synthetic Exchange"));
