@@ -27,11 +27,8 @@ concurrency:
 jobs:
   guard:
     if: ${{ github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422 }}
-    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    runs-on: ubuntu-latest
     steps:
-      - name: Clean trusted checkout before reuse
-        run: docker run --rm -v "$PWD:/workspace" alpine:3.22 rm -rf /workspace/.workgraph-trusted
-
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.workflow_sha }}
