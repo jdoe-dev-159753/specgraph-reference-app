@@ -11,7 +11,7 @@ skinparam rectangle {
 
 title R4 analysis architecture — functions first, implementations second
 
-rectangle "SOURCE FACTS\nCustomerSnapshot\nactivities + persisted risk_assessments\n(source truth)" as source
+rectangle "SOURCE FACTS\nCustomerSnapshot\ncomplete activities + persisted risk_assessments\n(source truth)" as source
 
 package "STAGE 1 — PRIMITIVE SIGNAL ANALYSIS" as stage1 {
   interface "RiskSignalDetectorPort" as detectorPort
@@ -33,10 +33,17 @@ package "STAGE 1 — PRIMITIVE SIGNAL ANALYSIS" as stage1 {
 package "STAGE 2 — EVIDENCE GROUNDING & FUSION" as stage2 {
   interface "PolicyKnowledgePort" as policyPort
   rectangle "Policy retrieval adapter\npgvector + local embeddings\nimplementation detail" as retrieval
-  rectangle "AnalysisEvidenceEnvelope\nsource facts + detector artifacts + policy evidence\ncanonical typed pivot graph" as envelope
+  rectangle "Canonical PolicyEvidence\nranked retrieved artifacts\nprovider-neutral provenance" as policies
 
   retrieval --> policyPort
-  policyPort --> envelope
+  policyPort --> policies
+}
+
+package "APPLICATION MODEL-CONTEXT BOUNDARY" as contextBoundary {
+  rectangle "AnalysisContextBuilder\ncomplete aggregates stay exact\ndetail windows selected deterministically" as contextBuilder
+  rectangle "AnalysisEvidenceEnvelope\nexact totals + bounded selected details\nactivities | source risk | detector | policy" as envelope
+
+  contextBuilder --> envelope
 }
 
 package "STAGE 3 — FINAL ADVISORY SYNTHESIS" as stage3 {
@@ -50,22 +57,26 @@ package "STAGE 3 — FINAL ADVISORY SYNTHESIS" as stage3 {
   modelPort --> result
 }
 
-rectangle "GROUNDING / SAFETY VALIDATION\nexact evidence references\nfail closed" as validator
+rectangle "GROUNDING / SAFETY VALIDATION\nreferences only supplied bounded details\nfail closed" as validator
 rectangle "PERSISTED REVIEW HISTORY\noperator + detector + retrieval + model provenance" as history
 rectangle "REVIEWER UI / API" as reviewer
 
-source --> detectorPort : bounded facts
-source --> envelope : preserve source authority
-signals --> envelope
-source --> policyPort : retrieval query context
+source --> detectorPort : complete snapshot
+source --> policyPort : complete snapshot\nretrieval adapter selects query context
+source --> contextBuilder : exact totals + source details
+signals --> contextBuilder
+policies --> contextBuilder
+contextBuilder --> envelope : configured independent bounds\n25 activity | 20 source risk | 8 detector | 3 policy
 envelope --> modelPort : bounded grounded evidence
 result --> validator
 validator --> history : validated only
 history --> reviewer
 
 note bottom
-Architecture names FUNCTIONS and PORTS.
+Stage 1 and Stage 2 retain complete CustomerSnapshot semantics.
+Only the application-owned boundary immediately before AnalysisModelPort bounds model-facing detail.
+Full-history aggregate counts remain truthful; grounding references may cite only supplied selected details.
+UI pagination and provider token ceilings are separate concerns.
 Library/vendor names appear only beneath adapters as implementation provenance.
-OpenAI implements Stage 3 synthesis; Bayesian, fuzzy and Random Forest implement Stage 1 signal analysis.
 end note
 @enduml
