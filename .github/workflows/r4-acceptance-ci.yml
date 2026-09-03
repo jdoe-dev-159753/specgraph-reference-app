@@ -27,6 +27,7 @@ jobs:
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       COMPOSE_PROJECT_NAME: r4-acceptance-${{ github.run_id }}
+      R4_PORT: '0'
     steps:
       - name: Clean container-owned outputs before checkout
         run: |
@@ -36,16 +37,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Allocate run-isolated acceptance port
-        run: |
-          port=$((56000 + (GITHUB_RUN_ID % 9000)))
-          if [ "$port" -lt 56000 ] || [ "$port" -gt 64999 ]; then
-            echo "Calculated R4 acceptance port is outside the reserved CI range: $port" >&2
-            exit 1
-          fi
-          echo "R4_PORT=$port" >> "$GITHUB_ENV"
-          printf 'Allocated R4 acceptance port %s for run %s\n' "$port" "$GITHUB_RUN_ID"
 
       - name: Assert exact validated source revision
         run: |
@@ -111,6 +102,18 @@ jobs:
 
           docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml up -d --no-build
 
+          application="$(docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml ps -q r4)"
+          endpoint="$(docker port "$application" 8080/tcp | head -n 1)"
+          R4_PORT="${endpoint##*:}"
+          case "$R4_PORT" in
+            ''|*[!0-9]*)
+              echo "Docker did not return a numeric run-isolated acceptance port: $endpoint" >&2
+              exit 1
+              ;;
+          esac
+          echo "R4_PORT=$R4_PORT" >> "$GITHUB_ENV"
+          printf 'Docker allocated R4 acceptance port %s for run %s\n' "$R4_PORT" "$GITHUB_RUN_ID"
+
           healthy=false
           for attempt in $(seq 1 180); do
             if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
@@ -169,11 +172,22 @@ jobs:
 
           docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml stop r4
           docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml rm -f r4
-          docker compose \
+          R4_PORT=0 docker compose \
             -f compose.r4.yaml \
             -f compose.r4.ci-cache.yaml \
             -f "$offline_override" \
             up -d --no-build r4
+
+          application="$(docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml -f "$offline_override" ps -q r4)"
+          endpoint="$(docker port "$application" 8080/tcp | head -n 1)"
+          R4_PORT="${endpoint##*:}"
+          case "$R4_PORT" in
+            ''|*[!0-9]*)
+              echo "Docker did not return a numeric warm-start acceptance port: $endpoint" >&2
+              exit 1
+              ;;
+          esac
+          printf 'Docker allocated warm-start R4 acceptance port %s for run %s\n' "$R4_PORT" "$GITHUB_RUN_ID"
 
           healthy=false
           for attempt in $(seq 1 120); do

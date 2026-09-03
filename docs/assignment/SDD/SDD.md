@@ -79,7 +79,7 @@ The central project-owned ports are:
 | `OperatorContextPort` | expose current operator state and require an authenticated project-owned `OperatorId` where the use case demands it | deterministic R3/default attribution; Spring Security-backed context under `r4` / `r4-auth` |
 | `CustomerActivityPort` | load one complete project-owned `CustomerSnapshot` for analysis/detector/retrieval semantics | synthetic R1, Spring JDBC R2+ |
 | `CustomerReviewQueryPort` | load one bounded operator-facing activity/risk page without changing complete-snapshot semantics | synthetic bounded projection R1; filtered/count/`LIMIT`/`OFFSET` Spring JDBC R2+ |
-| `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | explicit no-op R4 baseline; selectable Bayesian and fuzzy leaves; further statistical/graph/classical-ML adapters later |
+| `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | typed ordered `specgraph.analysis.detectors` selection resolves `NO_OP`, Bayesian or fuzzy as one leaf or a bounded Composite; legacy detector profiles are compatibility aliases only when typed selection is absent |
 | `PolicyKnowledgePort` | return project-owned `PolicyEvidence` | static deterministic evidence R3; Spring AI pgvector retrieval under the R4 profile |
 | `AnalysisModelPort` | consume one project-owned `AnalysisEvidenceEnvelope` and return structured result plus model provenance | deterministic R3/R4 baseline, optional live provider later |
 | `AnalysisHistoryPort` | persist validated history, retain complete-list compatibility, and expose bounded page queries for operator review | in-memory baseline; Spring JDBC count/`LIMIT`/`OFFSET` R3+ |
@@ -89,8 +89,10 @@ The primary adapters are `OperatorSessionHttpAdapter`, `CustomerReviewHttpAdapte
 The inception-selected GoF roles remain intentionally limited:
 
 - **Adapter:** translates framework/provider/storage/model APIs to project-owned ports.
-- **Strategy:** selects interchangeable identity-context, activity, detector, policy or analysis-model behavior behind stable ports.
-- **Facade/application service:** exposes one coarse-grained use case while hiding multi-port orchestration. `AnalysisService` owns the evidence-to-analysis chain.
+- **Strategy:** represents interchangeable identity-context, activity, detector, policy or analysis-model behavior behind stable ports.
+- **Factory/registry:** `RiskSignalDetectorFactory` resolves the bounded ordered project-owned detector IDs without becoming a service locator; Spring still owns bean lifecycle and dependency injection.
+- **Composite:** `CompositeRiskSignalDetector` treats an ordered group of Stage-1 detector leaves through the same `RiskSignalDetectorPort`, preserving child evidence and failing the Stage-1 call if any selected child fails.
+- **Facade/application service:** exposes one coarse-grained use case while hiding multi-port orchestration. `AnalysisService` owns the evidence-to-analysis chain and remains unaware of leaf-versus-Composite topology.
 
 Hexagonal architecture is the dependency style containing these roles; it is not itself a Strategy pattern. New patterns are not added to inflate vocabulary.
 
@@ -132,7 +134,7 @@ Source `risk_assessments` are persisted source-shaped evidence. They remain dist
 
 The R3 deterministic analysis may synthesize customer context, source risk evidence and static policy evidence, but it cannot manufacture a source risk fact. A later live LLM remains advisory explanation/synthesis, not the sole detector or authority for customer risk.
 
-R4 activates the project-owned `RiskSignalDetectorPort` as an explicit stage in the chain. Its default `NoOpRiskSignalDetectorAdapter` deliberately emits no additional signals, so introducing the seam does not change the accepted deterministic R3 risk decision. `BayesianSequentialRiskSignalDetectorAdapter` and `FuzzyRiskSignalDetectorAdapter` are now selectable Stage-1 leaves behind the same port. The Bayesian leaf emits transparent synthetic-demo Beta-binomial review-elevation probability evidence; the fuzzy leaf emits deterministic graded review-elevation evidence from bounded project-owned membership functions and versioned rules. Both translate only into `RiskSignalEvidence` and explicitly retain synthetic/demo limitations in provenance. Further statistical, graph and classical-ML implementations may substitute behind the same port when justified by data and benchmark evidence. No detector output overwrites source `risk_assessments`.
+R4 activates the project-owned `RiskSignalDetectorPort` as an explicit stage in the chain. Stage-1 topology is selected through the bounded ordered `specgraph.analysis.detectors` property using project-owned IDs `NO_OP`, `BAYESIAN` and `FUZZY`. `RiskSignalDetectorFactory` resolves one selected ID directly to its leaf or resolves multiple concrete IDs to `CompositeRiskSignalDetector`, which invokes children deterministically and returns their canonical evidence in configured order. `NO_OP` remains the absent-configuration baseline and deliberately emits no additional signals. The legacy `bayesian-detector` and `fuzzy-detector` profiles remain compatibility aliases only when the typed property is absent; an explicitly empty typed list, duplicate ID, `NO_OP` mixed with concrete leaves, unknown/unregistered selection or child execution failure fails clearly rather than silently changing topology or dropping evidence. The Bayesian leaf emits transparent synthetic-demo Beta-binomial review-elevation probability evidence; the fuzzy leaf emits deterministic graded review-elevation evidence from bounded project-owned membership functions and versioned rules. Both translate only into `RiskSignalEvidence` and explicitly retain synthetic/demo limitations in provenance. Further statistical, graph and classical-ML leaves may register behind the same port when justified by data and benchmark evidence. Calibrated score fusion remains separate work owned by #254. No detector output overwrites source `risk_assessments`, and `AnalysisService` remains unaware of whether Stage 1 resolved a leaf or a Composite.
 
 The detector stage and analysis-model stage are therefore intentionally different. A detector may estimate or rank a suspicious pattern from activity evidence; `AnalysisModelPort` receives those derived signals together with source evidence and retrieved policy context and produces bounded advisory synthesis. The OpenAI/Spring AI adapter, when explicitly enabled later, receives the same `AnalysisEvidenceEnvelope` as the deterministic model rather than a provider-specific side channel.
 
@@ -205,7 +207,7 @@ AnalysisHttpAdapter
           [activities + persisted source risk evidence]
   -> RiskSignalDetectorPort
        -> RiskSignalEvidence[*] implements AnalysisPipelineArtifact
-          [default NoOpRiskSignalDetectorAdapter => []]
+          [typed selection => one leaf or bounded Composite; default NO_OP => []]
   -> PolicyKnowledgePort
        -> PolicyEvidence[*] implements AnalysisPipelineArtifact
           [R3/default: StaticPolicyAdapter | R4: PgVectorPolicyAdapter]
@@ -225,7 +227,7 @@ AnalysisHttpAdapter
 
 `PgVectorPolicyAdapter` builds a bounded retrieval query from the newest bounded activity and source-risk windows in project-owned semantics, deliberately excluding sensitive account, PAN and wallet identifiers. Spring AI `Document` and vector-store types remain adapter-local. Retrieved chunks are translated into `PolicyEvidence` containing stable chunk identity, content and provider-neutral retrieval metadata such as corpus/revision, source document, chunk position, embedding identity and similarity score. An empty retrieval returns no evidence; the existing analysis orchestration then produces the explicit insufficient-grounding failure rather than allowing model prose to fabricate context.
 
-This composition means RAG is one context-supply stage, not the complete AI architecture. The implemented Bayesian or fuzzy detector can replace only the Stage-1 detector adapter; further statistical/classical-ML/graph detectors may be added later. An OpenAI/live model can later replace only the analysis-model adapter. All adapters translate library/provider-native results into existing application-owned sealed record variants. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.
+This composition means RAG is one context-supply stage, not the complete AI architecture. Typed Stage-1 selection can resolve Bayesian or fuzzy individually or compose both through `CompositeRiskSignalDetector`; further statistical/classical-ML/graph leaves may register later without changing `AnalysisService`. The Composite preserves child artifacts and ordering but performs no score calibration or fusion; #254 owns any later calibrated ensemble evidence. An OpenAI/live model can later replace only the analysis-model adapter. All adapters translate library/provider-native results into existing application-owned sealed record variants. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.
 
 ![Figure 7 - UML Activity diagram - grounded analysis](diagrams/activity-grounded-analysis.svg)
 

@@ -38,6 +38,8 @@ package "Spring Boot modular monolith" as Backend {
     component "Analysis Application\nMOD-ANALYSIS-001\napplication-service facade" as Analysis
     component "Analysis Context Builder\napplication-owned bounded model projection\nexact totals + selected details" as ContextBuilder
     interface "RiskSignalDetectorPort\nPRT-DETECTOR-001\n<<Strategy seam>>" as DetectorPort
+    component "Detector Selection\nRiskSignalDetectorFactory\nspecgraph.analysis.detectors\n<<Factory / Registry>>" as DetectorFactory
+    component "Composite Risk Signal Detector\nordered bounded children\n<<GoF Composite>>" as DetectorComposite
     interface "PolicyKnowledgePort\nPRT-POLICY-001\n<<Strategy seam>>" as PolicyPort
     interface "AnalysisModelPort\nPRT-MODEL-001\n<<Strategy seam>>" as ModelPort
     interface "AnalysisHistoryPort\nPRT-HISTORY-001" as HistoryPort
@@ -49,9 +51,9 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   component "Spring Security Operator Context\nADP-AUTH-SPRING-001\nR4 / r4-auth\n<<GoF Adapter>>" as OperatorSecurity
   component "Synthetic Activity\nADP-ACT-SYN-001\nR0/R1\n<<GoF Adapter>>" as ActivitySynthetic
   component "Spring JDBC Activity\nADP-ACT-JDBC-001\nR2\n<<GoF Adapter>>" as ActivityJdbc
-  component "No-op Risk Signal Detector\nADP-DETECTOR-NOOP-001\nR4/default\n<<GoF Adapter>>" as DetectorNoOp
-  component "Bayesian Risk Signal Detector\nADP-DETECTOR-BAYES-001\nbayesian-detector\n<<GoF Adapter>>" as DetectorBayes
-  component "Fuzzy Risk Signal Detector\nADP-DETECTOR-FUZZY-001\nfuzzy-detector\n<<GoF Adapter>>" as DetectorFuzzy
+  component "No-op Risk Signal Detector\nADP-DETECTOR-NOOP-001\nselection ID: NO_OP\n<<GoF Adapter>>" as DetectorNoOp
+  component "Bayesian Risk Signal Detector\nADP-DETECTOR-BAYES-001\nselection ID: BAYESIAN\n<<GoF Adapter>>" as DetectorBayes
+  component "Fuzzy Risk Signal Detector\nADP-DETECTOR-FUZZY-001\nselection ID: FUZZY\n<<GoF Adapter>>" as DetectorFuzzy
   component "Static Policy\nADP-POL-STATIC-001\nR3/default\n<<GoF Adapter>>" as PolicyStatic
   component "pgvector Policy\nADP-POL-PGV-001\nR4\n<<GoF Adapter>>" as PolicyPg
   component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3+\n<<GoF Adapter>>" as ModelDet
@@ -104,9 +106,16 @@ ActivityPort --> ActivitySynthetic
 ActivityPort ..> ActivityJdbc
 CustomerReviewPort --> ActivitySynthetic
 CustomerReviewPort ..> ActivityJdbc
-DetectorPort --> DetectorNoOp : default
-DetectorPort ..> DetectorBayes : selectable
-DetectorPort ..> DetectorFuzzy : selectable
+DetectorNoOp ..> DetectorPort : implements
+DetectorBayes ..> DetectorPort : implements
+DetectorFuzzy ..> DetectorPort : implements
+DetectorComposite ..> DetectorPort : implements
+DetectorFactory --> DetectorNoOp : NO_OP
+DetectorFactory --> DetectorBayes : BAYESIAN
+DetectorFactory --> DetectorFuzzy : FUZZY
+DetectorFactory --> DetectorComposite : 2+ concrete IDs
+DetectorComposite --> DetectorBayes : ordered child
+DetectorComposite --> DetectorFuzzy : ordered child
 PolicyPort --> PolicyStatic
 PolicyPort ..> PolicyPg
 ModelPort --> ModelDet
@@ -122,12 +131,15 @@ note bottom of Backend
   The four packages are the Spring Modulith application modules. Spring Security remains an
   adapter/runtime boundary: Authentication, SecurityContext and session types stop before
   OperatorContextPort. Detector implementations also stop behind the project-owned
-  RiskSignalDetectorPort and emit only derived RiskSignalEvidence. CustomerReviewQueryPort
-  bounds the operator surface independently of the complete CustomerActivityPort snapshot used
-  by analysis. AnalysisContextBuilder is an application-layer projection: Stage 1 and Stage 2
-  retain complete CustomerSnapshot semantics, then exact full-history totals are separated from
-  bounded model-facing details immediately before AnalysisModelPort. GoF Adapter labels identify
-  boundary translation roles; Strategy seams identify interchangeable implementations; the
-  analysis application service acts as a Facade over orchestration.
+  RiskSignalDetectorPort and emit only derived RiskSignalEvidence. `specgraph.analysis.detectors`
+  is the typed Stage-1 selection authority; legacy detector profiles are bootstrap aliases only
+  when that property is absent. Spring owns bean lifecycle, the factory/registry resolves leaves
+  or the bounded Composite, and child failure fails Stage 1 rather than disappearing silently.
+  CustomerReviewQueryPort bounds the operator surface independently of the complete
+  CustomerActivityPort snapshot used by analysis. AnalysisContextBuilder is an application-layer
+  projection: Stage 1 and Stage 2 retain complete CustomerSnapshot semantics, then exact full-history
+  totals are separated from bounded model-facing details immediately before AnalysisModelPort. GoF
+  Adapter labels identify boundary translation roles; Strategy seams identify interchangeable
+  implementations; the analysis application service acts as a Facade over orchestration.
 end note
 @enduml
