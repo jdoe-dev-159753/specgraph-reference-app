@@ -8,6 +8,13 @@ from pathlib import Path
 from scripts import work_graph_guard as guard
 
 
+REQUIRED_PROTECTED_ASSETS = {
+    ".github/workflows/work-graph-guard.yml",
+    ".github/workflows/work-graph-guard-tests.yml",
+    "scripts/test_work_graph_guard.py",
+}
+
+
 class ReviewFreshnessTests(unittest.TestCase):
     def test_pull_request_event_resolves_pr_number(self):
         event = {"number": 42, "pull_request": {"number": 42}}
@@ -362,8 +369,12 @@ class DurableWorkflowTests(unittest.TestCase):
 
 
     def test_repository_protected_assets_match_pinned_contract(self):
+        self.assertEqual(
+            REQUIRED_PROTECTED_ASSETS,
+            set(guard.PROTECTED_ASSET_SHA256),
+        )
         root = Path(__file__).resolve().parents[1]
-        for path in guard.PROTECTED_ASSET_SHA256:
+        for path in REQUIRED_PROTECTED_ASSETS:
             with self.subTest(path=path):
                 content = (root / path).read_text(encoding="utf-8")
                 self.assertEqual([], guard.protected_asset_violations(path, content))
