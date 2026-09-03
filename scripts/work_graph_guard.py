@@ -273,29 +273,48 @@ def _double_quoted_scalar_is_closed(value: str) -> bool:
     return False
 
 
-def _complete_double_quoted_scalar(
+def _single_quoted_scalar_is_closed(value: str) -> bool:
+    index = 1
+    while index < len(value):
+        if value[index] != "'":
+            index += 1
+            continue
+        if index + 1 < len(value) and value[index + 1] == "'":
+            index += 2
+            continue
+        return True
+    return False
+
+
+def _complete_flow_scalar(
     lines: list[str], index: int, root_indent: int, value: str
 ) -> str:
-    if not value.startswith('"') or _double_quoted_scalar_is_closed(value):
+    block_header = _strip_yaml_inline_comment(value)
+    if re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", block_header):
+        return value
+
+    is_double = value.startswith('"')
+    is_single = value.startswith("'")
+    if is_double and _double_quoted_scalar_is_closed(value):
+        return value
+    if is_single and _single_quoted_scalar_is_closed(value):
         return value
 
     combined = value
     for continuation in lines[index + 1 :]:
         if not continuation.strip():
-            if combined.endswith("\\"):
-                combined = combined[:-1]
-            else:
-                combined += "\n"
             continue
         continuation_indent = len(continuation) - len(continuation.lstrip(" "))
         if continuation_indent <= root_indent:
             break
         piece = continuation.strip()
-        if combined.endswith("\\"):
+        if is_double and combined.endswith("\\"):
             combined = combined[:-1] + piece
         else:
             combined += " " + piece
-        if _double_quoted_scalar_is_closed(combined):
+        if is_double and _double_quoted_scalar_is_closed(combined):
+            break
+        if is_single and _single_quoted_scalar_is_closed(combined):
             break
     return combined
 
@@ -325,7 +344,7 @@ def extract_workflow_name(text: str) -> str:
     for index, indent, key, raw_value in mapping_lines:
         if indent != root_indent or key != "name":
             continue
-        value = _complete_double_quoted_scalar(
+        value = _complete_flow_scalar(
             lines, index, root_indent, raw_value.strip()
         )
         block_header = _strip_yaml_inline_comment(value)
