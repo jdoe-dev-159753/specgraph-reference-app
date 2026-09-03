@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Reject competing prose work-state and stale Codex review evidence."""
+"""Reject competing prose work-state, stale Codex review evidence, and one-shot workflows."""
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
 import sys
-from urllib import error, request
+from urllib import error, parse, request
 
 API = "https://api.github.com"
 REPO = os.environ.get("GITHUB_REPOSITORY", "jdoe-dev-159753/specgraph-reference-app")
@@ -17,6 +18,8 @@ EVENT_NAME = os.environ.get("GITHUB_EVENT_NAME", "")
 CODEX_USER_ID = 199175422
 CODEX_APP_ID = 1144995
 MIN_REVIEWED_SHA_PREFIX = 10
+WORKFLOW_DIR = ".github/workflows"
+DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -26,6 +29,11 @@ PREFIX = re.compile(
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
 CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
 REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
+WORKFLOW_NAME = re.compile(r"(?m)^name:\s*['\"]?([^'\"\n]+)")
+ONE_SHOT_WORKFLOW = re.compile(
+    r"(?:^|[-_.])(pr|pull|issue|discovery|story|fix)[-_#.]?\d+(?:[-_.]|$)",
+    re.IGNORECASE,
+)
 
 
 def api(path: str):
@@ -157,6 +165,95 @@ def require_current_head_codex_review(pr_number: int, failures: list[str]) -> No
     )
 
 
+def decode_contents_payload(payload: dict, path: str) -> str:
+    if payload.get("type") != "file" or payload.get("encoding") != "base64":
+        raise RuntimeError(f"GitHub contents response for {path} is not a base64 file")
+    compact = "".join((payload.get("content") or "").splitlines())
+    return base64.b64decode(compact).decode("utf-8")
+
+
+def parse_durable_workflow_manifest(text: str) -> set[str]:
+    return {
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+
+
+def workflow_inventory_violations(
+    workflow_texts: dict[str, str], manifest_text: str
+) -> list[str]:
+    failures: list[str] = []
+    actual = set(workflow_texts)
+    allowed = parse_durable_workflow_manifest(manifest_text)
+
+    missing = sorted(allowed - actual)
+    unexpected = sorted(actual - allowed)
+    if missing:
+        failures.append(
+            "durable workflow manifest entries missing from repository: " + ", ".join(missing)
+        )
+    if unexpected:
+        failures.append(
+            "workflow files not declared durable: "
+            + ", ".join(unexpected)
+            + "; parameterize/reuse an existing durable workflow or deliberately update the manifest"
+        )
+
+    for filename, text in sorted(workflow_texts.items()):
+        match = WORKFLOW_NAME.search(text)
+        workflow_name = match.group(1).strip() if match else ""
+        if ONE_SHOT_WORKFLOW.search(filename) or (
+            workflow_name and ONE_SHOT_WORKFLOW.search(workflow_name)
+        ):
+            failures.append(
+                f"one-shot workflow identity is forbidden: {filename} (name={workflow_name!r})"
+            )
+    return failures
+
+
+def pr_changes_workflow_contract(changed_paths) -> bool:
+    return any(
+        path == DURABLE_WORKFLOW_MANIFEST or path.startswith(f"{WORKFLOW_DIR}/")
+        for path in changed_paths
+    )
+
+
+def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> None:
+    pr = api(f"/repos/{REPO}/pulls/{pr_number}")
+    if pr.get("state") != "open" or pr.get("draft"):
+        return
+
+    changed_paths = [item["filename"] for item in pages(f"/repos/{REPO}/pulls/{pr_number}/files")]
+    if not pr_changes_workflow_contract(changed_paths):
+        return
+
+    head_sha = pr["head"]["sha"]
+    ref = parse.quote(head_sha, safe="")
+    manifest_payload = api(
+        f"/repos/{REPO}/contents/{DURABLE_WORKFLOW_MANIFEST}?ref={ref}"
+    )
+    manifest_text = decode_contents_payload(manifest_payload, DURABLE_WORKFLOW_MANIFEST)
+
+    entries = api(f"/repos/{REPO}/contents/{WORKFLOW_DIR}?ref={ref}")
+    workflow_texts: dict[str, str] = {}
+    for entry in entries:
+        name = entry.get("name") or ""
+        if entry.get("type") != "file" or not name.endswith((".yml", ".yaml")):
+            continue
+        payload = api(f"/repos/{REPO}/contents/{WORKFLOW_DIR}/{name}?ref={ref}")
+        workflow_texts[name] = decode_contents_payload(payload, f"{WORKFLOW_DIR}/{name}")
+
+    for finding in workflow_inventory_violations(workflow_texts, manifest_text):
+        failures.append(f"pull request #{pr_number}: {finding}")
+
+    if not failures:
+        print(
+            f"pull request #{pr_number}: durable workflow surface is clean "
+            f"({len(workflow_texts)} workflows)"
+        )
+
+
 def main() -> int:
     failures: list[str] = []
     open_items = list(pages(f"/repos/{REPO}/issues?state=open"))
@@ -173,6 +270,7 @@ def main() -> int:
     # that explicitly name the reviewed commit prefix.
     pr_number = event_pr_number()
     if pr_number is not None:
+        require_durable_workflow_surface(pr_number, failures)
         require_current_head_codex_review(pr_number, failures)
     elif EVENT_NAME in {"schedule", "workflow_dispatch"}:
         for item in open_items:
@@ -185,7 +283,7 @@ def main() -> int:
             print(f"- {finding}", file=sys.stderr)
         return 1
 
-    print("controlled GitHub work descriptions and current-head Codex review evidence are clean")
+    print("controlled GitHub work descriptions, durable workflows, and current-head Codex review evidence are clean")
     return 0
 
 
