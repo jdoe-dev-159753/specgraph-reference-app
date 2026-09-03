@@ -103,7 +103,10 @@ jobs:
             flock -u 9
             lock_held=false
           else
-            echo "R4 embedding cache is cold; holding population lock through healthy startup"
+            echo "R4 embedding cache is cold or incomplete; resetting it before population"
+            docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache" alpine:3.22 \
+              sh -c 'find /cache -mindepth 1 -maxdepth 1 -exec rm -rf {} + && chown -R 10001:10001 /cache'
+            echo "R4 embedding cache reset under population lock"
           fi
 
           docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml up -d --no-build
