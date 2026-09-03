@@ -7,6 +7,7 @@ on:
       - 'frontend/**'
       - 'e2e/**'
       - 'docker/**'
+      - 'scripts/ci/**'
       - 'compose.r4.yaml'
       - '.dockerignore'
       - '.github/workflows/r4-acceptance-ci.yml'
@@ -52,12 +53,20 @@ jobs:
           echo "Checked-out SHA:     $checked_out_sha"
           test "$checked_out_sha" = "$SOURCE_SHA"
 
-      - name: Start exact-head R4 Compose topology
-        env:
-          APP_R4_IMAGE: specgraph-reference-app:r4-acceptance-${{ env.SOURCE_SHA }}
+      - name: Reuse or build immutable exact-head application image
         run: |
-          echo "APP_R4_IMAGE=$APP_R4_IMAGE" >> "$GITHUB_ENV"
-          docker compose -f compose.r4.yaml up -d --build
+          image="$(bash scripts/ci/ensure-app-image.sh \
+            "specgraph-reference-app:r4-${SOURCE_SHA}" . "$SOURCE_SHA")"
+          echo "APP_R4_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Reuse or build immutable Playwright dependency image
+        run: |
+          image="$(bash scripts/ci/ensure-e2e-image.sh)"
+          echo "E2E_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Start exact-head R4 Compose topology without rebuilding image
+        run: |
+          docker compose -f compose.r4.yaml up -d --no-build
 
           for attempt in $(seq 1 180); do
             if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
@@ -73,22 +82,16 @@ jobs:
           exit 1
 
       - name: VFY-AUTH-001 + VFY-ANALYSIS-CONTRACT-001 + VFY-RAG-001 + VFY-HISTORY-001 + VFY-DETERMINISM-001 - Verify complete R4 browser flow
-        run: |
-          docker run --rm --network host --ipc=host \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp \
-            -e npm_config_cache=/tmp/.npm \
-            -e BASE_URL="http://127.0.0.1:${R4_PORT}" \
-            -e EVIDENCE_NAME=r4-complete-flow \
-            -v "$PWD/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
+        env:
+          BASE_URL: http://127.0.0.1:${{ env.R4_PORT }}
+          EVIDENCE_NAME: r4-complete-flow
+        run: bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
 
       - name: Upload complete R4 acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r4-complete-flow-${{ env.SOURCE_SHA }}
+          name: r4-complete-flow-${{ env.SOURCE_SHA }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             e2e/test-results/r4-complete-flow.xml
             e2e/test-results/r4-complete-flow-artifacts/**
@@ -100,6 +103,3 @@ jobs:
         if: always()
         run: |
           docker compose -f compose.r4.yaml down --volumes --remove-orphans 2>/dev/null || true
-          if [ -n "${APP_R4_IMAGE:-}" ]; then
-            docker image rm -f "$APP_R4_IMAGE" 2>/dev/null || true
-          fi
