@@ -85,7 +85,7 @@ PY
   then
     invalid=1
   fi
-done
+}
 
 for source in "${PLANTUML_SOURCES[@]}"; do
   validate_svg "$source" "${source%.puml}.svg"
