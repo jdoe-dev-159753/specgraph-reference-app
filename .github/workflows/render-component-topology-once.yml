@@ -8,7 +8,7 @@ on:
       - '.github/workflows/render-component-topology-once.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   render:
@@ -31,7 +31,21 @@ jobs:
             plantuml/plantuml:1.2026.6 \
             -tsvg docs/assignment/SDD/diagrams/component-topology.puml
           grep -q 'RiskSignalDetectorPort' docs/assignment/SDD/diagrams/component-topology.svg
-          echo '---COMPONENT_TOPOLOGY_SVG_BASE64_BEGIN---'
-          base64 -w0 docs/assignment/SDD/diagrams/component-topology.svg
-          echo
-          echo '---COMPONENT_TOPOLOGY_SVG_BASE64_END---'
+          grep -q 'ADP-DETECTOR-NOOP-001' docs/assignment/SDD/diagrams/component-topology.svg
+          grep -q 'ADP-DETECTOR-BAYES-001' docs/assignment/SDD/diagrams/component-topology.svg
+          grep -q 'ADP-DETECTOR-FUZZY-001' docs/assignment/SDD/diagrams/component-topology.svg
+
+      - name: Commit generated component view only when changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add docs/assignment/SDD/diagrams/component-topology.svg
+          if git diff --cached --quiet; then
+            echo 'Generated SVG already matches the branch.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git diff --cached --check
+          git commit -m 'docs: regenerate detector component topology view'
+          git push origin HEAD:feat/r5-fuzzy-risk-detector
