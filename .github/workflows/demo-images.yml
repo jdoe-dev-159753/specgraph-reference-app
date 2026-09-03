@@ -50,11 +50,10 @@ jobs:
             specgraph-reference-app:r2 \
             specgraph-reference-app:r3 \
             specgraph-reference-app:r4 2>/dev/null || true
-          docker buildx prune -af || true
-          docker builder prune -af || true
-          docker container prune -f || true
-          docker network prune -f || true
-          docker image prune -af || true
+          # The runner is shared with other exact-head jobs. Reclaim only publication-owned
+          # resources here; the capacity gate below fails safely rather than deleting another
+          # job's freshly built image or stopped diagnostic container.
+          docker image prune -f --filter 'until=24h' || true
 
           echo 'Disk after publication cleanup:'
           df -h "$GITHUB_WORKSPACE" || df -h /
@@ -226,6 +225,15 @@ jobs:
             -v "$PWD/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
+
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
+            -e R4_BASELINE_URL=http://127.0.0.1:8084 \
+            -e R4_BAYESIAN_URL=http://127.0.0.1:8085 \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-side-by-side-session-isolation.spec.ts'
 
           docker compose -f compose.oci.yaml down -v --remove-orphans
 
@@ -435,6 +443,15 @@ jobs:
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
 
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
+            -e R4_BASELINE_URL=http://127.0.0.1:8084 \
+            -e R4_BAYESIAN_URL=http://127.0.0.1:8085 \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-side-by-side-session-isolation.spec.ts'
+
           docker compose -f "$compose_ref" ps
           docker compose -f "$compose_ref" down -v --remove-orphans
 
@@ -533,7 +550,5 @@ jobs:
             specgraph-reference-app:r2 \
             specgraph-reference-app:r3 \
             specgraph-reference-app:r4 2>/dev/null || true
-          docker buildx prune -af || true
-          docker builder prune -af || true
           docker logout ghcr.io || true
           df -h "$GITHUB_WORKSPACE" || true
