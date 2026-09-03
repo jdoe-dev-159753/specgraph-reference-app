@@ -139,6 +139,26 @@ class DurableWorkflowTests(unittest.TestCase):
                     any("one-shot workflow identity" in finding for finding in findings)
                 )
 
+    def test_quoted_yaml_name_keys_are_rejected(self):
+        for workflow in ('"name": issue-42-proof\n', "'name': story-43-proof\n"):
+            with self.subTest(workflow=workflow):
+                workflows = {"proof.yml": workflow}
+                findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
+                self.assertTrue(
+                    any("one-shot workflow identity" in finding for finding in findings)
+                )
+
+    def test_full_pull_request_identities_are_rejected(self):
+        workflows = {"pull-request-42-proof.yml": "name: durable-looking-name\n"}
+        findings = guard.workflow_inventory_violations(
+            workflows, "pull-request-42-proof.yml\n"
+        )
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
+        workflows = {"proof.yml": 'name: "Pull Request #42 proof"\n'}
+        findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
     def test_folded_block_workflow_name_is_rejected(self):
         workflows = {
             "proof.yml": "name: >-\n  PR #42 proof\non:\n  workflow_dispatch:\n"
