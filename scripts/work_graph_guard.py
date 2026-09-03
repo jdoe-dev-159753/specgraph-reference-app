@@ -347,20 +347,59 @@ def extract_workflow_name(text: str) -> str:
     """Read the resolved top-level YAML name scalar without a YAML dependency."""
     lines = text.splitlines()
     mapping_lines: list[tuple[int, int, str, str]] = []
-    sequence_lines: list[tuple[int, int, str]] = []
     for index, line in enumerate(lines):
         if not line.strip() or line.lstrip().startswith(("#", "---", "%")):
             continue
         match = YAML_MAPPING_KEY.match(line)
-        if match:
-            indent = len(match.group(1).replace("\t", "    "))
-            if match.group(2) is not None:
-                key = _plain_yaml_scalar(f'"{match.group(2)}"')
-            elif match.group(3) is not None:
-                key = _plain_yaml_scalar(f"'{match.group(3)}'")
-            else:
-                key = match.group(4)
-            mapping_lines.append((index, indent, key, match.group(5)))
+        if not match:
+            continue
+        indent = len(match.group(1).replace("\t", "    "))
+        if match.group(2) is not None:
+            key = _plain_yaml_scalar(f'"{match.group(2)}"')
+        elif match.group(3) is not None:
+            key = _plain_yaml_scalar(f"'{match.group(3)}'")
+        else:
+            key = match.group(4)
+        mapping_lines.append((index, indent, key, match.group(5)))
+
+    block_scalar_lines: set[int] = set()
+    for index, indent, _, raw_value in mapping_lines:
+        header = _strip_yaml_inline_comment(raw_value.strip())
+        if not re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", header):
+            continue
+        for continuation_index in range(index + 1, len(lines)):
+            continuation = lines[continuation_index]
+            if not continuation.strip():
+                block_scalar_lines.add(continuation_index)
+                continue
+            continuation_indent = len(continuation) - len(continuation.lstrip(" "))
+            if continuation_indent <= indent:
+                break
+            block_scalar_lines.add(continuation_index)
+
+    for index, indent, _, raw_value in mapping_lines:
+        value = raw_value.strip()
+        is_multiline_double = value.startswith('"') and not _double_quoted_scalar_is_closed(value)
+        is_multiline_single = value.startswith("'") and not _single_quoted_scalar_is_closed(value)
+        if not (is_multiline_double or is_multiline_single):
+            continue
+        for continuation_index in range(index + 1, len(lines)):
+            continuation = lines[continuation_index]
+            if not continuation.strip():
+                block_scalar_lines.add(continuation_index)
+                continue
+            continuation_indent = len(continuation) - len(continuation.lstrip(" "))
+            if continuation_indent <= indent:
+                break
+            block_scalar_lines.add(continuation_index)
+
+    mapping_lines = [
+        item for item in mapping_lines if item[0] not in block_scalar_lines
+    ]
+
+    sequence_lines: list[tuple[int, int, str]] = []
+    for index, line in enumerate(lines):
+        if index in block_scalar_lines:
             continue
         sequence = YAML_SEQUENCE_ENTRY.match(line)
         if sequence:
@@ -372,33 +411,40 @@ def extract_workflow_name(text: str) -> str:
     root_indent = min(item[1] for item in mapping_lines)
     root_entries = [item for item in mapping_lines if item[1] == root_indent]
 
+    name_entry = next((item for item in root_entries if item[2] == "name"), None)
+    if name_entry is None:
+        return ""
+    name_index, _, _, name_raw_value = name_entry
+
     anchors: dict[str, str] = {}
-    scalar_entries = [
-        (index, indent, raw_value)
-        for index, indent, _, raw_value in mapping_lines
-    ] + sequence_lines
+    scalar_entries = sorted(
+        [
+            (index, indent, raw_value)
+            for index, indent, _, raw_value in mapping_lines
+        ] + sequence_lines,
+        key=lambda entry: entry[0],
+    )
     for index, indent, raw_value in scalar_entries:
+        if index >= name_index:
+            break
         value = _extract_yaml_scalar(lines, index, indent, raw_value)
         anchor = re.match(r"&([A-Za-z0-9_-]+)(?:\s+)(.+)$", value, re.DOTALL)
         if anchor:
             anchors[anchor.group(1)] = _plain_yaml_scalar(anchor.group(2))
 
-    for index, _, key, raw_value in root_entries:
-        if key != "name":
-            continue
-        value = _extract_yaml_scalar(lines, index, root_indent, raw_value)
-        if not value:
+    value = _extract_yaml_scalar(lines, name_index, root_indent, name_raw_value)
+    if not value:
+        return UNRESOLVED_WORKFLOW_NAME
+    if value.startswith("*"):
+        alias = re.fullmatch(r"\*([A-Za-z0-9_-]+)", value)
+        if not alias:
             return UNRESOLVED_WORKFLOW_NAME
-        if value.startswith("*"):
-            alias = re.fullmatch(r"\*([A-Za-z0-9_-]+)", value)
-            if not alias:
-                return UNRESOLVED_WORKFLOW_NAME
-            return anchors.get(alias.group(1), UNRESOLVED_WORKFLOW_NAME)
-        if value.startswith('"') and not _double_quoted_scalar_is_closed(value):
-            return UNRESOLVED_WORKFLOW_NAME
-        if value.startswith("'") and not _single_quoted_scalar_is_closed(value):
-            return UNRESOLVED_WORKFLOW_NAME
-        return value
+        return anchors.get(alias.group(1), UNRESOLVED_WORKFLOW_NAME)
+    if value.startswith('"') and not _double_quoted_scalar_is_closed(value):
+        return UNRESOLVED_WORKFLOW_NAME
+    if value.startswith("'") and not _single_quoted_scalar_is_closed(value):
+        return UNRESOLVED_WORKFLOW_NAME
+    return value
     return ""
 
 def workflow_inventory_violations(
