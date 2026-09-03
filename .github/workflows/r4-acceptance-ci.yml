@@ -7,17 +7,16 @@ on:
       - 'frontend/**'
       - 'e2e/**'
       - 'docker/**'
+      - 'scripts/ci/**'
       - 'compose.r4.yaml'
+      - 'compose.r4.ci-cache.yaml'
       - '.dockerignore'
       - '.github/workflows/r4-acceptance-ci.yml'
   workflow_dispatch:
 
-# compose.r4.yaml binds the candidate to fixed host port 8086 on the shared
-# Docker runner. Serialize this workflow across PRs/runs so a second candidate
-# cannot fail merely because another R4 acceptance proof owns that port.
 concurrency:
-  group: r4-acceptance-ci-shared-host-fixed-port
-  cancel-in-progress: false
+  group: r4-acceptance-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -27,7 +26,6 @@ jobs:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      R4_PORT: '8086'
       COMPOSE_PROJECT_NAME: r4-acceptance-${{ github.run_id }}
     steps:
       - name: Clean container-owned outputs before checkout
@@ -39,6 +37,16 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Allocate run-isolated acceptance port
+        run: |
+          port=$((56000 + (GITHUB_RUN_ID % 9000)))
+          if [ "$port" -lt 56000 ] || [ "$port" -gt 64999 ]; then
+            echo "Calculated R4 acceptance port is outside the reserved CI range: $port" >&2
+            exit 1
+          fi
+          echo "R4_PORT=$port" >> "$GITHUB_ENV"
+          printf 'Allocated R4 acceptance port %s for run %s\n' "$port" "$GITHUB_RUN_ID"
+
       - name: Assert exact validated source revision
         run: |
           checked_out_sha="$(git rev-parse HEAD)"
@@ -46,43 +54,151 @@ jobs:
           echo "Checked-out SHA:     $checked_out_sha"
           test "$checked_out_sha" = "$SOURCE_SHA"
 
-      - name: Start exact-head R4 Compose topology
-        env:
-          APP_R4_IMAGE: specgraph-reference-app:r4-acceptance-${{ env.SOURCE_SHA }}
+      - name: Reuse or build immutable exact-head application image
         run: |
-          echo "APP_R4_IMAGE=$APP_R4_IMAGE" >> "$GITHUB_ENV"
-          docker compose -f compose.r4.yaml up -d --build
+          image="$(bash scripts/ci/ensure-app-image.sh \
+            "specgraph-reference-app:r4-${SOURCE_SHA}" . "$SOURCE_SHA")"
+          echo "APP_R4_IMAGE=$image" >> "$GITHUB_ENV"
 
+      - name: Reuse or build immutable Playwright dependency image
+        run: |
+          image="$(bash scripts/ci/ensure-e2e-image.sh)"
+          echo "E2E_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Prepare persistent R4 embedding model cache
+        run: |
+          volume="$(bash scripts/ci/ensure-r4-embedding-cache.sh)"
+          echo "R4_EMBEDDING_CACHE_VOLUME=$volume" >> "$GITHUB_ENV"
+          echo "R4 embedding cache volume: $volume"
+
+      - name: Start exact-head R4 topology and serialize first cache population
+        run: |
+          set -euo pipefail
+          command -v flock >/dev/null
+
+          lock_file="/tmp/${R4_EMBEDDING_CACHE_VOLUME}.lock"
+          exec 9>"$lock_file"
+          flock 9
+          lock_held=true
+
+          cleanup_locked_writer() {
+            status=$?
+            trap - EXIT
+            if [ "${lock_held:-false}" = true ]; then
+              echo "Stopping cold-cache writer before releasing population lock"
+              docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml stop r4 2>/dev/null || true
+              docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml rm -f r4 2>/dev/null || true
+            fi
+            exit "$status"
+          }
+          trap cleanup_locked_writer EXIT
+          trap 'exit 143' TERM
+          trap 'exit 130' INT
+
+          cache_ready=false
+          if docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
+            sh -c 'test -f /cache/.specgraph-cache-ready'; then
+            cache_ready=true
+            echo "R4 embedding cache already validated; releasing population lock before startup"
+            flock -u 9
+            lock_held=false
+          else
+            echo "R4 embedding cache is cold or incomplete; resetting it before population"
+            docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache" alpine:3.22 \
+              sh -c 'find /cache -mindepth 1 -maxdepth 1 -exec rm -rf {} + && chown -R 10001:10001 /cache'
+            echo "R4 embedding cache reset under population lock"
+          fi
+
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml up -d --no-build
+
+          healthy=false
           for attempt in $(seq 1 180); do
             if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
               echo "R4 acceptance topology healthy after ${attempt} attempts"
-              docker compose -f compose.r4.yaml ps
-              exit 0
+              docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml ps
+              healthy=true
+              break
             fi
             sleep 2
           done
 
-          docker compose -f compose.r4.yaml ps
-          docker compose -f compose.r4.yaml logs --no-color postgres r4
-          exit 1
+          if [ "$healthy" != true ]; then
+            docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml ps
+            docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml logs --no-color postgres r4
+            exit 1
+          fi
+
+          if [ "$cache_ready" != true ]; then
+            file_count="$(docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
+              sh -c 'find /cache -type f | wc -l')"
+            echo "Cold-start embedding cache files after healthy startup: $file_count"
+            test "$file_count" -gt 0
+            docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache" alpine:3.22 \
+              sh -c 'touch /cache/.specgraph-cache-ready && chown 10001:10001 /cache/.specgraph-cache-ready'
+            echo "R4 embedding cache validated and marked ready"
+            flock -u 9
+            lock_held=false
+          fi
 
       - name: VFY-AUTH-001 + VFY-ANALYSIS-CONTRACT-001 + VFY-RAG-001 + VFY-HISTORY-001 + VFY-DETERMINISM-001 - Verify complete R4 browser flow
+        env:
+          BASE_URL: http://127.0.0.1:${{ env.R4_PORT }}
+          EVIDENCE_NAME: r4-complete-flow
+        run: bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
+
+      - name: Assert transformer resources persisted outside disposable application container
         run: |
-          docker run --rm --network host --ipc=host \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp \
-            -e npm_config_cache=/tmp/.npm \
-            -e BASE_URL="http://127.0.0.1:${R4_PORT}" \
-            -e EVIDENCE_NAME=r4-complete-flow \
-            -v "$PWD/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
+          docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
+            sh -c 'test -f /cache/.specgraph-cache-ready'
+          file_count="$(docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
+            sh -c 'find /cache -type f ! -name .specgraph-cache-ready | wc -l')"
+          echo "Persistent embedding resource files: $file_count"
+          test "$file_count" -gt 0
+
+      - name: Prove warm exact-head R4 startup consumes the retained cache
+        run: |
+          set -euo pipefail
+          offline_override="$RUNNER_TEMP/r4-cache-origin-block.yaml"
+          cat > "$offline_override" <<'YAML'
+          services:
+            r4:
+              extra_hosts:
+                - "raw.githubusercontent.com:127.0.0.1"
+                - "media.githubusercontent.com:127.0.0.1"
+          YAML
+
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml stop r4
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml rm -f r4
+          docker compose \
+            -f compose.r4.yaml \
+            -f compose.r4.ci-cache.yaml \
+            -f "$offline_override" \
+            up -d --no-build r4
+
+          healthy=false
+          for attempt in $(seq 1 120); do
+            if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
+              healthy=true
+              echo "Warm-cache R4 restart succeeded with embedding resource origins blocked"
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$healthy" != true ]; then
+            docker compose \
+              -f compose.r4.yaml \
+              -f compose.r4.ci-cache.yaml \
+              -f "$offline_override" \
+              logs --no-color postgres r4
+            exit 1
+          fi
 
       - name: Upload complete R4 acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r4-complete-flow-${{ env.SOURCE_SHA }}
+          name: r4-complete-flow-${{ env.SOURCE_SHA }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             e2e/test-results/r4-complete-flow.xml
             e2e/test-results/r4-complete-flow-artifacts/**
@@ -90,10 +206,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Reclaim isolated R4 Compose topology
+      - name: Reclaim isolated R4 Compose topology but retain external model cache
         if: always()
         run: |
-          docker compose -f compose.r4.yaml down --volumes --remove-orphans 2>/dev/null || true
-          if [ -n "${APP_R4_IMAGE:-}" ]; then
-            docker image rm -f "$APP_R4_IMAGE" 2>/dev/null || true
-          fi
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml down --volumes --remove-orphans 2>/dev/null || true

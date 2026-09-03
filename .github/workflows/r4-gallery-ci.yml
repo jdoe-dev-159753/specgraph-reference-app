@@ -1,0 +1,124 @@
+name: r4-gallery-ci
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: r4-gallery-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-gallery:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        include:
+          - variant: baseline
+            port_offset: '0'
+            profiles: r4
+            expected_detector: none
+          - variant: bayesian
+            port_offset: '1'
+            profiles: r4,bayesian-detector
+            expected_detector: beta-binomial-review-elevation-v1
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      R4_PROFILES: ${{ matrix.profiles }}
+      COMPOSE_PROJECT_NAME: specgraph-r4-gallery-${{ matrix.variant }}-${{ github.run_id }}
+      EVIDENCE_NAME: r4-${{ matrix.variant }}
+      EXPECT_DETECTOR: ${{ matrix.expected_detector }}
+
+    steps:
+      - name: Clean container-owned outputs before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints'
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Allocate run-isolated gallery port
+        run: |
+          port=$((20000 + (GITHUB_RUN_ID % 18000) * 2 + ${{ matrix.port_offset }}))
+          if [ "$port" -lt 20000 ] || [ "$port" -gt 55999 ]; then
+            echo "Calculated gallery port is outside the reserved CI range: $port" >&2
+            exit 1
+          fi
+          echo "R4_PORT=$port" >> "$GITHUB_ENV"
+          printf 'Allocated R4 gallery port %s for run %s variant %s\n' "$port" "$GITHUB_RUN_ID" '${{ matrix.variant }}'
+
+      - name: Assert exact source and gallery configuration
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          docker compose -f compose.r4.yaml config --quiet
+          docker compose -f compose.r4.yaml config | grep -q "SPRING_PROFILES_ACTIVE: ${R4_PROFILES}"
+          printf 'variant=%s port=%s profiles=%s expectedDetector=%s\n' \
+            '${{ matrix.variant }}' "$R4_PORT" "$R4_PROFILES" "$EXPECT_DETECTOR"
+
+      - name: Reuse or build immutable exact-head application image
+        run: |
+          image="$(bash scripts/ci/ensure-app-image.sh \
+            "specgraph-reference-app:r4-${SOURCE_SHA}" . "$SOURCE_SHA")"
+          echo "APP_R4_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Reuse or build immutable Playwright dependency image
+        run: |
+          image="$(bash scripts/ci/ensure-e2e-image.sh)"
+          echo "E2E_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Start isolated R4 gallery variant without rebuilding image
+        run: |
+          docker compose -f compose.r4.yaml up -d --no-build
+          for attempt in $(seq 1 180); do
+            if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
+              docker compose -f compose.r4.yaml ps
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f compose.r4.yaml logs --no-color postgres r4
+          exit 1
+
+      - name: Verify configured R4 flow and capture Playwright screenshot
+        env:
+          BASE_URL: http://127.0.0.1:${{ env.R4_PORT }}
+        run: bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
+
+      - name: Collect reviewer screenshot
+        if: always()
+        run: |
+          mkdir -p "e2e/reviewer-evidence/${{ matrix.variant }}"
+          find e2e/test-results -type f -name '*.png' -exec cp -v {} "e2e/reviewer-evidence/${{ matrix.variant }}/" \; 2>/dev/null || true
+          printf '%s\n' \
+            "sourceSha=$SOURCE_SHA" \
+            "variant=${{ matrix.variant }}" \
+            "port=$R4_PORT" \
+            "profiles=$R4_PROFILES" \
+            "expectedDetector=$EXPECT_DETECTOR" \
+            "applicationImage=$APP_R4_IMAGE" \
+            "stage2=pgvector+all-MiniLM-L6-v2" \
+            "stage3=deterministic" \
+            > "e2e/reviewer-evidence/${{ matrix.variant }}/provenance.txt"
+
+      - name: Upload R4 gallery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r4-gallery-${{ matrix.variant }}-${{ env.SOURCE_SHA }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: |
+            e2e/reviewer-evidence/${{ matrix.variant }}/**
+            e2e/test-results/**
+            e2e/playwright-report/**
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Reclaim isolated gallery variant
+        if: always()
+        run: |
+          docker compose -f compose.r4.yaml down -v --remove-orphans 2>/dev/null || true
