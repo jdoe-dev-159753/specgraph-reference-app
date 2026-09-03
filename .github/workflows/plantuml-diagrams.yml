@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'docs/assignment/**/*.puml'
+      - 'docs/assignment/**/*.dot'
       - 'docs/assignment/**/*.svg'
       - 'scripts/render_plantuml.sh'
       - '.github/workflows/plantuml-diagrams.yml'
@@ -11,6 +12,7 @@ on:
     branches: [main]
     paths:
       - 'docs/assignment/**/*.puml'
+      - 'docs/assignment/**/*.dot'
       - 'docs/assignment/**/*.svg'
       - 'scripts/render_plantuml.sh'
       - '.github/workflows/plantuml-diagrams.yml'
@@ -36,12 +38,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Render controlled PlantUML sources
+      - name: Render controlled diagram sources
         run: bash scripts/render_plantuml.sh
       - name: Reject stale or missing generated SVGs
         run: |
           if [[ -n "$(git status --porcelain -- docs/assignment)" ]]; then
-            echo 'Committed PlantUML SVGs are stale or missing:' >&2
+            echo 'Committed controlled diagram SVGs are stale or missing:' >&2
             git status --short -- docs/assignment >&2
             git diff -- docs/assignment >&2 || true
             exit 1
@@ -57,17 +59,17 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 1
-      - name: Render controlled PlantUML sources
+      - name: Render controlled diagram sources
         run: bash scripts/render_plantuml.sh
       - name: Commit regenerated SVGs when needed
         run: |
           if [[ -z "$(git status --porcelain -- docs/assignment)" ]]; then
-            echo 'All committed SVGs are already current.'
+            echo 'All committed controlled SVGs are already current.'
             exit 0
           fi
           git add 'docs/assignment/**/*.svg'
           git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'docs: regenerate PlantUML SVG views'
+          git commit -m 'docs: regenerate controlled diagram SVG views'
           git push origin "HEAD:${GITHUB_REF_NAME}"
