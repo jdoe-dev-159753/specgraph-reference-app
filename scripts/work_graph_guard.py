@@ -33,8 +33,8 @@ YAML_MAPPING_KEY = re.compile(
     r"^(\s*)(?:\"((?:\\.|[^\"])*)\"|'((?:''|[^'])*)'|([A-Za-z0-9_.-]+))\s*:\s*(.*)$"
 )
 ONE_SHOT_WORKFLOW = re.compile(
-    r"(?:^|[-_.\s])(?:pr|pull(?:[-_.\s]+request)?|issue|discovery|story|fix)"
-    r"[-_#.\s]*\d+(?=[-_.\s]|$)",
+    r"(?<![A-Za-z0-9])(?:pr|pull(?:[^A-Za-z0-9]+request)?|issue|discovery|story|fix)"
+    r"[^A-Za-z0-9]*\d+(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
 
@@ -319,8 +319,30 @@ def _complete_flow_scalar(
     return combined
 
 
+def _extract_yaml_scalar(
+    lines: list[str], index: int, root_indent: int, raw_value: str
+) -> str:
+    value = _complete_flow_scalar(lines, index, root_indent, raw_value.strip())
+    block_header = _strip_yaml_inline_comment(value)
+    block = re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", block_header)
+    if not block:
+        return _plain_yaml_scalar(value)
+
+    parts: list[str] = []
+    for continuation in lines[index + 1 :]:
+        if not continuation.strip():
+            parts.append("")
+            continue
+        continuation_indent = len(continuation) - len(continuation.lstrip(" "))
+        if continuation_indent <= root_indent:
+            break
+        parts.append(continuation.strip())
+    separator = "\n" if block.group(1) == "|" else " "
+    return separator.join(parts).strip()
+
+
 def extract_workflow_name(text: str) -> str:
-    """Read the top-level YAML `name` scalar without adding a YAML dependency."""
+    """Read the resolved top-level YAML name scalar without a YAML dependency."""
     lines = text.splitlines()
     mapping_lines: list[tuple[int, int, str, str]] = []
     for index, line in enumerate(lines):
@@ -341,30 +363,24 @@ def extract_workflow_name(text: str) -> str:
     if not mapping_lines:
         return ""
     root_indent = min(item[1] for item in mapping_lines)
-    for index, indent, key, raw_value in mapping_lines:
-        if indent != root_indent or key != "name":
+    root_entries = [item for item in mapping_lines if item[1] == root_indent]
+
+    anchors: dict[str, str] = {}
+    for index, _, _, raw_value in root_entries:
+        value = _extract_yaml_scalar(lines, index, root_indent, raw_value)
+        anchor = re.match(r"&([A-Za-z0-9_-]+)(?:\s+)(.+)$", value, re.DOTALL)
+        if anchor:
+            anchors[anchor.group(1)] = _plain_yaml_scalar(anchor.group(2))
+
+    for index, _, key, raw_value in root_entries:
+        if key != "name":
             continue
-        value = _complete_flow_scalar(
-            lines, index, root_indent, raw_value.strip()
-        )
-        block_header = _strip_yaml_inline_comment(value)
-        block = re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", block_header)
-        if not block:
-            return _plain_yaml_scalar(value)
-
-        parts: list[str] = []
-        for continuation in lines[index + 1 :]:
-            if not continuation.strip():
-                parts.append("")
-                continue
-            continuation_indent = len(continuation) - len(continuation.lstrip(" "))
-            if continuation_indent <= root_indent:
-                break
-            parts.append(continuation.strip())
-        separator = "\n" if block.group(1) == "|" else " "
-        return separator.join(parts).strip()
+        value = _extract_yaml_scalar(lines, index, root_indent, raw_value)
+        alias = re.fullmatch(r"\*([A-Za-z0-9_-]+)", value)
+        if alias:
+            return anchors.get(alias.group(1), "")
+        return value
     return ""
-
 
 def workflow_inventory_violations(
     workflow_texts: dict[str, str], manifest_text: str

@@ -186,6 +186,28 @@ class DurableWorkflowTests(unittest.TestCase):
                     any("one-shot workflow identity" in finding for finding in findings)
                 )
 
+    def test_punctuation_delimited_workflow_identities_are_rejected(self):
+        for workflow_name in ("Validate (Issue #42)", "Validate [story-7]"):
+            with self.subTest(workflow_name=workflow_name):
+                workflows = {"proof.yml": f"name: {workflow_name}\n"}
+                findings = guard.workflow_inventory_violations(
+                    workflows, "proof.yml\n"
+                )
+                self.assertTrue(
+                    any("one-shot workflow identity" in finding for finding in findings)
+                )
+
+    def test_aliased_workflow_name_is_rejected(self):
+        workflow = (
+            'identity: &identity "issue-42-proof"\n'
+            "name: *identity\n"
+        )
+        self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
+        findings = guard.workflow_inventory_violations(
+            {"proof.yml": workflow}, "proof.yml\n"
+        )
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
     def test_full_pull_request_identities_are_rejected(self):
         workflows = {"pull-request-42-proof.yml": "name: durable-looking-name\n"}
         findings = guard.workflow_inventory_violations(workflows, "pull-request-42-proof.yml\n")
