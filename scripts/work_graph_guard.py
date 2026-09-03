@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import re
@@ -21,6 +22,7 @@ MIN_REVIEWED_SHA_PREFIX = 10
 WORKFLOW_DIR = ".github/workflows"
 DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
+TRUSTED_GUARD_WORKFLOW_SHA256 = "f15bad4b691b95abb8b0cf7f2e3b6976dc3ca3d9ad5323097aacb53f394a5fae"
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -228,97 +230,20 @@ def canonical_workflow_name_violations(filename: str, text: str) -> list[str]:
 
 
 
-def _significant_block(lines: list[str], header: str) -> list[str] | None:
-    """Return one canonical root block, excluding comments and blank lines."""
-    matches = [index for index, line in enumerate(lines) if line == header]
-    if len(matches) != 1:
-        return None
-    start = matches[0]
-    block: list[str] = []
-    for line in lines[start + 1 :]:
-        if line and not line[0].isspace():
-            break
-        if line.strip() and not line.lstrip().startswith("#"):
-            block.append(line)
-    return block
-
 
 def trusted_guard_workflow_contract_violations(text: str) -> list[str]:
-    """Validate the bounded security contract of the privileged guard workflow."""
-    failures: list[str] = []
-    lines = text.splitlines()
+    """Pin the complete privileged workflow so YAML overrides cannot weaken it."""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    if actual == TRUSTED_GUARD_WORKFLOW_SHA256:
+        return []
+    return [
+        "work-graph-guard.yml: privileged workflow contract changed "
+        f"(expected sha256 {TRUSTED_GUARD_WORKFLOW_SHA256}, got {actual}); "
+        "review the complete trusted trigger/permission/checkout/token contract, "
+        "then deliberately update this digest in the same reviewed change"
+    ]
 
-    trigger_block = _significant_block(lines, "on:")
-    required_triggers = {
-        "  issues:", "    types: [opened, edited, reopened]",
-        "  pull_request_target:", "    types: [opened, edited, synchronize, reopened, ready_for_review]",
-        "  pull_request_review:", "    types: [submitted]",
-        "  issue_comment:", "    types: [created]",
-        "  schedule:", "    - cron: '17 4 * * *'", "  workflow_dispatch:",
-    }
-    if trigger_block is None or set(trigger_block) != required_triggers or len(trigger_block) != len(required_triggers):
-        failures.append("work-graph-guard.yml: privileged trigger contract is missing, duplicated, or non-canonical")
-
-    permission_block = _significant_block(lines, "permissions:")
-    required_permissions = {"  contents: read", "  issues: read", "  pull-requests: read"}
-    if permission_block is None or set(permission_block) != required_permissions or len(permission_block) != len(required_permissions):
-        failures.append("work-graph-guard.yml: permissions must be exactly contents/issues/pull-requests read")
-
-    required_once = (
-        "  guard:", "    runs-on: ubuntu-latest",
-        "      - uses: actions/checkout@v6",
-        "          ref: ${{ github.workflow_sha }}",
-        "          path: .workgraph-trusted",
-        "          persist-credentials: false",
-        "        working-directory: .workgraph-trusted",
-        "        run: python3 -m unittest scripts/test_work_graph_guard.py",
-        "        env:",
-        "          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
-        "        run: python3 scripts/work_graph_guard.py",
-    )
-    for required in required_once:
-        if lines.count(required) != 1:
-            failures.append(f"work-graph-guard.yml: required trusted guard line must occur exactly once: {required.strip()}")
-
-    step_starts = [line for line in lines if line.startswith("      - ")]
-    if len(step_starts) != 3:
-        failures.append("work-graph-guard.yml: guard job must contain exactly checkout, test, and guard steps")
-    if sum(line.startswith("      - uses: actions/checkout@") for line in lines) != 1:
-        failures.append("work-graph-guard.yml: exactly one canonical trusted checkout is required")
-    if sum(line.startswith("          ref:") for line in lines) != 1:
-        failures.append("work-graph-guard.yml: checkout ref must not be omitted or overridden")
-    if sum(line.startswith("          path:") for line in lines) != 1:
-        failures.append("work-graph-guard.yml: trusted checkout path must not be omitted or overridden")
-    if sum(line.startswith("          persist-credentials:") for line in lines) != 1:
-        failures.append("work-graph-guard.yml: checkout credential persistence must not be overridden")
-    if sum(line.startswith("        working-directory:") for line in lines) != 2:
-        failures.append("work-graph-guard.yml: both executable steps must use the trusted checkout")
-    if sum(line.startswith("        run:") for line in lines) != 2:
-        failures.append("work-graph-guard.yml: trusted test and guard commands must not be omitted or overridden")
-    if sum("GITHUB_TOKEN:" in line for line in lines) != 1:
-        failures.append("work-graph-guard.yml: GITHUB_TOKEN must occur exactly once in the guard step")
-
-    jobs_block = _significant_block(lines, "jobs:")
-    if jobs_block is None:
-        failures.append("work-graph-guard.yml: canonical jobs block is required")
-    else:
-        direct_job_keys = [line for line in jobs_block if line.startswith("  ") and not line.startswith("    ")]
-        if direct_job_keys != ["  guard:"]:
-            failures.append("work-graph-guard.yml: the privileged workflow must contain only the guard job")
-
-    positions = []
-    for required in (
-        "      - uses: actions/checkout@v6",
-        "        run: python3 -m unittest scripts/test_work_graph_guard.py",
-        "        run: python3 scripts/work_graph_guard.py",
-    ):
-        try:
-            positions.append(lines.index(required))
-        except ValueError:
-            pass
-    if len(positions) == 3 and positions != sorted(positions):
-        failures.append("work-graph-guard.yml: checkout, trusted tests, and guard must execute in order")
-    return failures
 
 def workflow_inventory_violations(
     workflow_texts: dict[str, str], manifest_text: str
