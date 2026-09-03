@@ -107,6 +107,7 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: r4
+      SERVER_SERVLET_SESSION_COOKIE_NAME: SPECGRAPH_R4_BASELINE_SESSION
       SPRING_DATASOURCE_URL: jdbc:postgresql://r4-postgres-baseline:5432/specgraph
       SPRING_DATASOURCE_USERNAME: specgraph
       SPRING_DATASOURCE_PASSWORD: specgraph
@@ -145,6 +146,7 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: r4,bayesian-detector
+      SERVER_SERVLET_SESSION_COOKIE_NAME: SPECGRAPH_R4_BAYESIAN_SESSION
       SPRING_DATASOURCE_URL: jdbc:postgresql://r4-postgres-bayesian:5432/specgraph
       SPRING_DATASOURCE_USERNAME: specgraph
       SPRING_DATASOURCE_PASSWORD: specgraph
