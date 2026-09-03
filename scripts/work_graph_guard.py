@@ -29,9 +29,12 @@ PREFIX = re.compile(
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
 CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
 REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
-YAML_MAPPING_KEY = re.compile(r"^(\s*)([A-Za-z0-9_.-]+)\s*:\s*(.*)$")
+YAML_MAPPING_KEY = re.compile(
+    r'''^(\s*)(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_.-]+))\s*:\s*(.*)$'''
+)
 ONE_SHOT_WORKFLOW = re.compile(
-    r"(?:^|[-_.\s])(pr|pull|issue|discovery|story|fix)[-_#.\s]*\d+(?=[-_.\s]|$)",
+    r"(?:^|[-_.\s])(?:pr|pull(?:[-_.\s]+request)?|issue|discovery|story|fix)"
+    r"[-_#.\s]*\d+(?=[-_.\s]|$)",
     re.IGNORECASE,
 )
 
@@ -208,7 +211,11 @@ def extract_workflow_name(text: str) -> str:
         if not match:
             continue
         indent = len(match.group(1).replace("\t", "    "))
-        mapping_lines.append((index, indent, match.group(2), match.group(3)))
+        key = next(
+            (candidate for candidate in match.group(2, 3, 4) if candidate is not None),
+            "",
+        )
+        mapping_lines.append((index, indent, key, match.group(5)))
 
     if not mapping_lines:
         return ""
