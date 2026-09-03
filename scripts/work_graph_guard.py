@@ -30,7 +30,7 @@ PROTECTED_ASSET_SHA256 = {
         {"0e6865bb537e7b837ff47ec501a09b8e2a06d674fc391740b89a7ccd6c5b767c"}
     ),
     "scripts/test_work_graph_guard.py": frozenset(
-        {"2f881fffc0cc02ca5c937cb55c628e924c9b2eac9f0630d59410d8d5805db552"}
+        {"ae025c5ff30805c3dfea17d85377e940ee0cb914feae6c07e39f3e283e932c0d"}
     ),
 }
 
