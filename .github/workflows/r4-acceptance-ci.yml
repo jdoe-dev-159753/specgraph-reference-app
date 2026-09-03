@@ -9,6 +9,7 @@ on:
       - 'docker/**'
       - 'scripts/ci/**'
       - 'compose.r4.yaml'
+      - 'compose.r4.ci-cache.yaml'
       - '.dockerignore'
       - '.github/workflows/r4-acceptance-ci.yml'
   workflow_dispatch:
@@ -64,21 +65,27 @@ jobs:
           image="$(bash scripts/ci/ensure-e2e-image.sh)"
           echo "E2E_IMAGE=$image" >> "$GITHUB_ENV"
 
+      - name: Prepare persistent R4 embedding model cache
+        run: |
+          volume="$(bash scripts/ci/ensure-r4-embedding-cache.sh)"
+          echo "R4_EMBEDDING_CACHE_VOLUME=$volume" >> "$GITHUB_ENV"
+          echo "R4 embedding cache volume: $volume"
+
       - name: Start exact-head R4 Compose topology without rebuilding image
         run: |
-          docker compose -f compose.r4.yaml up -d --no-build
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml up -d --no-build
 
           for attempt in $(seq 1 180); do
             if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
               echo "R4 acceptance topology healthy after ${attempt} attempts"
-              docker compose -f compose.r4.yaml ps
+              docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml ps
               exit 0
             fi
             sleep 2
           done
 
-          docker compose -f compose.r4.yaml ps
-          docker compose -f compose.r4.yaml logs --no-color postgres r4
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml ps
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml logs --no-color postgres r4
           exit 1
 
       - name: VFY-AUTH-001 + VFY-ANALYSIS-CONTRACT-001 + VFY-RAG-001 + VFY-HISTORY-001 + VFY-DETERMINISM-001 - Verify complete R4 browser flow
@@ -86,6 +93,13 @@ jobs:
           BASE_URL: http://127.0.0.1:${{ env.R4_PORT }}
           EVIDENCE_NAME: r4-complete-flow
         run: bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
+
+      - name: Assert transformer resources persisted outside disposable application container
+        run: |
+          file_count="$(docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
+            sh -c 'find /cache -type f | wc -l')"
+          echo "Persistent embedding cache files: $file_count"
+          test "$file_count" -gt 0
 
       - name: Upload complete R4 acceptance evidence
         if: always()
@@ -99,7 +113,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Reclaim isolated R4 Compose topology
+      - name: Reclaim isolated R4 Compose topology but retain external model cache
         if: always()
         run: |
-          docker compose -f compose.r4.yaml down --volumes --remove-orphans 2>/dev/null || true
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml down --volumes --remove-orphans 2>/dev/null || true
