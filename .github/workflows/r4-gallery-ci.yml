@@ -6,6 +6,8 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'e2e/**'
+      - 'docker/**'
+      - '.dockerignore'
       - 'compose.r4.yaml'
       - 'docs/reviewer/**'
       - 'README.md'
@@ -28,11 +30,11 @@ jobs:
       matrix:
         include:
           - variant: baseline
-            port: '18084'
+            port: '18184'
             profiles: r4
             expected_detector: none
           - variant: bayesian
-            port: '18085'
+            port: '18185'
             profiles: r4,bayesian-detector
             expected_detector: beta-binomial-review-elevation-v1
     env:
