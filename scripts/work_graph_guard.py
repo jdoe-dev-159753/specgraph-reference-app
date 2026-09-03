@@ -20,6 +20,7 @@ CODEX_APP_ID = 1144995
 MIN_REVIEWED_SHA_PREFIX = 10
 WORKFLOW_DIR = ".github/workflows"
 DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
+UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -386,9 +387,17 @@ def extract_workflow_name(text: str) -> str:
         if key != "name":
             continue
         value = _extract_yaml_scalar(lines, index, root_indent, raw_value)
-        alias = re.fullmatch(r"\*([A-Za-z0-9_-]+)", value)
-        if alias:
-            return anchors.get(alias.group(1), "")
+        if not value:
+            return UNRESOLVED_WORKFLOW_NAME
+        if value.startswith("*"):
+            alias = re.fullmatch(r"\*([A-Za-z0-9_-]+)", value)
+            if not alias:
+                return UNRESOLVED_WORKFLOW_NAME
+            return anchors.get(alias.group(1), UNRESOLVED_WORKFLOW_NAME)
+        if value.startswith('"') and not _double_quoted_scalar_is_closed(value):
+            return UNRESOLVED_WORKFLOW_NAME
+        if value.startswith("'") and not _single_quoted_scalar_is_closed(value):
+            return UNRESOLVED_WORKFLOW_NAME
         return value
     return ""
 
@@ -414,7 +423,12 @@ def workflow_inventory_violations(
 
     for filename, text in sorted(workflow_texts.items()):
         workflow_name = extract_workflow_name(text)
-        if ONE_SHOT_WORKFLOW.search(filename) or (
+        if workflow_name == UNRESOLVED_WORKFLOW_NAME:
+            failures.append(
+                f"workflow name cannot be resolved safely: {filename}; "
+                "use a plain, quoted, or block scalar, or an alias with a scalar anchor"
+            )
+        elif ONE_SHOT_WORKFLOW.search(filename) or (
             workflow_name and ONE_SHOT_WORKFLOW.search(workflow_name)
         ):
             failures.append(
