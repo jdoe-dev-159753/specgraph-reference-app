@@ -133,11 +133,30 @@ class DurableWorkflowTests(unittest.TestCase):
     def test_human_readable_numbered_workflow_names_are_rejected(self):
         for workflow_name in ("PR #42 proof", "Issue 42 validation", "discovery #219 fix"):
             with self.subTest(workflow_name=workflow_name):
-                workflows = {"proof.yml": f"name: {workflow_name}\n"}
+                workflows = {"proof.yml": f'name: "{workflow_name}"\n'}
                 findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
                 self.assertTrue(
                     any("one-shot workflow identity" in finding for finding in findings)
                 )
+
+    def test_folded_block_workflow_name_is_rejected(self):
+        workflows = {
+            "proof.yml": "name: >-\n  PR #42 proof\non:\n  workflow_dispatch:\n"
+        }
+        findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
+    def test_literal_block_with_indented_root_is_rejected(self):
+        workflows = {
+            "proof.yml": "  name: |\n    Issue 42 validation\n  on:\n    workflow_dispatch:\n"
+        }
+        findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
+    def test_plain_yaml_comment_is_not_part_of_workflow_name(self):
+        workflows = {"proof.yml": "name: PR #42 proof\n"}
+        self.assertEqual([], guard.workflow_inventory_violations(workflows, "proof.yml\n"))
+        self.assertEqual("PR", guard.extract_workflow_name(workflows["proof.yml"]))
 
     def test_unrelated_fix_word_without_number_is_allowed(self):
         workflows = {"repair.yml": "name: fix flaky cache reuse\n"}
@@ -153,6 +172,24 @@ class DurableWorkflowTests(unittest.TestCase):
             guard.pr_changes_workflow_contract([guard.DURABLE_WORKFLOW_MANIFEST])
         )
         self.assertFalse(guard.pr_changes_workflow_contract(["backend/pom.xml"]))
+
+    def test_rename_out_of_workflow_directory_is_detected(self):
+        changed = guard.changed_file_paths([
+            {
+                "filename": "docs/retired-proof.yml",
+                "previous_filename": ".github/workflows/pr-42-proof.yml",
+            }
+        ])
+        self.assertTrue(guard.pr_changes_workflow_contract(changed))
+
+    def test_manifest_rename_is_detected_from_previous_filename(self):
+        changed = guard.changed_file_paths([
+            {
+                "filename": "scripts/ci/old-workflow-list.txt",
+                "previous_filename": guard.DURABLE_WORKFLOW_MANIFEST,
+            }
+        ])
+        self.assertTrue(guard.pr_changes_workflow_contract(changed))
 
 
 if __name__ == "__main__":
