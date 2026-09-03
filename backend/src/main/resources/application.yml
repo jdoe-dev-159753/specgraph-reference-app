@@ -10,6 +10,12 @@ spring:
       audio:
         speech: none
         transcription: none
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      timeout: 20s
+      max-retries: 1
+      chat:
+        model: ${OPENAI_MODEL:gpt-5-mini}
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/specgraph}
     username: ${SPRING_DATASOURCE_USERNAME:specgraph}
