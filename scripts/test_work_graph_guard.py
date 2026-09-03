@@ -167,7 +167,7 @@ class MainIntegrationTests(unittest.TestCase):
                     "type": "file",
                     "encoding": "base64",
                     "content": base64.b64encode(
-                        Path(__file__).read_bytes()
+                        Path(__file__).read_bytes() + b"\n"
                     ).decode("ascii"),
                 }
             raise AssertionError(f"unexpected API path: {path}")
@@ -185,6 +185,9 @@ class MainIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(
             any("work-graph-guard-tests.yml: protected asset is missing" in item for item in failures)
+        )
+        self.assertTrue(
+            any("scripts/test_work_graph_guard.py: protected asset changed" in item for item in failures)
         )
 
 
@@ -378,6 +381,24 @@ class DurableWorkflowTests(unittest.TestCase):
             with self.subTest(path=path):
                 content = (root / path).read_text(encoding="utf-8")
                 self.assertEqual([], guard.protected_asset_violations(path, content))
+
+    def test_required_assets_trigger_current_and_previous_path_checks(self):
+        for path in REQUIRED_PROTECTED_ASSETS:
+            with self.subTest(path=path):
+                self.assertTrue(guard.pr_changes_workflow_contract([path]))
+                renamed = guard.changed_file_paths([{
+                    "filename": "retired/asset",
+                    "previous_filename": path,
+                }])
+                self.assertTrue(guard.pr_changes_workflow_contract(renamed))
+
+    def test_protected_digest_allowlist_is_bounded(self):
+        path = "scripts/test_work_graph_guard.py"
+        for allowed in (frozenset(), frozenset({"a", "b", "c"})):
+            with self.subTest(size=len(allowed)):
+                with patch.dict(guard.PROTECTED_ASSET_SHA256, {path: allowed}):
+                    findings = guard.protected_asset_violations(path, "content")
+                self.assertTrue(any("one or two entries" in item for item in findings))
 
     def test_protected_assets_fail_closed_on_no_op_mutations(self):
         root = Path(__file__).resolve().parents[1]
