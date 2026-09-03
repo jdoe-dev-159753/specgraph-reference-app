@@ -1,15 +1,6 @@
 name: r4-auth-ci
 
 on:
-  pull_request:
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'e2e/**'
-      - 'docker/**'
-      - 'scripts/ci/**'
-      - '.dockerignore'
-      - '.github/workflows/r4-auth-ci.yml'
   workflow_dispatch:
 
 concurrency:
