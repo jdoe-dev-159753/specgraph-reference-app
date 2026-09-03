@@ -220,6 +220,62 @@ class DurableWorkflowTests(unittest.TestCase):
         )
         self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
 
+    def test_sequence_anchor_workflow_name_is_rejected(self):
+        for anchored_value in ("issue-42-proof", '"issue-42-proof"'):
+            with self.subTest(anchored_value=anchored_value):
+                workflow = (
+                    "on:\n"
+                    "  push:\n"
+                    "    branches:\n"
+                    f"      - &identity {anchored_value}\n"
+                    "name: *identity\n"
+                )
+                self.assertEqual(
+                    "issue-42-proof", guard.extract_workflow_name(workflow)
+                )
+                findings = guard.workflow_inventory_violations(
+                    {"proof.yml": workflow}, "proof.yml\n"
+                )
+                self.assertTrue(
+                    any("one-shot workflow identity" in finding for finding in findings)
+                )
+
+    def test_nested_sequence_anchor_workflow_name_is_rejected(self):
+        workflow = (
+            "matrix:\n"
+            "  include:\n"
+            "    - values:\n"
+            "        - &identity issue-42-proof\n"
+            "name: *identity\n"
+        )
+        self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
+        findings = guard.workflow_inventory_violations(
+            {"proof.yml": workflow}, "proof.yml\n"
+        )
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
+    def test_unknown_or_invalid_name_alias_fails_closed(self):
+        for alias in ("*missing", "*invalid!"):
+            with self.subTest(alias=alias):
+                workflow = f"name: {alias}\n"
+                self.assertEqual(
+                    guard.UNRESOLVED_WORKFLOW_NAME,
+                    guard.extract_workflow_name(workflow),
+                )
+                findings = guard.workflow_inventory_violations(
+                    {"proof.yml": workflow}, "proof.yml\n"
+                )
+                self.assertTrue(
+                    any("cannot be resolved safely" in finding for finding in findings)
+                )
+
+    def test_absent_workflow_name_remains_allowed(self):
+        workflow = "on:\n  workflow_dispatch:\n"
+        self.assertEqual("", guard.extract_workflow_name(workflow))
+        self.assertEqual(
+            [], guard.workflow_inventory_violations({"proof.yml": workflow}, "proof.yml\n")
+        )
+
     def test_full_pull_request_identities_are_rejected(self):
         workflows = {"pull-request-42-proof.yml": "name: durable-looking-name\n"}
         findings = guard.workflow_inventory_violations(workflows, "pull-request-42-proof.yml\n")
