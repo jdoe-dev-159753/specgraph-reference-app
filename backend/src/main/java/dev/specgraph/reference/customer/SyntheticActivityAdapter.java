@@ -5,11 +5,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 @Component
-class SyntheticActivityAdapter implements CustomerActivityPort {
+class SyntheticActivityAdapter implements CustomerActivityPort, CustomerReviewQueryPort {
     static final UUID SEEDED_CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     private static final UUID CARD_TX = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
@@ -42,5 +44,58 @@ class SyntheticActivityAdapter implements CustomerActivityPort {
     @Override
     public Optional<CustomerSnapshot> loadSnapshot(UUID customerId) {
         return SEEDED_CUSTOMER_ID.equals(customerId) ? Optional.of(seeded) : Optional.empty();
+    }
+
+    @Override
+    public Optional<CustomerReviewPage> loadReviewPage(UUID customerId, CustomerReviewQuery query) {
+        if (!SEEDED_CUSTOMER_ID.equals(customerId)) {
+            return Optional.empty();
+        }
+
+        List<Activity> matchingActivities = seeded.activities().stream()
+                .filter(activity -> matches(activity, query))
+                .toList();
+        long offset = query.offset();
+        List<Activity> pageActivities = offset >= matchingActivities.size()
+                ? List.of()
+                : matchingActivities.subList(
+                        (int) offset,
+                        Math.min(matchingActivities.size(), (int) offset + query.pageSize()));
+
+        Set<UUID> matchingTransactionIds = matchingActivities.stream()
+                .map(Activity::transactionId)
+                .collect(Collectors.toUnmodifiableSet());
+        Set<UUID> pageTransactionIds = pageActivities.stream()
+                .map(Activity::transactionId)
+                .collect(Collectors.toUnmodifiableSet());
+
+        List<RiskEvidence> pageRiskEvidence = seeded.riskEvidence().stream()
+                .filter(risk -> pageTransactionIds.contains(risk.transactionId()))
+                .toList();
+        long totalRiskEvidence = seeded.riskEvidence().stream()
+                .filter(risk -> matchingTransactionIds.contains(risk.transactionId()))
+                .count();
+
+        return Optional.of(new CustomerReviewPage(
+                customerId,
+                pageActivities,
+                pageRiskEvidence,
+                query.page(),
+                query.pageSize(),
+                matchingActivities.size(),
+                totalRiskEvidence));
+    }
+
+    private static boolean matches(Activity activity, CustomerReviewQuery query) {
+        if (query.activityType() != null && activity.type() != query.activityType()) {
+            return false;
+        }
+        if (query.status() != null && !activity.status().equalsIgnoreCase(query.status())) {
+            return false;
+        }
+        if (query.createdFrom() != null && activity.createdAt().isBefore(query.createdFrom())) {
+            return false;
+        }
+        return query.createdTo() == null || activity.createdAt().isBefore(query.createdTo());
     }
 }
