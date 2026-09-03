@@ -36,7 +36,7 @@ CANONICAL_ROOT_KEY = re.compile(
 )
 ONE_SHOT_WORKFLOW = re.compile(
     r"(?<![A-Za-z0-9])(?:pr|pull(?:[^A-Za-z0-9]+request)?|issue|discovery|story|fix)"
-    r"[^A-Za-z0-9]*\d+(?![A-Za-z0-9])",
+    r"[^A-Za-z0-9]*(?:(?:no|number|id)[^A-Za-z0-9]*)?\d+(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
 
