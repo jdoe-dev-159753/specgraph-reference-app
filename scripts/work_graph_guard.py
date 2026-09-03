@@ -29,7 +29,7 @@ PREFIX = re.compile(
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
 CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
 REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
-WORKFLOW_NAME = re.compile(r"(?m)^name:\s*['\"]?([^'\"\n]+)")
+YAML_MAPPING_KEY = re.compile(r"^(\s*)([A-Za-z0-9_.-]+)\s*:\s*(.*)$")
 ONE_SHOT_WORKFLOW = re.compile(
     r"(?:^|[-_.\s])(pr|pull|issue|discovery|story|fix)[-_#.\s]*\d+(?=[-_.\s]|$)",
     re.IGNORECASE,
@@ -180,6 +180,61 @@ def parse_durable_workflow_manifest(text: str) -> set[str]:
     }
 
 
+def _plain_yaml_scalar(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return ""
+    if value[0] == '"' and value.endswith('"'):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value[1:-1]
+    if value[0] == "'" and value.endswith("'"):
+        return value[1:-1].replace("''", "'")
+    comment = re.search(r"\s+#", value)
+    if comment:
+        value = value[: comment.start()].rstrip()
+    return value
+
+
+def extract_workflow_name(text: str) -> str:
+    """Read the top-level YAML `name` scalar without adding a YAML dependency."""
+    lines = text.splitlines()
+    mapping_lines: list[tuple[int, int, str, str]] = []
+    for index, line in enumerate(lines):
+        if not line.strip() or line.lstrip().startswith(("#", "---", "%")):
+            continue
+        match = YAML_MAPPING_KEY.match(line)
+        if not match:
+            continue
+        indent = len(match.group(1).replace("\t", "    "))
+        mapping_lines.append((index, indent, match.group(2), match.group(3)))
+
+    if not mapping_lines:
+        return ""
+    root_indent = min(item[1] for item in mapping_lines)
+    for index, indent, key, raw_value in mapping_lines:
+        if indent != root_indent or key != "name":
+            continue
+        value = raw_value.strip()
+        block = re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", value)
+        if not block:
+            return _plain_yaml_scalar(value)
+
+        parts: list[str] = []
+        for continuation in lines[index + 1 :]:
+            if not continuation.strip():
+                parts.append("")
+                continue
+            continuation_indent = len(continuation) - len(continuation.lstrip(" "))
+            if continuation_indent <= root_indent:
+                break
+            parts.append(continuation.strip())
+        separator = "\n" if block.group(1) == "|" else " "
+        return separator.join(parts).strip()
+    return ""
+
+
 def workflow_inventory_violations(
     workflow_texts: dict[str, str], manifest_text: str
 ) -> list[str]:
@@ -201,8 +256,7 @@ def workflow_inventory_violations(
         )
 
     for filename, text in sorted(workflow_texts.items()):
-        match = WORKFLOW_NAME.search(text)
-        workflow_name = match.group(1).strip() if match else ""
+        workflow_name = extract_workflow_name(text)
         if ONE_SHOT_WORKFLOW.search(filename) or (
             workflow_name and ONE_SHOT_WORKFLOW.search(workflow_name)
         ):
@@ -219,13 +273,25 @@ def pr_changes_workflow_contract(changed_paths) -> bool:
     )
 
 
+def changed_file_paths(changed_items: list[dict]) -> list[str]:
+    paths: list[str] = []
+    for item in changed_items:
+        filename = item.get("filename")
+        previous_filename = item.get("previous_filename")
+        if filename:
+            paths.append(filename)
+        if previous_filename:
+            paths.append(previous_filename)
+    return paths
+
+
 def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> None:
     pr = api(f"/repos/{REPO}/pulls/{pr_number}")
     if pr.get("state") != "open" or pr.get("draft"):
         return
 
-    changed_paths = [item["filename"] for item in pages(f"/repos/{REPO}/pulls/{pr_number}/files")]
-    if not pr_changes_workflow_contract(changed_paths):
+    changed_items = list(pages(f"/repos/{REPO}/pulls/{pr_number}/files"))
+    if not pr_changes_workflow_contract(changed_file_paths(changed_items)):
         return
 
     head_sha = pr["head"]["sha"]
@@ -244,10 +310,11 @@ def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> Non
         payload = api(f"/repos/{REPO}/contents/{WORKFLOW_DIR}/{name}?ref={ref}")
         workflow_texts[name] = decode_contents_payload(payload, f"{WORKFLOW_DIR}/{name}")
 
-    for finding in workflow_inventory_violations(workflow_texts, manifest_text):
+    inventory_failures = workflow_inventory_violations(workflow_texts, manifest_text)
+    for finding in inventory_failures:
         failures.append(f"pull request #{pr_number}: {finding}")
 
-    if not failures:
+    if not inventory_failures:
         print(
             f"pull request #{pr_number}: durable workflow surface is clean "
             f"({len(workflow_texts)} workflows)"
