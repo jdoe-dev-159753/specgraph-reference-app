@@ -14,16 +14,19 @@ jobs:
   render:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     steps:
-      - name: Checkout exact branch head
+      - name: Checkout exact branch head into isolated path
         uses: actions/checkout@v6
         with:
           ref: feat/r5-fuzzy-risk-detector
           fetch-depth: 1
+          clean: false
+          path: .render-component-topology
 
       - name: Render component topology with canonical PlantUML version
         shell: bash
         run: |
           set -euo pipefail
+          cd .render-component-topology
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             -v "$PWD:/workspace" \
