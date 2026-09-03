@@ -6,36 +6,56 @@ cd "$ROOT"
 
 PLANTUML_IMAGE="${PLANTUML_IMAGE:-plantuml/plantuml:1.2026.6@sha256:47870c1f76cfb3747bc7090bfe83013a4e3105b5a0bb1515e2baf5d3e2b3ee9d}"
 
-mapfile -d '' SOURCES < <(find docs/assignment -type f -name '*.puml' -print0 | sort -z)
-if (( ${#SOURCES[@]} == 0 )); then
-  echo "No PlantUML sources found under docs/assignment." >&2
+mapfile -d '' PLANTUML_SOURCES < <(find docs/assignment -type f -name '*.puml' -print0 | sort -z)
+mapfile -d '' DOT_SOURCES < <(find docs/assignment -type f -name '*.dot' -print0 | sort -z)
+
+if (( ${#PLANTUML_SOURCES[@]} == 0 && ${#DOT_SOURCES[@]} == 0 )); then
+  echo "No controlled diagram sources found under docs/assignment." >&2
   exit 1
 fi
 
-echo "Rendering ${#SOURCES[@]} PlantUML source(s) with ${PLANTUML_IMAGE}"
+if (( ${#PLANTUML_SOURCES[@]} > 0 )); then
+  echo "Rendering ${#PLANTUML_SOURCES[@]} PlantUML source(s) with ${PLANTUML_IMAGE}"
+  docker run --rm \
+    --network none \
+    --user "$(id -u):$(id -g)" \
+    -v "$ROOT:/workspace" \
+    -w /workspace \
+    "$PLANTUML_IMAGE" \
+    -charset UTF-8 \
+    -tsvg \
+    "${PLANTUML_SOURCES[@]}"
+fi
 
-docker run --rm \
-  --network none \
-  --user "$(id -u):$(id -g)" \
-  -v "$ROOT:/workspace" \
-  -w /workspace \
-  "$PLANTUML_IMAGE" \
-  -charset UTF-8 \
-  -tsvg \
-  "${SOURCES[@]}"
+if (( ${#DOT_SOURCES[@]} > 0 )); then
+  echo "Rendering ${#DOT_SOURCES[@]} Graphviz DOT source(s) with Graphviz from ${PLANTUML_IMAGE}"
+  for source in "${DOT_SOURCES[@]}"; do
+    rendered="${source%.dot}.svg"
+    docker run --rm \
+      --network none \
+      --user "$(id -u):$(id -g)" \
+      -v "$ROOT:/workspace" \
+      -w /workspace \
+      --entrypoint dot \
+      "$PLANTUML_IMAGE" \
+      -Tsvg "$source" -o "$rendered"
+  done
+fi
 
 invalid=0
-for source in "${SOURCES[@]}"; do
-  rendered="${source%.puml}.svg"
+validate_svg() {
+  local source="$1"
+  local rendered="$2"
+
   if [[ ! -s "$rendered" ]]; then
     echo "Missing generated SVG for $source: $rendered" >&2
     invalid=1
-    continue
+    return
   fi
 
-  # Graphviz diagnostics emitted by @startdot can precede the SVG document in some
-  # PlantUML container builds. They are renderer diagnostics, not part of the artifact.
-  # Strip only a leading diagnostic preamble, then require valid SVG XML.
+  # Some renderer paths can emit diagnostics before the SVG document. Diagnostics are
+  # not part of the committed artifact. Strip only a leading preamble, then require
+  # well-formed SVG XML for every controlled generated view.
   if ! python3 - "$rendered" <<'PY'
 from pathlib import Path
 import sys
@@ -62,12 +82,20 @@ PY
   then
     invalid=1
   fi
+}
+
+for source in "${PLANTUML_SOURCES[@]}"; do
+  validate_svg "$source" "${source%.puml}.svg"
 done
 
-# Diagram views in the controlled assignment documentation must retain an explicit
-# sibling source. PlantUML views use .puml; the legacy delivery-rings view is sourced
-# from .dot. This source/view invariant deliberately does not depend on renderer
-# metadata, so @startdot output is covered even when it carries no <?plantuml marker.
+for source in "${DOT_SOURCES[@]}"; do
+  validate_svg "$source" "${source%.dot}.svg"
+done
+
+# Diagram views in controlled documentation must retain an explicit sibling source.
+# PlantUML views use .puml and Graphviz views use .dot. This invariant deliberately
+# does not depend on renderer metadata, so @startdot output is covered even when it
+# carries no <?plantuml processing-instruction marker.
 while IFS= read -r -d '' rendered; do
   puml_source="${rendered%.svg}.puml"
   dot_source="${rendered%.svg}.dot"
@@ -81,4 +109,4 @@ if (( invalid != 0 )); then
   exit 1
 fi
 
-echo "PlantUML rendering complete."
+echo "Controlled diagram rendering complete."
