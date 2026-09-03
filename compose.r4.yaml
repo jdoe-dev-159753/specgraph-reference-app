@@ -28,8 +28,6 @@ services:
       SPRING_DATASOURCE_PASSWORD: specgraph
       SPECGRAPH_SOURCE_TIME_ZONE: "${SPECGRAPH_SOURCE_TIME_ZONE:-UTC}"
       SPECGRAPH_EMBEDDING_CACHE: /tmp/specgraph-embedding-model
-    volumes:
-      - r4-embedding-cache:/tmp/specgraph-embedding-model
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,7 +39,3 @@ services:
       timeout: 3s
       retries: 120
       start_period: 20s
-
-volumes:
-  r4-embedding-cache:
-    name: specgraph-r4-embedding-cache
