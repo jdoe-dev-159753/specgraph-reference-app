@@ -33,7 +33,7 @@ class RiskSignalDetectorConfiguration {
             RiskSignalDetectorProperties properties,
             Environment environment) {
         List<RiskSignalDetectorId> selection = properties.hasExplicitSelection()
-                ? properties.detectors()
+                ? properties.configuredDetectors()
                 : legacyProfileSelection(environment);
         return factory.resolve(selection);
     }
