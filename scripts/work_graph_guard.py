@@ -366,8 +366,8 @@ def extract_workflow_name(text: str) -> str:
     root_entries = [item for item in mapping_lines if item[1] == root_indent]
 
     anchors: dict[str, str] = {}
-    for index, _, _, raw_value in root_entries:
-        value = _extract_yaml_scalar(lines, index, root_indent, raw_value)
+    for index, indent, _, raw_value in mapping_lines:
+        value = _extract_yaml_scalar(lines, index, indent, raw_value)
         anchor = re.match(r"&([A-Za-z0-9_-]+)(?:\s+)(.+)$", value, re.DOTALL)
         if anchor:
             anchors[anchor.group(1)] = _plain_yaml_scalar(anchor.group(2))
