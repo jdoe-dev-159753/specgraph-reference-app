@@ -71,22 +71,54 @@ jobs:
           echo "R4_EMBEDDING_CACHE_VOLUME=$volume" >> "$GITHUB_ENV"
           echo "R4 embedding cache volume: $volume"
 
-      - name: Start exact-head R4 Compose topology without rebuilding image
+      - name: Start exact-head R4 topology and serialize first cache population
         run: |
+          set -euo pipefail
+          command -v flock >/dev/null
+
+          lock_file="/tmp/${R4_EMBEDDING_CACHE_VOLUME}.lock"
+          exec 9>"$lock_file"
+          flock 9
+
+          cache_ready=false
+          if docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
+            sh -c 'test -f /cache/.specgraph-cache-ready'; then
+            cache_ready=true
+            echo "R4 embedding cache already validated; releasing population lock before startup"
+            flock -u 9
+          else
+            echo "R4 embedding cache is cold; holding population lock through healthy startup"
+          fi
+
           docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml up -d --no-build
 
+          healthy=false
           for attempt in $(seq 1 180); do
             if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
               echo "R4 acceptance topology healthy after ${attempt} attempts"
               docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml ps
-              exit 0
+              healthy=true
+              break
             fi
             sleep 2
           done
 
-          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml ps
-          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml logs --no-color postgres r4
-          exit 1
+          if [ "$healthy" != true ]; then
+            docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml ps
+            docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml logs --no-color postgres r4
+            exit 1
+          fi
+
+          if [ "$cache_ready" != true ]; then
+            file_count="$(docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
+              sh -c 'find /cache -type f | wc -l')"
+            echo "Cold-start embedding cache files after healthy startup: $file_count"
+            test "$file_count" -gt 0
+            docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache" alpine:3.22 \
+              sh -c 'touch /cache/.specgraph-cache-ready && chown 10001:10001 /cache/.specgraph-cache-ready'
+            echo "R4 embedding cache validated and marked ready"
+            flock -u 9
+          fi
 
       - name: VFY-AUTH-001 + VFY-ANALYSIS-CONTRACT-001 + VFY-RAG-001 + VFY-HISTORY-001 + VFY-DETERMINISM-001 - Verify complete R4 browser flow
         env:
@@ -96,9 +128,11 @@ jobs:
 
       - name: Assert transformer resources persisted outside disposable application container
         run: |
+          docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
+            sh -c 'test -f /cache/.specgraph-cache-ready'
           file_count="$(docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
-            sh -c 'find /cache -type f | wc -l')"
-          echo "Persistent embedding cache files: $file_count"
+            sh -c 'find /cache -type f ! -name .specgraph-cache-ready | wc -l')"
+          echo "Persistent embedding resource files: $file_count"
           test "$file_count" -gt 0
 
       - name: Upload complete R4 acceptance evidence
