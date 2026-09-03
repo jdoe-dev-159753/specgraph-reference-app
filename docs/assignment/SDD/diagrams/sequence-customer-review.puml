@@ -7,7 +7,7 @@ actor Operator
 participant "React UI" as UI
 participant "Security + HTTP\nboundary" as Boundary
 participant "Customer / Risk\napplication" as App
-participant "CustomerActivityPort" as Port
+participant "CustomerReviewQueryPort" as Port
 participant "Activity adapter" as Adapter
 database "PostgreSQL" as DB
 
@@ -17,23 +17,25 @@ alt unauthenticated
   Boundary --> UI : 401 / redirect
   UI --> Operator : authentication required
 else authenticated
-  Boundary -> App : lookup(customerId, operator) [in-process]
-  App -> Port : loadSnapshot(customerId)
+  Boundary -> App : lookup(customerId, page, filters) [in-process]
+  App -> Port : loadReviewPage(customerId, CustomerReviewQuery)
   alt R1 synthetic adapter
-    Port -> Adapter : SyntheticActivityAdapter.loadSnapshot
-    Adapter --> Port : CustomerSnapshot / not-found
+    Port -> Adapter : SyntheticActivityAdapter.loadReviewPage
+    Adapter --> Port : bounded CustomerReviewPage / not-found
   else R2+ relational adapter
-    Port -> Adapter : JdbcCustomerActivityAdapter.loadSnapshot
-    Adapter -> DB : Spring JDBC activity + risk queries
-    DB --> Adapter : source rows
-    Adapter --> Port : CustomerSnapshot / not-found
+    Port -> Adapter : JdbcCustomerActivityAdapter.loadReviewPage
+    Adapter -> DB : REPEATABLE READ count + stable LIMIT/OFFSET page
+    DB --> Adapter : matching total + page activities
+    Adapter -> DB : risk evidence for page transaction IDs only
+    DB --> Adapter : page-scoped source risk rows
+    Adapter --> Port : bounded CustomerReviewPage / not-found
   end
 
   alt customer exists
-    Port --> App : CustomerSnapshot
-    App --> Boundary : activity + risk projection
-    Boundary --> UI : 200 JSON
-    UI --> Operator : CARD / PAYMENT / CRYPTO + risk evidence
+    Port --> App : page details + full filtered totals
+    App --> Boundary : bounded activity + risk projection
+    Boundary --> UI : 200 JSON + page metadata
+    UI --> Operator : bounded rows + filters + navigation
   else unknown Customer ID
     Port --> App : not-found
     App --> Boundary : explicit not-found

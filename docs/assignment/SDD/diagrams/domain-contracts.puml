@@ -36,6 +36,22 @@ package "Identity contracts" {
 }
 
 package "Customer review contracts" {
+  class CustomerReviewQuery <<project contract>> {
+    page
+    pageSize : default 50, maximum 200
+    activityType
+    status
+    createdFrom
+    createdTo
+  }
+  class CustomerReviewPage <<project contract>> {
+    customerIdentity
+    activities : ActivityProjection[*]
+    riskEvidence : RiskEvidence[*]
+    pageMetadata
+    totalActivities
+    totalRiskEvidence
+  }
   class CustomerSnapshot <<project contract>> {
     customerIdentity
     activities : ActivityProjection[*]
@@ -59,6 +75,9 @@ package "Customer review contracts" {
     scoreContribution
   }
 
+  CustomerReviewPage "1" o-- "0..*" ActivityProjection
+  CustomerReviewPage "1" o-- "0..*" RiskEvidence
+  CustomerReviewQuery ..> CustomerReviewPage : selects bounded operator view
   CustomerSnapshot "1" o-- "0..*" ActivityProjection
   CustomerSnapshot "1" o-- "0..*" RiskEvidence
   ActivityProjection -[hidden]right-> RiskEvidence
@@ -99,6 +118,15 @@ package "Analysis pivot artifacts" {
 }
 
 package "Analysis orchestration and history contracts" {
+  class AnalysisHistoryQuery <<project contract>> {
+    page
+    pageSize : default 20, maximum 100
+  }
+  class AnalysisHistoryPage <<project contract>> {
+    entries : AnalysisHistoryEntry[*]
+    pageMetadata
+    totalEntries
+  }
   class AnalysisEvidenceEnvelope <<project contract>> {
     snapshot : CustomerSnapshot
     detectorEvidence : RiskSignalEvidence[*]
@@ -152,6 +180,8 @@ package "Analysis orchestration and history contracts" {
   AnalysisHistoryEntry "1" o-- "0..*" PolicyEvidence
   AnalysisHistoryEntry "1" o-- "0..*" RiskSignalEvidence
   AnalysisHistoryEntry "1" *-- "1" AnalysisModelProvenance
+  AnalysisHistoryPage "1" o-- "0..*" AnalysisHistoryEntry
+  AnalysisHistoryQuery ..> AnalysisHistoryPage : selects bounded operator view
 
   AnalysisResult ..> CustomerSnapshot : derived from source context
   AnalysisResult ..> RiskSignalEvidence : may use derived detector evidence
@@ -161,7 +191,9 @@ package "Analysis orchestration and history contracts" {
 note bottom
   UML Class diagram: application-owned contracts are the stable pivot across hexagonal adapters.
   Authentication state is a sealed project-owned OperatorContext; Spring Security types stop at
-  adapters. Source truth remains CustomerSnapshot/RiskEvidence. Detector evidence, retrieval
+  adapters. CustomerReviewQuery/Page and AnalysisHistoryQuery/Page bound operator-facing
+  review without changing the complete CustomerSnapshot used by analysis. Source truth remains
+  CustomerSnapshot/RiskEvidence. Detector evidence, retrieval
   evidence and model/backend provenance share a sealed typed artifact family without sharing
   authority. Persistence relations and provider/framework response types do not become members
   of this contract model.
