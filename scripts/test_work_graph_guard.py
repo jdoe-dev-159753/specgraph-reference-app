@@ -148,13 +148,24 @@ class DurableWorkflowTests(unittest.TestCase):
                     any("workflow must start with exactly" in finding for finding in findings)
                 )
 
-    def test_duplicate_top_level_name_fails_closed(self):
-        findings = guard.workflow_inventory_violations(
-            {"proof.yml": "name: proof\nname: issue-42-proof\n"}, "proof.yml\n"
+    def test_noncanonical_root_keys_after_name_fail_closed(self):
+        workflows = (
+            "name: proof\nname: issue-42-proof\n",
+            'name: proof\n"na\\u006de": issue-42-proof\n',
+            "name: proof\n? name\n: issue-42-proof\n",
+            "name: proof\n{name: issue-42-proof}\n",
         )
-        self.assertTrue(
-            any("duplicate top-level workflow name" in finding for finding in findings)
-        )
+        for workflow in workflows:
+            with self.subTest(workflow=workflow):
+                findings = guard.workflow_inventory_violations(
+                    {"proof.yml": workflow}, "proof.yml\n"
+                )
+                self.assertTrue(
+                    any(
+                        "non-canonical or unknown top-level YAML key" in finding
+                        for finding in findings
+                    )
+                )
 
     def test_complex_yaml_content_after_canonical_name_is_irrelevant(self):
         workflow = (
