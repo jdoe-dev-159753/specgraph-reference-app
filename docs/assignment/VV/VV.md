@@ -33,7 +33,7 @@ The baseline currently defines ten stable obligations. This table is a human rea
 | --- | --- | --- |
 | `VFY-CUSTOMER-READ-001` | Customer lookup, CARD/PAYMENT/CRYPTO activity and risk evidence on the operator dashboard, including bounded high-volume pagination/filtering | focused UI E2E + HTTP acceptance + real PostgreSQL/Testcontainers port/integration |
 | `VFY-AUTH-001` | Multiple authenticated operators and protected capabilities | Spring Security integration + HTTP acceptance + focused browser E2E |
-| `VFY-ANALYSIS-CONTRACT-001` | Structured result plus deterministic bounded Stage-3 context with truthful complete-input totals and citable selected evidence | contract/unit + acceptance |
+| `VFY-ANALYSIS-CONTRACT-001` | Typed Stage-1 leaf/Composite selection plus structured results over deterministic bounded Stage-3 context with truthful complete-input totals and citable selected evidence | contract/unit + acceptance |
 | `VFY-RAG-001` | Relevant policy grounding, explicit absent-grounding behavior and provenance | port/integration + failure-path acceptance |
 | `VFY-HISTORY-001` | Persisted analysis and authenticated later review with operator/time attribution, including bounded history-page semantics | PostgreSQL integration + HTTP/browser acceptance |
 | `VFY-REPRODUCIBILITY-001` | Clean-checkout local/demo startup and deterministic project assembly | deployment/Compose + smoke validation |
@@ -130,7 +130,7 @@ A human reviewer validates concerns that automation cannot prove economically: d
 
 Implementation PRs satisfy obligations by adding executable evidence carrying the stable obligation/requirement IDs. Until that happens, generated current-status views shall report the obligation as missing/pending from executable evidence. The durable strategy remains unchanged merely because a test temporarily fails or passes.
 
-The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `OperatorContextPort`, `CustomerActivityPort`, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology.
+The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `OperatorContextPort`, `CustomerActivityPort`, typed `RiskSignalDetectorPort` leaf/Composite selection, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology. `VFY-ANALYSIS-CONTRACT-001` covers the Stage-1 selection/factory/Composite contract, including deterministic ordering and fail-closed invalid configuration, without turning optional calibrated fusion into an accepted #254 behavior.
 
 ![Verification evidence flow](diagrams/verification-evidence-flow.svg)
 
