@@ -95,7 +95,7 @@ class DurableWorkflowTests(unittest.TestCase):
             guard.parse_durable_workflow_manifest(manifest),
         )
 
-    def test_exact_durable_inventory_is_accepted(self):
+    def test_exact_canonical_inventory_is_accepted(self):
         workflows = {
             "application-ci.yml": "name: application-ci\non:\n  workflow_dispatch:\n",
             "r4-acceptance-ci.yml": "name: r4-acceptance-ci\non:\n  workflow_dispatch:\n",
@@ -103,288 +103,94 @@ class DurableWorkflowTests(unittest.TestCase):
         manifest = "application-ci.yml\nr4-acceptance-ci.yml\n"
         self.assertEqual([], guard.workflow_inventory_violations(workflows, manifest))
 
-    def test_undeclared_workflow_is_rejected(self):
+    def test_undeclared_and_missing_workflows_are_rejected(self):
         workflows = {
             "application-ci.yml": "name: application-ci\n",
             "temporary-proof.yml": "name: temporary-proof\n",
         }
-        findings = guard.workflow_inventory_violations(workflows, "application-ci.yml\n")
-        self.assertTrue(any("not declared durable" in finding for finding in findings))
-
-    def test_missing_declared_workflow_is_rejected(self):
-        workflows = {"application-ci.yml": "name: application-ci\n"}
         findings = guard.workflow_inventory_violations(
             workflows, "application-ci.yml\nr4-acceptance-ci.yml\n"
         )
+        self.assertTrue(any("not declared durable" in finding for finding in findings))
         self.assertTrue(any("missing from repository" in finding for finding in findings))
 
     def test_numbered_one_shot_filename_is_rejected(self):
-        workflows = {"discovery-219-fix.yml": "name: durable-looking-name\n"}
+        workflows = {"discovery-219-fix.yml": "name: discovery-219-fix\n"}
         findings = guard.workflow_inventory_violations(
             workflows, "discovery-219-fix.yml\n"
         )
         self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
 
-    def test_numbered_one_shot_workflow_name_is_rejected(self):
-        workflows = {"proof.yml": "name: story-42-proof\n"}
-        findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_human_readable_numbered_workflow_names_are_rejected(self):
-        for workflow_name in ("PR #42 proof", "Issue 42 validation", "discovery #219 fix"):
-            with self.subTest(workflow_name=workflow_name):
-                workflows = {"proof.yml": f'name: "{workflow_name}"\n'}
-                findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
-                self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_quoted_yaml_name_keys_are_rejected(self):
-        for workflow in ('"name": issue-42-proof\n', "'name': story-43-proof\n"):
-            with self.subTest(workflow=workflow):
-                workflows = {"proof.yml": workflow}
-                findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
-                self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_escaped_double_quoted_yaml_name_keys_are_rejected(self):
-        for key in (r"na\x6de", r"na\u006de", r"na\U0000006de"):
-            with self.subTest(key=key):
-                workflow = f'"{key}": issue-42-proof\n'
-                self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
-                findings = guard.workflow_inventory_violations(
-                    {"proof.yml": workflow}, "proof.yml\n"
-                )
-                self.assertTrue(
-                    any("one-shot workflow identity" in finding for finding in findings)
-                )
-
-    def test_multiline_double_quoted_yaml_names_are_rejected(self):
-        escaped = 'name: "issue-' + chr(92) + '\n  42-proof"\n'
-        folded = 'name: "issue-\n  42-proof"\n'
-        for workflow, expected in (
-            (escaped, "issue-42-proof"),
-            (folded, "issue- 42-proof"),
-        ):
-            with self.subTest(workflow=workflow):
-                self.assertEqual(expected, guard.extract_workflow_name(workflow))
-                findings = guard.workflow_inventory_violations(
-                    {"proof.yml": workflow}, "proof.yml\n"
-                )
-                self.assertTrue(
-                    any("one-shot workflow identity" in finding for finding in findings)
-                )
-
-    def test_multiline_plain_and_single_quoted_names_are_rejected(self):
-        for workflow, expected in (
-            ("name: issue-\n  42-proof\n", "issue- 42-proof"),
-            ("name: 'issue-\n  42-proof'\n", "issue- 42-proof"),
-        ):
-            with self.subTest(workflow=workflow):
-                self.assertEqual(expected, guard.extract_workflow_name(workflow))
-                findings = guard.workflow_inventory_violations(
-                    {"proof.yml": workflow}, "proof.yml\n"
-                )
-                self.assertTrue(
-                    any("one-shot workflow identity" in finding for finding in findings)
-                )
-
-    def test_punctuation_delimited_workflow_identities_are_rejected(self):
-        for workflow_name in ("Validate (Issue #42)", "Validate [story-7]"):
-            with self.subTest(workflow_name=workflow_name):
-                workflows = {"proof.yml": f'name: "{workflow_name}"\n'}
-                findings = guard.workflow_inventory_violations(
-                    workflows, "proof.yml\n"
-                )
-                self.assertTrue(
-                    any("one-shot workflow identity" in finding for finding in findings)
-                )
-
-    def test_aliased_workflow_name_is_rejected(self):
-        workflow = (
-            'identity: &identity "issue-42-proof"\n'
-            "name: *identity\n"
-        )
-        self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
+    def test_name_must_equal_filename_stem(self):
         findings = guard.workflow_inventory_violations(
-            {"proof.yml": workflow}, "proof.yml\n"
+            {"proof.yml": "name: durable-looking-name\n"}, "proof.yml\n"
         )
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+        self.assertTrue(any("must equal filename stem" in finding for finding in findings))
 
-    def test_nested_anchor_workflow_name_is_rejected(self):
-        workflow = (
-            "env:\n"
-            "  DISPLAY: &identity issue-42-proof\n"
-            "name: *identity\n"
+    def test_noncanonical_yaml_name_forms_fail_closed(self):
+        forms = (
+            "",
+            "# comment\nname: proof\n",
+            "  name: proof\n",
+            '"name": proof\n',
+            "name: \"proof\"\n",
+            "name: *identity\nidentity: &identity proof\n",
+            "name: >-\n  proof\n",
+            'name: "pro\\\nof"\n',
+            "{name: proof, on: {workflow_dispatch: {}}}\n",
         )
-        self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
-        findings = guard.workflow_inventory_violations(
-            {"proof.yml": workflow}, "proof.yml\n"
-        )
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_sequence_anchor_workflow_name_is_rejected(self):
-        for anchored_value in ("issue-42-proof", '"issue-42-proof"'):
-            with self.subTest(anchored_value=anchored_value):
-                workflow = (
-                    "on:\n"
-                    "  push:\n"
-                    "    branches:\n"
-                    f"      - &identity {anchored_value}\n"
-                    "name: *identity\n"
-                )
-                self.assertEqual(
-                    "issue-42-proof", guard.extract_workflow_name(workflow)
-                )
+        for workflow in forms:
+            with self.subTest(workflow=workflow):
                 findings = guard.workflow_inventory_violations(
                     {"proof.yml": workflow}, "proof.yml\n"
                 )
                 self.assertTrue(
-                    any("one-shot workflow identity" in finding for finding in findings)
+                    any("workflow must start with exactly" in finding for finding in findings)
                 )
 
-    def test_nested_sequence_anchor_workflow_name_is_rejected(self):
-        workflow = (
-            "matrix:\n"
-            "  include:\n"
-            "    - values:\n"
-            "        - &identity issue-42-proof\n"
-            "name: *identity\n"
-        )
-        self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
+    def test_duplicate_top_level_name_fails_closed(self):
         findings = guard.workflow_inventory_violations(
-            {"proof.yml": workflow}, "proof.yml\n"
+            {"proof.yml": "name: proof\nname: issue-42-proof\n"}, "proof.yml\n"
         )
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_unknown_or_invalid_name_alias_fails_closed(self):
-        for alias in ("*missing", "*invalid!"):
-            with self.subTest(alias=alias):
-                workflow = f"name: {alias}\n"
-                self.assertEqual(
-                    guard.UNRESOLVED_WORKFLOW_NAME,
-                    guard.extract_workflow_name(workflow),
-                )
-                findings = guard.workflow_inventory_violations(
-                    {"proof.yml": workflow}, "proof.yml\n"
-                )
-                self.assertTrue(
-                    any("cannot be resolved safely" in finding for finding in findings)
-                )
-
-    def test_absent_workflow_name_remains_allowed(self):
-        workflow = "on:\n  workflow_dispatch:\n"
-        self.assertEqual("", guard.extract_workflow_name(workflow))
-        self.assertEqual(
-            [], guard.workflow_inventory_violations({"proof.yml": workflow}, "proof.yml\n")
+        self.assertTrue(
+            any("duplicate top-level workflow name" in finding for finding in findings)
         )
 
-    def test_block_scalar_sequence_text_does_not_override_real_anchor(self):
+    def test_complex_yaml_content_after_canonical_name_is_irrelevant(self):
         workflow = (
+            "name: proof\n"
             "env:\n"
             "  DISPLAY: &identity issue-42-proof\n"
             "  NOTES: |\n"
             "    - &identity durable-name\n"
-            "name: *identity\n"
-        )
-        self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
-        findings = guard.workflow_inventory_violations(
-            {"proof.yml": workflow}, "proof.yml\n"
-        )
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_forward_anchor_reference_fails_closed(self):
-        workflow = (
-            "name: *identity\n"
-            "env:\n"
-            "  DISPLAY: &identity issue-42-proof\n"
+            "jobs: {}\n"
         )
         self.assertEqual(
-            guard.UNRESOLVED_WORKFLOW_NAME,
-            guard.extract_workflow_name(workflow),
+            [], guard.workflow_inventory_violations({"proof.yml": workflow}, "proof.yml\n")
         )
-        findings = guard.workflow_inventory_violations(
-            {"proof.yml": workflow}, "proof.yml\n"
-        )
-        self.assertTrue(any("cannot be resolved safely" in finding for finding in findings))
-
-    def test_anchor_redefinition_after_name_does_not_override_resolution(self):
-        workflow = (
-            "env:\n"
-            "  DISPLAY: &identity issue-42-proof\n"
-            "name: *identity\n"
-            "later:\n"
-            "  - &identity durable-name\n"
-        )
-        self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
-        findings = guard.workflow_inventory_violations(
-            {"proof.yml": workflow}, "proof.yml\n"
-        )
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_full_pull_request_identities_are_rejected(self):
-        workflows = {"pull-request-42-proof.yml": "name: durable-looking-name\n"}
-        findings = guard.workflow_inventory_violations(workflows, "pull-request-42-proof.yml\n")
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-        workflows = {"proof.yml": 'name: "Pull Request #42 proof"\n'}
-        findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_folded_block_workflow_name_is_rejected(self):
-        workflows = {"proof.yml": "name: >-\n  PR #42 proof\non:\n  workflow_dispatch:\n"}
-        findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_commented_folded_block_workflow_name_is_rejected(self):
-        workflows = {"proof.yml": "name: >- # display name\n  issue-42-proof\non:\n  workflow_dispatch:\n"}
-        findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_commented_quoted_workflow_names_are_rejected(self):
-        for workflow in (
-            'name: "issue-42-proof" # display name\n',
-            "name: 'story-43-proof' # display name\n",
-        ):
-            with self.subTest(workflow=workflow):
-                workflows = {"proof.yml": workflow}
-                findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
-                self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_hash_inside_quoted_workflow_name_is_preserved(self):
-        self.assertEqual(
-            "release #42 notes",
-            guard.extract_workflow_name('name: "release #42 notes" # display name\n'),
-        )
-
-    def test_literal_block_with_indented_root_is_rejected(self):
-        workflows = {"proof.yml": "  name: |\n    Issue 42 validation\n  on:\n    workflow_dispatch:\n"}
-        findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
-        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
-
-    def test_plain_yaml_comment_is_not_part_of_workflow_name(self):
-        workflows = {"proof.yml": "name: PR #42 proof\n"}
-        self.assertEqual([], guard.workflow_inventory_violations(workflows, "proof.yml\n"))
-        self.assertEqual("PR", guard.extract_workflow_name(workflows["proof.yml"]))
 
     def test_unrelated_fix_word_without_number_is_allowed(self):
-        workflows = {"repair.yml": "name: fix flaky cache reuse\n"}
-        self.assertEqual([], guard.workflow_inventory_violations(workflows, "repair.yml\n"))
+        workflows = {"fix-cache.yml": "name: fix-cache\n"}
+        self.assertEqual(
+            [], guard.workflow_inventory_violations(workflows, "fix-cache.yml\n")
+        )
 
     def test_workflow_contract_change_detection(self):
-        self.assertTrue(guard.pr_changes_workflow_contract([".github/workflows/new-proof.yml"]))
+        self.assertTrue(guard.pr_changes_workflow_contract([".github/workflows/new.yml"]))
         self.assertTrue(guard.pr_changes_workflow_contract([guard.DURABLE_WORKFLOW_MANIFEST]))
         self.assertFalse(guard.pr_changes_workflow_contract(["backend/pom.xml"]))
 
-    def test_rename_out_of_workflow_directory_is_detected(self):
-        changed = guard.changed_file_paths([{
-            "filename": "docs/retired-proof.yml",
-            "previous_filename": ".github/workflows/pr-42-proof.yml",
-        }])
-        self.assertTrue(guard.pr_changes_workflow_contract(changed))
-
-    def test_manifest_rename_is_detected_from_previous_filename(self):
-        changed = guard.changed_file_paths([{
-            "filename": "scripts/ci/old-workflow-list.txt",
-            "previous_filename": guard.DURABLE_WORKFLOW_MANIFEST,
-        }])
+    def test_renamed_previous_paths_are_detected(self):
+        changed = guard.changed_file_paths([
+            {
+                "filename": "docs/retired-proof.yml",
+                "previous_filename": ".github/workflows/pr-42-proof.yml",
+            },
+            {
+                "filename": "scripts/ci/old-workflow-list.txt",
+                "previous_filename": guard.DURABLE_WORKFLOW_MANIFEST,
+            },
+        ])
         self.assertTrue(guard.pr_changes_workflow_contract(changed))
 
 
