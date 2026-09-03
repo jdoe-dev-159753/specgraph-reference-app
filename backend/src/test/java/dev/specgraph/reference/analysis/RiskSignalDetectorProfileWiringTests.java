@@ -1,7 +1,9 @@
 package dev.specgraph.reference.analysis;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,17 @@ final class RiskSignalDetectorProfileWiringTests {
                 FuzzyRiskSignalDetectorAdapter.class,
                 Map.of("specgraph.analysis.detectors[0]", "FUZZY"),
                 "bayesian-detector");
+    }
+
+    @Test
+    void explicitlyEmptyTypedSelectionFailsInsteadOfFallingBackToLegacyProfile() {
+        try (AnnotationConfigApplicationContext context = unrefreshedContext(
+                Map.of("specgraph.analysis.detectors", List.of()),
+                "bayesian-detector")) {
+            assertThatThrownBy(context::refresh)
+                    .hasRootCauseInstanceOf(IllegalArgumentException.class)
+                    .hasRootCauseMessage("At least one detector must be selected");
+        }
     }
 
     private void assertSelected(
