@@ -1,0 +1,32 @@
+name: stage-demo-images-gate
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/one_shot_stage_demo_images_gate.py'
+      - '.github/workflows/stage-demo-images-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    if: github.event_name != 'pull_request' || github.head_ref == 'demo/publish-r4-reviewer-oci'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: demo/publish-r4-reviewer-oci
+          fetch-depth: 0
+      - name: Stage guarded demo-images workflow as ordinary file
+        run: python3 scripts/one_shot_stage_demo_images_gate.py
+      - name: Commit staged workflow blob for direct promotion
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/demo-images-with-publication-gate.yml
+          git diff --cached --check
+          git diff --cached --quiet && exit 0
+          git commit -m 'chore: stage guarded demo-images workflow blob'
+          git push origin HEAD:demo/publish-r4-reviewer-oci
