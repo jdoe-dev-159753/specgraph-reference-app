@@ -31,7 +31,7 @@ concurrency:
 jobs:
   verify:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.regenerate_artifact != true }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     permissions:
       contents: read
     env:
@@ -57,7 +57,7 @@ jobs:
 
   regenerate:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.regenerate_artifact == true }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     permissions:
       contents: read
     steps:
