@@ -31,7 +31,7 @@ CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.
 REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
 WORKFLOW_NAME = re.compile(r"(?m)^name:\s*['\"]?([^'\"\n]+)")
 ONE_SHOT_WORKFLOW = re.compile(
-    r"(?:^|[-_.])(pr|pull|issue|discovery|story|fix)[-_#.]?\d+(?:[-_.]|$)",
+    r"(?:^|[-_.\s])(pr|pull|issue|discovery|story|fix)[-_#.\s]*\d+(?=[-_.\s]|$)",
     re.IGNORECASE,
 )
 
