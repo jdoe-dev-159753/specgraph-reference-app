@@ -2,28 +2,28 @@ name: application-ci
 
 on:
   workflow_dispatch:
+    inputs:
+      compatibility:
+        description: 'Run the archived R1/R2/R3 compatibility proof instead of fast verification'
+        required: false
+        default: false
+        type: boolean
   pull_request:
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - 'e2e/**'
-      - 'docker/**'
-      - 'scripts/**'
       - 'compose.yaml'
       - 'compose.oci.yaml'
-      - '.dockerignore'
+      - 'scripts/validate_design_map.py'
       - '.github/workflows/application-ci.yml'
   push:
     branches: [main]
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - 'e2e/**'
-      - 'docker/**'
-      - 'scripts/**'
       - 'compose.yaml'
       - 'compose.oci.yaml'
-      - '.dockerignore'
+      - 'scripts/validate_design_map.py'
       - '.github/workflows/application-ci.yml'
 
 concurrency:
@@ -34,14 +34,71 @@ permissions:
   contents: read
 
 jobs:
+  fast-verify:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.compatibility != true }}
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Assert exact validated source revision
+        run: |
+          checked_out_sha="$(git rev-parse HEAD)"
+          echo "Expected source SHA: $SOURCE_SHA"
+          echo "Checked-out SHA:     $checked_out_sha"
+          test "$checked_out_sha" = "$SOURCE_SHA"
+
+      - name: Ratchet normative SRS to design-map coverage
+        run: python3 scripts/validate_design_map.py
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Verify backend against Testcontainers PostgreSQL
+        working-directory: backend
+        run: mvn -B -q verify
+
+      - name: Report backend test failures
+        if: failure()
+        run: |
+          if [ -d backend/target/surefire-reports ]; then
+            find backend/target/surefire-reports -maxdepth 1 -type f -name '*.txt' -print -exec cat {} \;
+          else
+            echo 'No Surefire report directory was produced.'
+          fi
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          npm install --prefer-offline --no-audit --no-fund
+          npm run build
+
+      - name: Validate deployment topology syntax without starting runtime
+        run: |
+          docker compose config --quiet
+          docker compose -f compose.oci.yaml config --quiet
+
   verify:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.compatibility == true }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       COMPOSE_PROJECT_NAME: specgraph-ci-${{ github.run_id }}
       R1_PORT: '8081'
       R2_PORT: '8082'
       R3_PORT: '8083'
-      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      SOURCE_SHA: ${{ github.sha }}
       R1_CHECKPOINT_SHA: e2a41694290ef8b03e4485ca1a2fe2c5664d1941
       R2_CHECKPOINT_SHA: 587027b7c80339998ab49e879afefcc692e6d052
     steps:
@@ -57,9 +114,6 @@ jobs:
           docker network prune -f --filter 'until=24h' || true
           docker image prune -f --filter 'until=24h' || true
 
-          # Keep immutable source-tagged application images and recent BuildKit
-          # layers hot. Only repository-owned application images unused for a
-          # week are eligible for normal garbage collection.
           docker image prune -af \
             --filter 'until=168h' \
             --filter 'label=io.specgraph.source-root' || true
@@ -99,7 +153,7 @@ jobs:
 
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Assert exact validated source revision
         run: |
