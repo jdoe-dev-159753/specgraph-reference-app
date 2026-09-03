@@ -224,7 +224,8 @@ def extract_workflow_name(text: str) -> str:
         if indent != root_indent or key != "name":
             continue
         value = raw_value.strip()
-        block = re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", value)
+        block_header = re.sub(r"\s+#.*$", "", value).rstrip()
+        block = re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", block_header)
         if not block:
             return _plain_yaml_scalar(value)
 
