@@ -22,7 +22,7 @@ The runtime is a **modular monolith with hexagonal / ports-and-adapters boundari
 
 The mature analysis path is intentionally split by function:
 
-1. **Stage 1: primitive signal analysis** behind `RiskSignalDetectorPort`, currently no-op by default or Bayesian when selected;
+1. **Stage 1: primitive signal analysis** behind `RiskSignalDetectorPort`, implemented as no-op by default with selectable Bayesian beta-binomial and fuzzy detector adapters; the reviewer gallery below currently proves the baseline and Bayesian variants;
 2. **Stage 2: evidence grounding and fusion** through `PolicyKnowledgePort`, real pgvector retrieval and local MiniLM embeddings, assembled into the application-owned `AnalysisEvidenceEnvelope`;
 3. **Stage 3: final advisory synthesis** behind `AnalysisModelPort`, deterministic by default and externally substitutable only through deliberate opt-in configuration.
 
