@@ -22,7 +22,7 @@ MIN_REVIEWED_SHA_PREFIX = 10
 WORKFLOW_DIR = ".github/workflows"
 DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
-TRUSTED_GUARD_WORKFLOW_SHA256 = "f15bad4b691b95abb8b0cf7f2e3b6976dc3ca3d9ad5323097aacb53f394a5fae"
+TRUSTED_GUARD_WORKFLOW_SHA256 = frozenset({"f15bad4b691b95abb8b0cf7f2e3b6976dc3ca3d9ad5323097aacb53f394a5fae"})
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -235,13 +235,14 @@ def trusted_guard_workflow_contract_violations(text: str) -> list[str]:
     """Pin the complete privileged workflow so YAML overrides cannot weaken it."""
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-    if actual == TRUSTED_GUARD_WORKFLOW_SHA256:
+    if actual in TRUSTED_GUARD_WORKFLOW_SHA256:
         return []
     return [
         "work-graph-guard.yml: privileged workflow contract changed "
-        f"(expected sha256 {TRUSTED_GUARD_WORKFLOW_SHA256}, got {actual}); "
-        "review the complete trusted trigger/permission/checkout/token contract, "
-        "then deliberately update this digest in the same reviewed change"
+        f"(allowed sha256 values {sorted(TRUSTED_GUARD_WORKFLOW_SHA256)}, got {actual}); "
+        "rotate safely in two PRs: first preauthorize the reviewed future digest "
+        "while retaining the current digest, then change the workflow in a second PR; "
+        "remove the retired digest only after the workflow change merges"
     ]
 
 
