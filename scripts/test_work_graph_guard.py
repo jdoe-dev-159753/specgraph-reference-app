@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import unittest
+from pathlib import Path
 
 from scripts import work_graph_guard as guard
 
@@ -265,6 +266,39 @@ class DurableWorkflowTests(unittest.TestCase):
             },
         ])
         self.assertTrue(guard.pr_changes_workflow_contract(changed))
+
+
+    def test_repository_trusted_guard_workflow_matches_pinned_contract(self):
+        workflow_path = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "work-graph-guard.yml"
+        workflow = workflow_path.read_text(encoding="utf-8")
+        self.assertEqual([], guard.trusted_guard_workflow_contract_violations(workflow))
+        mutations = {
+            "disable job": workflow.replace(
+                "  guard:\n    if:", "  guard:\n    if: false\n    continue-on-error: true\n    original-if:"),
+            "remove trusted trigger": workflow.replace(
+                "  pull_request_target:\n    types: [opened, edited, synchronize, reopened, ready_for_review]\n", ""),
+            "checkout proposed head": workflow.replace(
+                "          ref: ${{ github.workflow_sha }}",
+                "          ref: ${{ github.event.pull_request.head.sha }}"),
+            "remove trusted tests": workflow.replace(
+                "        run: python3 -m unittest scripts/test_work_graph_guard.py",
+                "        run: echo tests-disabled"),
+            "remove guard": workflow.replace(
+                "        run: python3 scripts/work_graph_guard.py",
+                "        run: echo guard-disabled"),
+            "continue after failure": workflow.replace(
+                "        run: python3 scripts/work_graph_guard.py",
+                "        continue-on-error: true\n        run: python3 scripts/work_graph_guard.py"),
+        }
+        for case, candidate in mutations.items():
+            with self.subTest(case=case):
+                self.assertTrue(guard.trusted_guard_workflow_contract_violations(candidate))
+
+    def test_inventory_applies_pinned_trusted_guard_contract(self):
+        workflow = "name: work-graph-guard\non:\n  workflow_dispatch:\n"
+        findings = guard.workflow_inventory_violations(
+            {"work-graph-guard.yml": workflow}, "work-graph-guard.yml\n")
+        self.assertTrue(any("privileged workflow contract changed" in finding for finding in findings))
 
 
 if __name__ == "__main__":
