@@ -14,6 +14,10 @@ record AnalysisContextProperties(
         requirePositive(maxSourceRiskEvidence, "maxSourceRiskEvidence");
         requirePositive(maxDetectorEvidence, "maxDetectorEvidence");
         requirePositive(maxPolicyEvidence, "maxPolicyEvidence");
+        if (maxActivities < maxSourceRiskEvidence) {
+            throw new IllegalArgumentException(
+                    "maxActivities must be at least maxSourceRiskEvidence so selected source-risk facts can retain their backing activities");
+        }
     }
 
     private static void requirePositive(int value, String field) {
