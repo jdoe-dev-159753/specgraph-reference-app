@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import base64
 import unittest
 from unittest.mock import patch
 from pathlib import Path
@@ -115,6 +116,61 @@ class MainIntegrationTests(unittest.TestCase):
                     self.assertEqual(1, guard.main())
                     durable.assert_called_once()
                     review.assert_called_once()
+
+
+    def test_real_review_guard_rejects_missing_exact_head_review(self):
+        pull_request = {
+            "state": "open",
+            "draft": False,
+            "base": {"ref": "main"},
+            "head": {"sha": "a" * 40},
+        }
+
+        with (
+            patch.object(guard, "api", return_value=pull_request),
+            patch.object(guard, "pages", return_value=iter(())),
+        ):
+            failures = []
+            guard.require_current_head_codex_review(308, failures)
+
+        self.assertEqual(1, len(failures))
+        self.assertIn("no Codex review evidence", failures[0])
+
+    def test_real_durable_surface_guard_rejects_deleted_protected_workflows(self):
+        pull_request = {
+            "state": "open",
+            "draft": False,
+            "head": {"sha": "b" * 40},
+        }
+        manifest_payload = {
+            "type": "file",
+            "encoding": "base64",
+            "content": base64.b64encode(b"").decode("ascii"),
+        }
+
+        def fake_api(path):
+            if path == "/repos/jdoe-dev-159753/specgraph-reference-app/pulls/308":
+                return pull_request
+            if "/contents/scripts/ci/durable-workflows.txt?" in path:
+                return manifest_payload
+            if "/contents/.github/workflows?" in path:
+                return []
+            raise AssertionError(f"unexpected API path: {path}")
+
+        changed = iter(([{"filename": guard.DURABLE_WORKFLOW_MANIFEST}],))
+        with (
+            patch.object(guard, "api", side_effect=fake_api),
+            patch.object(guard, "pages", side_effect=changed),
+        ):
+            failures = []
+            guard.require_durable_workflow_surface(308, failures)
+
+        self.assertTrue(
+            any("work-graph-guard.yml: protected asset is missing" in item for item in failures)
+        )
+        self.assertTrue(
+            any("work-graph-guard-tests.yml: protected asset is missing" in item for item in failures)
+        )
 
 
 class DurableWorkflowTests(unittest.TestCase):
