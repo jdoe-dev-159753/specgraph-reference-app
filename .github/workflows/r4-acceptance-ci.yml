@@ -135,6 +135,45 @@ jobs:
           echo "Persistent embedding resource files: $file_count"
           test "$file_count" -gt 0
 
+      - name: Prove warm exact-head R4 startup consumes the retained cache
+        run: |
+          set -euo pipefail
+          offline_override="$RUNNER_TEMP/r4-cache-origin-block.yaml"
+          cat > "$offline_override" <<'YAML'
+          services:
+            r4:
+              extra_hosts:
+                - "raw.githubusercontent.com:127.0.0.1"
+                - "media.githubusercontent.com:127.0.0.1"
+          YAML
+
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml stop r4
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml rm -f r4
+          docker compose \
+            -f compose.r4.yaml \
+            -f compose.r4.ci-cache.yaml \
+            -f "$offline_override" \
+            up -d --no-build r4
+
+          healthy=false
+          for attempt in $(seq 1 120); do
+            if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
+              healthy=true
+              echo "Warm-cache R4 restart succeeded with embedding resource origins blocked"
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$healthy" != true ]; then
+            docker compose \
+              -f compose.r4.yaml \
+              -f compose.r4.ci-cache.yaml \
+              -f "$offline_override" \
+              logs --no-color postgres r4
+            exit 1
+          fi
+
       - name: Upload complete R4 acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
