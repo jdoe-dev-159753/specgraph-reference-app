@@ -146,6 +146,13 @@ ports:
     accepts: CTR-CUSTOMER-SNAPSHOT-001
     returns: CTR-RISK-SIGNAL-EVIDENCE-001
     implementation_adapters: [ADP-DETECTOR-NOOP-001, ADP-DETECTOR-BAYES-001, ADP-DETECTOR-FUZZY-001]
+    selection_authority: specgraph.analysis.detectors
+    selection_ids: [NO_OP, BAYESIAN, FUZZY]
+    resolver: RiskSignalDetectorFactory
+    composite: CompositeRiskSignalDetector
+    selection_semantics: bounded ordered list; one ID resolves a leaf, multiple concrete IDs resolve a Composite
+    compatibility_profile_aliases: [bayesian-detector, fuzzy-detector]
+    failure_semantics: explicit empty, duplicate, invalid/unregistered, NO_OP mixed with concrete, or child failure fails closed
     activation_ring: R4
     adrs: [ADR-001, ADR-002]
   PRT-MODEL-001:
@@ -250,7 +257,8 @@ adapters:
     owner: MOD-ANALYSIS-001
     implements: PRT-DETECTOR-001
     activation_ring: R4
-    responsibility: keep the detector stage explicit and preserve the deterministic no-extra-signal baseline when no concrete detector is deliberately selected
+    selection_id: NO_OP
+    responsibility: keep the detector stage explicit and preserve the deterministic no-extra-signal baseline when no typed selection or compatibility detector profile is supplied
     adrs: [ADR-001, ADR-002]
   ADP-DETECTOR-BAYES-001:
     name: BayesianSequentialRiskSignalDetectorAdapter
@@ -259,7 +267,8 @@ adapters:
     technology: Apache Commons Math 3.6.1
     implements: PRT-DETECTOR-001
     activation_ring: R4
-    profile: bayesian-detector
+    selection_id: BAYESIAN
+    compatibility_profile_alias: bayesian-detector
     responsibility: derive deterministic synthetic-demo Beta-binomial review-elevation probability evidence without mutating source risk
     adrs: [ADR-001, ADR-002]
   ADP-DETECTOR-FUZZY-001:
@@ -269,7 +278,8 @@ adapters:
     technology: project-owned minimal fuzzy inference
     implements: PRT-DETECTOR-001
     activation_ring: R4
-    profile: fuzzy-detector
+    selection_id: FUZZY
+    compatibility_profile_alias: fuzzy-detector
     responsibility: derive deterministic graded review-elevation evidence from bounded memberships and versioned rules without mutating source risk
     adrs: [ADR-001, ADR-002]
   ADP-MODEL-DET-001:

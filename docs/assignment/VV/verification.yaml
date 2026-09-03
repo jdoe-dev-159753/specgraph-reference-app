@@ -21,7 +21,7 @@ obligations:
     covers: [FR-AI-001, FR-AI-002, INV-AI-001, CON-AI-001]
     acceptance: [AC-AI-001, AC-AI-002]
     methods: [unit_property, port_contract, api_acceptance, ui_e2e]
-    design: [MOD-ANALYSIS-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001]
+    design: [MOD-ANALYSIS-001, PRT-DETECTOR-001, ADP-DETECTOR-NOOP-001, ADP-DETECTOR-BAYES-001, ADP-DETECTOR-FUZZY-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001]
     executable_evidence: discovered_by_markers
   VFY-RAG-001:
     covers: [FR-RAG-001, INV-RAG-001]
