@@ -1,16 +1,6 @@
 name: r4-gallery-ci
 
 on:
-  pull_request:
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'e2e/**'
-      - 'docker/**'
-      - 'scripts/ci/**'
-      - '.dockerignore'
-      - 'compose.r4.yaml'
-      - '.github/workflows/r4-gallery-ci.yml'
   workflow_dispatch:
 
 concurrency:
@@ -55,9 +45,6 @@ jobs:
 
       - name: Allocate run-isolated gallery port
         run: |
-          # Each workflow run receives a stable high port pair. This keeps separate PRs from
-          # contending on one self-hosted Docker host without a global concurrency group that
-          # can discard the newest pending exact-head proof.
           port=$((20000 + (GITHUB_RUN_ID % 18000) * 2 + ${{ matrix.port_offset }}))
           if [ "$port" -lt 20000 ] || [ "$port" -gt 55999 ]; then
             echo "Calculated gallery port is outside the reserved CI range: $port" >&2
