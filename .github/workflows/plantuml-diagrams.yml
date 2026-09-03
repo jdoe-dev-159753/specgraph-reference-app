@@ -31,13 +31,14 @@ concurrency:
 jobs:
   verify:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.regenerate_artifact != true }}
-    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted","linux","x64","specgraph-reference-app","ci","docker"]') }}
     permissions:
       contents: read
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Clean container-owned outputs before checkout
+        if: ${{ github.event_name != 'pull_request' }}
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams'

@@ -36,12 +36,12 @@ permissions:
 jobs:
   fast-verify:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.compatibility != true }}
-    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted","linux","x64","specgraph-reference-app","ci","docker"]') }}
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      MAVEN_CACHE_VOLUME: ${{ github.event_name == 'pull_request' && format('specgraph-maven-cache-pr-{0}', github.event.pull_request.number) || 'specgraph-maven-cache-fast-main' }}
     steps:
       - name: Clean container-owned outputs before checkout
+        if: ${{ github.event_name != 'pull_request' }}
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams'
@@ -60,12 +60,26 @@ jobs:
       - name: Ratchet normative SRS to design-map coverage
         run: python3 scripts/validate_design_map.py
 
-      - name: Verify backend against Testcontainers PostgreSQL
+      - uses: actions/setup-java@v5
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Verify backend on GitHub-hosted pull-request runner
+        if: ${{ github.event_name == 'pull_request' }}
+        working-directory: backend
+        run: mvn -B -q verify
+
+      - name: Verify backend in pinned container on trusted self-hosted runner
+        if: ${{ github.event_name != 'pull_request' }}
         run: >-
           docker run --rm
           --network host
           -v /var/run/docker.sock:/var/run/docker.sock
-          -v "$MAVEN_CACHE_VOLUME:/root/.m2"
+          -v specgraph-maven-cache-fast-main:/root/.m2
           -v "$PWD/backend:/workspace"
           -w /workspace
           maven:3.9-eclipse-temurin-21
