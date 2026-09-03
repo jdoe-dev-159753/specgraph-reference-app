@@ -40,6 +40,9 @@ jobs:
       - name: Assert exact tested source revision
         run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
 
+      - name: Verify proposed work-graph guard semantics
+        run: python3 -m unittest scripts/test_work_graph_guard.py
+
   verify-r4-acceptance:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
