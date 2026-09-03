@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("!bayesian-detector")
+@Profile("!bayesian-detector & !fuzzy-detector")
 final class NoOpRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     @Override
     public List<RiskSignalEvidence> detect(CustomerSnapshot snapshot) {
