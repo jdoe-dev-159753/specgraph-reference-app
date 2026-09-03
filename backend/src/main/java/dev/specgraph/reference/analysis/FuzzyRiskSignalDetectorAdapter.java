@@ -13,20 +13,22 @@ import org.springframework.stereotype.Component;
  * Small explainable fuzzy detector for the synthetic review domain.
  *
  * <p>The implementation deliberately keeps the fuzzy surface project-owned and bounded: four
- * normalized memberships, one coupled rule and weighted singleton defuzzification. This avoids a
- * heavyweight or license-constraining fuzzy runtime for a rule surface that is smaller than the
- * adapter glue such a dependency would require. The output is derived advisory evidence only and
- * never mutates source risk facts.
+ * normalized memberships, one coupled rule and monotonic weighted singleton defuzzification. This
+ * avoids a heavyweight or license-constraining fuzzy runtime for a rule surface that is smaller
+ * than the adapter glue such a dependency would require. The output is derived advisory evidence
+ * only and never mutates source risk facts.
  */
 @Component
 @Profile("fuzzy-detector")
 final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     static final String DETECTOR_IDENTITY = "graded-review-fuzzy-v1";
     static final String SIGNAL_IDENTITY = "fuzzy-review-elevation";
-    static final String RULE_SET_VERSION = "review-fuzzy-rules-v1";
+    static final String RULE_SET_VERSION = "review-fuzzy-rules-v2";
     static final String FEATURE_SCHEMA_VERSION = "review-fuzzy-features-v1";
 
     private static final double BASELINE_ACTIVATION = 0.25;
+    private static final double BASELINE_CONSEQUENT = 0.05;
+    private static final double ELEVATION_CONSEQUENT = 1.0;
 
     @Override
     public List<RiskSignalEvidence> detect(CustomerSnapshot snapshot) {
@@ -55,13 +57,20 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
         activations.put("R5_CROSS_BORDER_WITH_SOURCE_RISK",
                 Math.min(activations.get("R2_CROSS_BORDER"), activations.get("R4_SOURCE_RISK")));
 
+        /*
+         * Every non-baseline rule represents evidence in the same direction: increased review
+         * elevation. Giving every positive rule the maximum singleton consequent makes the
+         * weighted mean monotonic in each positive activation. Feature/rule importance stays in
+         * the membership functions and coupled-rule activation instead of incompatible singleton
+         * levels that could make adding positive evidence lower the aggregate score.
+         */
         Map<String, Double> consequents = Map.of(
-                "R0_BASELINE", 0.05,
-                "R1_CRYPTO", 0.90,
-                "R2_CROSS_BORDER", 0.70,
-                "R3_INCOMPLETE", 0.65,
-                "R4_SOURCE_RISK", 0.70,
-                "R5_CROSS_BORDER_WITH_SOURCE_RISK", 0.88);
+                "R0_BASELINE", BASELINE_CONSEQUENT,
+                "R1_CRYPTO", ELEVATION_CONSEQUENT,
+                "R2_CROSS_BORDER", ELEVATION_CONSEQUENT,
+                "R3_INCOMPLETE", ELEVATION_CONSEQUENT,
+                "R4_SOURCE_RISK", ELEVATION_CONSEQUENT,
+                "R5_CROSS_BORDER_WITH_SOURCE_RISK", ELEVATION_CONSEQUENT);
 
         double weighted = 0.0;
         double activationSum = 0.0;
@@ -72,16 +81,17 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
         double score = clamp01(weighted / activationSum);
 
         LinkedHashMap<String, String> provenance = new LinkedHashMap<>();
-        provenance.put("semantics", "weighted fuzzy review-elevation score in [0,1]");
+        provenance.put("semantics", "monotonic weighted fuzzy review-elevation score in [0,1]");
         provenance.put("featureSchemaVersion", FEATURE_SCHEMA_VERSION);
         provenance.put("ruleSetVersion", RULE_SET_VERSION);
-        provenance.put("defuzzification", "weighted-singleton-v1");
+        provenance.put("defuzzification", "weighted-singleton-monotonic-v2");
+        provenance.put("positiveConsequent", format(ELEVATION_CONSEQUENT));
         provenance.put("crossBorderRatio", format(crossBorderRatio));
         provenance.put("cryptoRatio", format(cryptoRatio));
         provenance.put("incompleteRatio", format(incompleteRatio));
         provenance.put("sourceRiskDensity", format(sourceRiskDensity));
         activations.forEach((rule, activation) -> provenance.put("activation." + rule, format(activation)));
-        provenance.put("implementation", "project-owned-minimal-fuzzy-inference-v1");
+        provenance.put("implementation", "project-owned-minimal-fuzzy-inference-v2");
         provenance.put("demoLimitation", "synthetic heuristic; not production AML calibration");
 
         return List.of(new RiskSignalEvidence(
