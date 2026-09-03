@@ -6,7 +6,7 @@ skinparam componentStyle rectangle
 skinparam nodesep 28
 skinparam ranksep 38
 
-rectangle "Customer Care\nOperator" as Operator
+actor "Customer Care\nOperator" as Operator
 
 package "Driving adapters" {
   component "React operator UI" as UI
@@ -15,7 +15,7 @@ package "Driving adapters" {
 }
 
 interface "Inbound application use cases\ncustomer review · analysis · history" as Inbound
-rectangle "Application core\n\nidentity · customer · risk · analysis\n\nproject-owned domain +\napplication contracts" as Core
+hexagon "Application core\n\nidentity · customer · risk · analysis\n\nproject-owned domain +\napplication contracts" as Core
 
 interface "CustomerActivityPort" as ActivityPort
 interface "PolicyKnowledgePort" as PolicyPort
@@ -37,8 +37,8 @@ package "Driven adapters" {
   ModelAdapters -[hidden]down-> HistoryAdapter
 }
 
-rectangle "PostgreSQL + pgvector" as DB
-rectangle "External AI provider" as Provider
+database "PostgreSQL + pgvector" as DB
+component "External AI provider" as Provider <<external>>
 DB -[hidden]down-> Provider
 
 Operator --> UI
