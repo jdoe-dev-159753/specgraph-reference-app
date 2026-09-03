@@ -20,6 +20,7 @@ import java.util.UUID;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -114,7 +115,7 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public AnalysisHistoryPage pageByCustomer(UUID customerId, AnalysisHistoryQuery query) {
         long totalEntries = jdbc.sql("SELECT COUNT(*) FROM analysis_history WHERE customer_id = :customerId")
                 .param("customerId", customerId)
