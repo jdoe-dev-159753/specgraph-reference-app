@@ -10,5 +10,7 @@ public interface AnalysisUseCase {
 
     List<AnalysisHistoryEntry> listHistory(UUID customerId);
 
+    AnalysisHistoryPage listHistory(UUID customerId, AnalysisHistoryQuery query);
+
     Optional<AnalysisHistoryEntry> findHistory(UUID customerId, UUID analysisId);
 }

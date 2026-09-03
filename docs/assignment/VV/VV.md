@@ -31,11 +31,11 @@ The baseline currently defines ten stable obligations. This table is a human rea
 
 | Obligation | Concern | Primary evidence level |
 | --- | --- | --- |
-| `VFY-CUSTOMER-READ-001` | Customer lookup, CARD/PAYMENT/CRYPTO activity and risk evidence on the operator dashboard | focused UI E2E + HTTP acceptance + port/integration |
+| `VFY-CUSTOMER-READ-001` | Customer lookup, CARD/PAYMENT/CRYPTO activity and risk evidence on the operator dashboard, including bounded high-volume pagination/filtering | focused UI E2E + HTTP acceptance + real PostgreSQL/Testcontainers port/integration |
 | `VFY-AUTH-001` | Multiple authenticated operators and protected capabilities | Spring Security integration + HTTP acceptance + focused browser E2E |
 | `VFY-ANALYSIS-CONTRACT-001` | Structured risk level, findings and recommendations | contract/unit + acceptance |
 | `VFY-RAG-001` | Relevant policy grounding, explicit absent-grounding behavior and provenance | port/integration + failure-path acceptance |
-| `VFY-HISTORY-001` | Persisted analysis and authenticated later review with operator/time attribution | PostgreSQL integration + acceptance |
+| `VFY-HISTORY-001` | Persisted analysis and authenticated later review with operator/time attribution, including bounded history-page semantics | PostgreSQL integration + HTTP/browser acceptance |
 | `VFY-REPRODUCIBILITY-001` | Clean-checkout local/demo startup and deterministic project assembly | deployment/Compose + smoke validation |
 | `VFY-DETERMINISM-001` | Mandatory baseline without a live external LLM | deterministic adapter acceptance |
 | `VFY-FAILURE-PATHS-001` | Authentication, grounding, model/result and persistence failures do not masquerade as success | explicit failure-injection acceptance/integration |
@@ -123,7 +123,7 @@ A human reviewer validates concerns that automation cannot prove economically: d
 
 Implementation PRs satisfy obligations by adding executable evidence carrying the stable obligation/requirement IDs. Until that happens, generated current-status views shall report the obligation as missing/pending from executable evidence. The durable strategy remains unchanged merely because a test temporarily fails or passes.
 
-The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `OperatorContextPort`, `CustomerActivityPort`, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology.
+The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `OperatorContextPort`, `CustomerActivityPort`, typed `RiskSignalDetectorPort` leaf/Composite selection, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology. `VFY-ANALYSIS-CONTRACT-001` covers the Stage-1 selection/factory/Composite contract, including deterministic ordering and fail-closed invalid configuration, without turning optional calibrated fusion into an accepted #224 behavior.
 
 ![Verification evidence flow](diagrams/verification-evidence-flow.svg)
 
@@ -148,7 +148,7 @@ Evidence should be cheap to reproduce and close to the behavior it proves:
 
 - unit/property evidence: normal test runner output plus markers;
 - HTTP/security evidence: Spring Security integration plus exact-head browser acceptance where session/navigation semantics are operator-visible;
-- database evidence: migration + repository/integration tests against real PostgreSQL where semantics matter;
+- database evidence: migration + repository/integration tests against real PostgreSQL where semantics matter, including high-density fixtures that prove filtering/count/`LIMIT`/`OFFSET` occurs before activity/history payloads cross the operator boundary;
 - architecture evidence: deterministic dependency/import/module checks;
 - UI evidence: focused E2E assertions for dashboard and authentication acceptance plus human review of comprehensibility;
 - provider evidence: deterministic adapter for mandatory baseline, optional live-provider smoke evidence separately tagged;

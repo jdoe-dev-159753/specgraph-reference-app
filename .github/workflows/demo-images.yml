@@ -7,9 +7,6 @@ on:
       - 'docker/**'
       - 'compose.yaml'
       - 'compose.oci.yaml'
-      - 'e2e/**'
-      - 'scripts/**'
-      - '.github/workflows/demo-images.yml'
   workflow_dispatch:
 
 concurrency:

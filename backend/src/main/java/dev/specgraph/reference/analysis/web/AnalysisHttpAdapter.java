@@ -2,6 +2,8 @@ package dev.specgraph.reference.analysis.web;
 
 import dev.specgraph.reference.analysis.AnalysisFailureException;
 import dev.specgraph.reference.analysis.AnalysisHistoryEntry;
+import dev.specgraph.reference.analysis.AnalysisHistoryPage;
+import dev.specgraph.reference.analysis.AnalysisHistoryQuery;
 import dev.specgraph.reference.analysis.AnalysisModelProvenance;
 import dev.specgraph.reference.analysis.AnalysisResult;
 import dev.specgraph.reference.analysis.AnalysisUseCase;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -39,8 +42,25 @@ final class AnalysisHttpAdapter {
     }
 
     @GetMapping
-    List<AnalysisResponse> history(@PathVariable UUID customerId) {
-        return analysis.listHistory(customerId).stream().map(AnalysisResponse::from).toList();
+    ResponseEntity<List<AnalysisResponse>> history(
+            @PathVariable UUID customerId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        AnalysisHistoryQuery query;
+        try {
+            query = new AnalysisHistoryQuery(page, pageSize);
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().build();
+        }
+        AnalysisHistoryPage historyPage = analysis.listHistory(customerId, query);
+        return ResponseEntity.ok()
+                .header("X-Page", Integer.toString(historyPage.page()))
+                .header("X-Page-Size", Integer.toString(historyPage.pageSize()))
+                .header("X-Total-Count", Long.toString(historyPage.totalEntries()))
+                .header("X-Total-Pages", Long.toString(historyPage.totalPages()))
+                .header("X-Has-Previous", Boolean.toString(historyPage.hasPrevious()))
+                .header("X-Has-Next", Boolean.toString(historyPage.hasNext()))
+                .body(historyPage.entries().stream().map(AnalysisResponse::from).toList());
     }
 
     @GetMapping("/{analysisId}")

@@ -1,15 +1,6 @@
 name: r4-gallery-ci
 
 on:
-  pull_request:
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'e2e/**'
-      - 'docker/**'
-      - '.dockerignore'
-      - 'compose.r4.yaml'
-      - '.github/workflows/r4-gallery-ci.yml'
   workflow_dispatch:
 
 concurrency:
@@ -54,9 +45,6 @@ jobs:
 
       - name: Allocate run-isolated gallery port
         run: |
-          # Each workflow run receives a stable high port pair. This keeps separate PRs from
-          # contending on one self-hosted Docker host without a global concurrency group that
-          # can discard the newest pending exact-head proof.
           port=$((20000 + (GITHUB_RUN_ID % 18000) * 2 + ${{ matrix.port_offset }}))
           if [ "$port" -lt 20000 ] || [ "$port" -gt 55999 ]; then
             echo "Calculated gallery port is outside the reserved CI range: $port" >&2
@@ -73,12 +61,20 @@ jobs:
           printf 'variant=%s port=%s profiles=%s expectedDetector=%s\n' \
             '${{ matrix.variant }}' "$R4_PORT" "$R4_PROFILES" "$EXPECT_DETECTOR"
 
-      - name: Start isolated R4 gallery variant
-        env:
-          APP_R4_IMAGE: specgraph-reference-app:r4-gallery-${{ matrix.variant }}-${{ env.SOURCE_SHA }}
+      - name: Reuse or build immutable exact-head application image
         run: |
-          echo "APP_R4_IMAGE=$APP_R4_IMAGE" >> "$GITHUB_ENV"
-          docker compose -f compose.r4.yaml up -d --build
+          image="$(bash scripts/ci/ensure-app-image.sh \
+            "specgraph-reference-app:r4-${SOURCE_SHA}" . "$SOURCE_SHA")"
+          echo "APP_R4_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Reuse or build immutable Playwright dependency image
+        run: |
+          image="$(bash scripts/ci/ensure-e2e-image.sh)"
+          echo "E2E_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Start isolated R4 gallery variant without rebuilding image
+        run: |
+          docker compose -f compose.r4.yaml up -d --no-build
           for attempt in $(seq 1 180); do
             if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
               docker compose -f compose.r4.yaml ps
@@ -90,17 +86,9 @@ jobs:
           exit 1
 
       - name: Verify configured R4 flow and capture Playwright screenshot
-        run: |
-          docker run --rm --network host --ipc=host \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp \
-            -e npm_config_cache=/tmp/.npm \
-            -e BASE_URL="http://127.0.0.1:${R4_PORT}" \
-            -e EVIDENCE_NAME="$EVIDENCE_NAME" \
-            -e EXPECT_DETECTOR="$EXPECT_DETECTOR" \
-            -v "$PWD/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
+        env:
+          BASE_URL: http://127.0.0.1:${{ env.R4_PORT }}
+        run: bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
 
       - name: Collect reviewer screenshot
         if: always()
@@ -113,6 +101,7 @@ jobs:
             "port=$R4_PORT" \
             "profiles=$R4_PROFILES" \
             "expectedDetector=$EXPECT_DETECTOR" \
+            "applicationImage=$APP_R4_IMAGE" \
             "stage2=pgvector+all-MiniLM-L6-v2" \
             "stage3=deterministic" \
             > "e2e/reviewer-evidence/${{ matrix.variant }}/provenance.txt"
@@ -121,7 +110,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r4-gallery-${{ matrix.variant }}-${{ env.SOURCE_SHA }}
+          name: r4-gallery-${{ matrix.variant }}-${{ env.SOURCE_SHA }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             e2e/reviewer-evidence/${{ matrix.variant }}/**
             e2e/test-results/**
@@ -133,6 +122,3 @@ jobs:
         if: always()
         run: |
           docker compose -f compose.r4.yaml down -v --remove-orphans 2>/dev/null || true
-          if [ -n "${APP_R4_IMAGE:-}" ]; then
-            docker image rm -f "$APP_R4_IMAGE" 2>/dev/null || true
-          fi

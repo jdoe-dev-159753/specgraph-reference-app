@@ -1,8 +1,8 @@
 import { FormEvent, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Box, Button, Chip, Container, List, ListItem, Paper, Stack, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
+  Alert, Box, Button, Chip, Container, List, ListItem, MenuItem, Paper, Stack, Table, TableBody,
+  TableCell, TableContainer, TableHead, TablePagination, TableRow, TextField, Typography,
 } from '@mui/material'
 
 type Activity = {
@@ -41,8 +41,39 @@ type Analysis = {
   evidenceProvenance: PolicyEvidence[]
 }
 
-type CustomerSnapshot = { customerId: string; activities: Activity[]; riskEvidence: RiskEvidence[] }
-type Request = { customerId: string; submission: number }
+type CustomerSnapshot = {
+  customerId: string
+  activities: Activity[]
+  riskEvidence: RiskEvidence[]
+  page: number
+  pageSize: number
+  totalActivities: number
+  totalRiskEvidence: number
+  totalPages: number
+  hasPrevious: boolean
+  hasNext: boolean
+}
+
+type Request = {
+  customerId: string
+  submission: number
+  page: number
+  pageSize: number
+  activityType: '' | Activity['type']
+  status: string
+  createdFrom: string
+  createdTo: string
+}
+
+type AnalysisHistoryPage = {
+  entries: Analysis[]
+  page: number
+  pageSize: number
+  totalEntries: number
+  totalPages: number
+  hasPrevious: boolean
+  hasNext: boolean
+}
 
 type CsrfView = {
   headerName: string
@@ -67,6 +98,8 @@ type LoginRequest = { username: string; password: string; csrf: CsrfView }
 type RunAnalysisRequest = { customerId: string; csrf?: CsrfView }
 
 const SEEDED_CUSTOMER = '11111111-1111-1111-1111-111111111111'
+const DEFAULT_ACTIVITY_PAGE_SIZE = 50
+const DEFAULT_HISTORY_PAGE_SIZE = 20
 
 function formatAmount(amount: string) {
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(amount)
@@ -74,6 +107,10 @@ function formatAmount(amount: string) {
   const [, sign, integer, fraction = ''] = match
   const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, "'")
   return `${sign}${grouped}.${fraction.padEnd(2, '0')}`
+}
+
+function optionalInstant(value: string) {
+  return value ? new Date(value).toISOString() : ''
 }
 
 function GroundingEvidence({ evidence }: { evidence: PolicyEvidence[] }) {
@@ -153,17 +190,55 @@ async function logoutOperator(csrf: CsrfView): Promise<void> {
   if (!response.ok) throw new Error(`Logout failed (${response.status})`)
 }
 
+function customerUrl(request: Request) {
+  const base = `/api/customers/${request.customerId}`
+  const params = new URLSearchParams()
+  if (request.page !== 0) params.set('page', String(request.page))
+  if (request.pageSize !== DEFAULT_ACTIVITY_PAGE_SIZE) params.set('pageSize', String(request.pageSize))
+  if (request.activityType) params.set('type', request.activityType)
+  if (request.status.trim()) params.set('status', request.status.trim())
+  if (request.createdFrom) params.set('createdFrom', optionalInstant(request.createdFrom))
+  if (request.createdTo) params.set('createdTo', optionalInstant(request.createdTo))
+  const query = params.toString()
+  return query ? `${base}?${query}` : base
+}
+
 async function loadCustomer(request: Request): Promise<CustomerSnapshot> {
-  const response = await fetch(`/api/customers/${request.customerId}`)
+  const response = await fetch(customerUrl(request))
   if (response.status === 404) throw new Error('Customer not found')
+  if (response.status === 400) throw new Error('Invalid customer activity filters')
   if (!response.ok) throw new Error(`Customer request failed (${response.status})`)
   return response.json()
 }
 
-async function loadAnalysisHistory(customerId: string): Promise<Analysis[]> {
-  const response = await fetch(`/api/customers/${customerId}/analyses`)
+async function loadAnalysisHistory(
+  customerId: string,
+  page: number,
+  pageSize: number,
+): Promise<AnalysisHistoryPage> {
+  const base = `/api/customers/${customerId}/analyses`
+  const params = new URLSearchParams()
+  if (page !== 0) params.set('page', String(page))
+  if (pageSize !== DEFAULT_HISTORY_PAGE_SIZE) params.set('pageSize', String(pageSize))
+  const query = params.toString()
+  const response = await fetch(query ? `${base}?${query}` : base)
   if (!response.ok) throw new Error(`Analysis history request failed (${response.status})`)
-  return response.json()
+  const entries = await response.json() as Analysis[]
+  const headerNumber = (name: string, fallback: number) => {
+    const raw = response.headers.get(name)
+    if (raw === null || raw.trim() === '') return fallback
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : fallback
+  }
+  return {
+    entries,
+    page: headerNumber('X-Page', page),
+    pageSize: headerNumber('X-Page-Size', pageSize),
+    totalEntries: headerNumber('X-Total-Count', entries.length),
+    totalPages: headerNumber('X-Total-Pages', entries.length === 0 ? 0 : 1),
+    hasPrevious: response.headers.get('X-Has-Previous') === 'true',
+    hasNext: response.headers.get('X-Has-Next') === 'true',
+  }
 }
 
 async function runAnalysis(request: RunAnalysisRequest): Promise<Analysis> {
@@ -185,6 +260,12 @@ function RiskLevelChip({ level }: { level: Analysis['riskLevel'] }) {
 export default function App() {
   const [customerId, setCustomerId] = useState(SEEDED_CUSTOMER)
   const [request, setRequest] = useState<Request | null>(null)
+  const [activityType, setActivityType] = useState<Request['activityType']>('')
+  const [activityStatus, setActivityStatus] = useState('')
+  const [createdFrom, setCreatedFrom] = useState('')
+  const [createdTo, setCreatedTo] = useState('')
+  const [historyPage, setHistoryPage] = useState(0)
+  const [historyPageSize, setHistoryPageSize] = useState(DEFAULT_HISTORY_PAGE_SIZE)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const submission = useRef(0)
@@ -211,14 +292,15 @@ export default function App() {
   })
   const selectedCustomerId = customer.data?.customerId ?? null
   const history = useQuery({
-    queryKey: ['analysis-history', selectedCustomerId],
-    queryFn: () => loadAnalysisHistory(selectedCustomerId!),
+    queryKey: ['analysis-history', selectedCustomerId, historyPage, historyPageSize],
+    queryFn: () => loadAnalysisHistory(selectedCustomerId!, historyPage, historyPageSize),
     enabled: applicationEnabled && selectedCustomerId !== null,
     retry: false,
   })
   const analysis = useMutation({
     mutationFn: runAnalysis,
     onSuccess: async (_completed, analyzed) => {
+      setHistoryPage(0)
       await queryClient.invalidateQueries({ queryKey: ['analysis-history', analyzed.customerId] })
     },
   })
@@ -233,6 +315,7 @@ export default function App() {
     mutationFn: logoutOperator,
     onSuccess: async () => {
       setRequest(null)
+      setHistoryPage(0)
       analysis.reset()
       queryClient.removeQueries({ queryKey: ['customer'] })
       queryClient.removeQueries({ queryKey: ['analysis-history'] })
@@ -243,8 +326,24 @@ export default function App() {
   function submit(event: FormEvent) {
     event.preventDefault()
     analysis.reset()
+    setHistoryPage(0)
     submission.current += 1
-    setRequest({ customerId, submission: submission.current })
+    setRequest({
+      customerId,
+      submission: submission.current,
+      page: 0,
+      pageSize: DEFAULT_ACTIVITY_PAGE_SIZE,
+      activityType,
+      status: activityStatus,
+      createdFrom,
+      createdTo,
+    })
+  }
+
+  function updateActivityPage(page: number, pageSize = request?.pageSize ?? DEFAULT_ACTIVITY_PAGE_SIZE) {
+    if (!request) return
+    submission.current += 1
+    setRequest({ ...request, page, pageSize, submission: submission.current })
   }
 
   function submitLogin(event: FormEvent) {
@@ -323,15 +422,56 @@ export default function App() {
         {applicationEnabled && (
           <>
             <Paper component="form" onSubmit={submit} sx={{ p: { xs: 2, md: 3 } }}>
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'stretch' }}>
-                <TextField
-                  fullWidth
-                  label="Customer ID"
-                  value={customerId}
-                  onChange={e => setCustomerId(e.target.value)}
-                  size="small"
-                />
-                <Button type="submit" variant="contained" sx={{ minWidth: 128 }}>Search</Button>
+              <Stack spacing={2}>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'stretch' }}>
+                  <TextField
+                    fullWidth
+                    label="Customer ID"
+                    value={customerId}
+                    onChange={e => setCustomerId(e.target.value)}
+                    size="small"
+                  />
+                  <Button type="submit" variant="contained" sx={{ minWidth: 128 }}>Search</Button>
+                </Stack>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                  <TextField
+                    select
+                    label="Activity type"
+                    value={activityType}
+                    onChange={event => setActivityType(event.target.value as Request['activityType'])}
+                    size="small"
+                    sx={{ minWidth: 160 }}
+                  >
+                    <MenuItem value="">All types</MenuItem>
+                    <MenuItem value="CARD">CARD</MenuItem>
+                    <MenuItem value="PAYMENT">PAYMENT</MenuItem>
+                    <MenuItem value="CRYPTO">CRYPTO</MenuItem>
+                  </TextField>
+                  <TextField
+                    label="Status"
+                    value={activityStatus}
+                    onChange={event => setActivityStatus(event.target.value)}
+                    placeholder="Completed"
+                    size="small"
+                    sx={{ minWidth: 160 }}
+                  />
+                  <TextField
+                    label="Created from"
+                    type="datetime-local"
+                    value={createdFrom}
+                    onChange={event => setCreatedFrom(event.target.value)}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    size="small"
+                  />
+                  <TextField
+                    label="Created to"
+                    type="datetime-local"
+                    value={createdTo}
+                    onChange={event => setCreatedTo(event.target.value)}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    size="small"
+                  />
+                </Stack>
               </Stack>
             </Paper>
 
@@ -343,11 +483,11 @@ export default function App() {
                   <Box sx={{ px: 3, py: 2.5, borderBottom: 1, borderColor: 'divider' }}>
                     <Typography variant="h5">Customer activity</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                      Customer {customer.data.customerId}
+                      Customer {customer.data.customerId} · {customer.data.totalActivities} matching activit{customer.data.totalActivities === 1 ? 'y' : 'ies'}
                     </Typography>
                   </Box>
-                  <TableContainer>
-                    <Table size="small" aria-label="Customer activity">
+                  <TableContainer sx={{ maxHeight: 520 }}>
+                    <Table stickyHeader size="small" aria-label="Customer activity">
                       <TableHead><TableRow>
                         <TableCell>Type</TableCell>
                         <TableCell>Transaction</TableCell>
@@ -397,7 +537,7 @@ export default function App() {
                               >
                                 {new Date(activity.createdAt).toLocaleString()}
                               </TableCell>
-                              <TableCell>
+                              <TableCell sx={{ minWidth: 260, maxWidth: 420 }}>
                                 {Object.entries(activity.details)
                                   .filter(([, value]) => value !== null)
                                   .map(([key, value]) => `${key}: ${String(value)}`)
@@ -409,13 +549,23 @@ export default function App() {
                       </TableBody>
                     </Table>
                   </TableContainer>
+                  <TablePagination
+                    component="div"
+                    data-testid="activity-pagination"
+                    count={customer.data.totalActivities}
+                    page={customer.data.page}
+                    rowsPerPage={customer.data.pageSize}
+                    rowsPerPageOptions={[25, 50, 100, 200]}
+                    onPageChange={(_event, page) => updateActivityPage(page)}
+                    onRowsPerPageChange={event => updateActivityPage(0, Number(event.target.value))}
+                  />
                 </Paper>
 
                 <Paper data-testid="risk-evidence" sx={{ overflow: 'hidden' }}>
                   <Box sx={{ px: 3, py: 2.5, borderBottom: 1, borderColor: 'divider', borderLeft: 4, borderLeftColor: 'secondary.main' }}>
                     <Typography variant="h5">Risk evidence</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                      Source-shaped deterministic evidence associated with the current activity set.
+                      Source-shaped deterministic evidence associated with the current activity page ({customer.data.totalRiskEvidence} matching assessment{customer.data.totalRiskEvidence === 1 ? '' : 's'} overall).
                     </Typography>
                   </Box>
                   <List dense disablePadding>
@@ -496,11 +646,11 @@ export default function App() {
                     <Typography variant="h6">Analysis history</Typography>
                     {history.isFetching && <Typography sx={{ mt: 1 }}>Loading prior analyses…</Typography>}
                     {history.error && <Alert severity="error" sx={{ mt: 1 }}>{history.error.message}</Alert>}
-                    {history.data?.length === 0 && (
+                    {history.data?.entries.length === 0 && (
                       <Typography color="text.secondary" sx={{ mt: 1 }}>No completed analyses have been retained for this customer.</Typography>
                     )}
                     <List data-testid="analysis-history" disablePadding sx={{ mt: 1 }}>
-                      {history.data?.map(entry => (
+                      {history.data?.entries.map(entry => (
                         <ListItem
                           key={entry.analysisId}
                           data-testid={`analysis-history-${entry.analysisId}`}
@@ -522,6 +672,21 @@ export default function App() {
                         </ListItem>
                       ))}
                     </List>
+                    {history.data && (
+                      <TablePagination
+                        component="div"
+                        data-testid="analysis-history-pagination"
+                        count={history.data.totalEntries}
+                        page={history.data.page}
+                        rowsPerPage={history.data.pageSize}
+                        rowsPerPageOptions={[10, 20, 50, 100]}
+                        onPageChange={(_event, page) => setHistoryPage(page)}
+                        onRowsPerPageChange={event => {
+                          setHistoryPage(0)
+                          setHistoryPageSize(Number(event.target.value))
+                        }}
+                      />
+                    )}
                   </Box>
                 </Paper>
               </>

@@ -112,6 +112,11 @@ final class AnalysisService implements AnalysisUseCase {
     }
 
     @Override
+    public AnalysisHistoryPage listHistory(UUID customerId, AnalysisHistoryQuery query) {
+        return analysisHistory.pageByCustomer(customerId, query);
+    }
+
+    @Override
     public Optional<AnalysisHistoryEntry> findHistory(UUID customerId, UUID analysisId) {
         return analysisHistory.findByCustomerAndId(customerId, analysisId);
     }

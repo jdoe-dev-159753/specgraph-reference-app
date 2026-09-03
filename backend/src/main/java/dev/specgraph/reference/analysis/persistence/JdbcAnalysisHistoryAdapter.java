@@ -2,7 +2,9 @@ package dev.specgraph.reference.analysis.persistence;
 
 import dev.specgraph.reference.analysis.AnalysisHistoryCreateCommand;
 import dev.specgraph.reference.analysis.AnalysisHistoryEntry;
+import dev.specgraph.reference.analysis.AnalysisHistoryPage;
 import dev.specgraph.reference.analysis.AnalysisHistoryPort;
+import dev.specgraph.reference.analysis.AnalysisHistoryQuery;
 import dev.specgraph.reference.analysis.AnalysisModelProvenance;
 import dev.specgraph.reference.analysis.AnalysisResult;
 import dev.specgraph.reference.analysis.PolicyEvidence;
@@ -18,6 +20,7 @@ import java.util.UUID;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -109,6 +112,26 @@ class JdbcAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 .param("customerId", customerId)
                 .query(this::mapHistoryEntry)
                 .list();
+    }
+
+    @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public AnalysisHistoryPage pageByCustomer(UUID customerId, AnalysisHistoryQuery query) {
+        long totalEntries = jdbc.sql("SELECT COUNT(*) FROM analysis_history WHERE customer_id = :customerId")
+                .param("customerId", customerId)
+                .query(Long.class)
+                .single();
+        List<AnalysisHistoryEntry> entries = jdbc.sql(SELECT_BASE + """
+                        WHERE customer_id = :customerId
+                        ORDER BY generated_at DESC, analysis_id DESC
+                        LIMIT :pageSize OFFSET :offset
+                        """)
+                .param("customerId", customerId)
+                .param("pageSize", query.pageSize())
+                .param("offset", query.offset())
+                .query(this::mapHistoryEntry)
+                .list();
+        return new AnalysisHistoryPage(entries, query.page(), query.pageSize(), totalEntries);
     }
 
     @Override

@@ -1,14 +1,6 @@
 name: r4-auth-ci
 
 on:
-  pull_request:
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'e2e/**'
-      - 'docker/**'
-      - '.dockerignore'
-      - '.github/workflows/r4-auth-ci.yml'
   workflow_dispatch:
 
 concurrency:
@@ -23,7 +15,6 @@ jobs:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      AUTH_PORT: '8084'
     steps:
       - name: Clean container-owned outputs before checkout
         run: |
@@ -41,11 +32,16 @@ jobs:
           echo "Checked-out SHA:     $checked_out_sha"
           test "$checked_out_sha" = "$SOURCE_SHA"
 
-      - name: Build exact-head application image
+      - name: Reuse or build immutable exact-head application image
         run: |
-          image="specgraph-reference-app:r4-auth-ci-${SOURCE_SHA}"
-          docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$image" .
+          image="$(bash scripts/ci/ensure-app-image.sh \
+            "specgraph-reference-app:r4-${SOURCE_SHA}" . "$SOURCE_SHA")"
           echo "R4_AUTH_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Reuse or build immutable Playwright dependency image
+        run: |
+          image="$(bash scripts/ci/ensure-e2e-image.sh)"
+          echo "E2E_IMAGE=$image" >> "$GITHUB_ENV"
 
       - name: Start isolated PostgreSQL and r4-auth application
         run: |
@@ -76,13 +72,24 @@ jobs:
           done
 
           docker run -d --name "$application" --network "$network" \
-            -p "${AUTH_PORT}:8080" \
+            -p "127.0.0.1::8080" \
             -e SPRING_PROFILES_ACTIVE=r4-auth \
             -e SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/specgraph \
             -e SPRING_DATASOURCE_USERNAME=specgraph \
             -e SPRING_DATASOURCE_PASSWORD=specgraph \
             -e SPECGRAPH_SOURCE_TIME_ZONE=UTC \
             "$R4_AUTH_IMAGE"
+
+          endpoint="$(docker port "$application" 8080/tcp | head -n 1)"
+          AUTH_PORT="${endpoint##*:}"
+          case "$AUTH_PORT" in
+            ''|*[!0-9]*)
+              echo "Docker did not return a numeric run-isolated auth port: $endpoint" >&2
+              exit 1
+              ;;
+          esac
+          echo "AUTH_PORT=$AUTH_PORT" >> "$GITHUB_ENV"
+          printf 'Docker allocated R4 auth port %s for run %s\n' "$AUTH_PORT" "$GITHUB_RUN_ID"
 
           for attempt in $(seq 1 90); do
             if curl -fsS "http://127.0.0.1:${AUTH_PORT}/actuator/health" >/dev/null 2>&1; then
@@ -95,22 +102,16 @@ jobs:
           exit 1
 
       - name: VFY-AUTH-001 - Verify multi-operator browser boundary
-        run: |
-          docker run --rm --network host --ipc=host \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp \
-            -e npm_config_cache=/tmp/.npm \
-            -e BASE_URL="http://127.0.0.1:${AUTH_PORT}" \
-            -e EVIDENCE_NAME=r4-auth \
-            -v "$PWD/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-auth.spec.ts'
+        env:
+          BASE_URL: http://127.0.0.1:${{ env.AUTH_PORT }}
+          EVIDENCE_NAME: r4-auth
+        run: bash scripts/ci/run-playwright.sh r4-auth.spec.ts
 
       - name: Upload R4 auth evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r4-auth-${{ env.SOURCE_SHA }}
+          name: r4-auth-${{ env.SOURCE_SHA }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             e2e/test-results/r4-auth.xml
             e2e/test-results/r4-auth-artifacts/**
@@ -123,6 +124,3 @@ jobs:
         run: |
           docker rm -f "${R4_AUTH_APPLICATION:-missing}" "${R4_AUTH_DATABASE:-missing}" 2>/dev/null || true
           docker network rm "${R4_AUTH_NETWORK:-missing}" 2>/dev/null || true
-          if [ -n "${R4_AUTH_IMAGE:-}" ]; then
-            docker image rm -f "$R4_AUTH_IMAGE" 2>/dev/null || true
-          fi
