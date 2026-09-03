@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from scripts import work_graph_guard as guard
@@ -86,6 +87,35 @@ class ReviewFreshnessTests(unittest.TestCase):
                 comments, "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
             )
         )
+
+
+class MainIntegrationTests(unittest.TestCase):
+    def test_main_runs_both_pr_guards_and_propagates_each_failure(self):
+        injectors = (
+            "require_durable_workflow_surface",
+            "require_current_head_codex_review",
+        )
+        for failing_guard in injectors:
+            with self.subTest(failing_guard=failing_guard):
+                def inject_failure(pr_number, failures):
+                    self.assertEqual(308, pr_number)
+                    failures.append(f"{failing_guard} injected failure")
+
+                with (
+                    patch.object(guard, "pages", return_value=iter(())),
+                    patch.object(guard, "event_pr_number", return_value=308),
+                    patch.object(guard, "require_durable_workflow_surface") as durable,
+                    patch.object(guard, "require_current_head_codex_review") as review,
+                ):
+                    {"durable" if False else ""}
+                    selected = {
+                        "require_durable_workflow_surface": durable,
+                        "require_current_head_codex_review": review,
+                    }
+                    selected[failing_guard].side_effect = inject_failure
+                    self.assertEqual(1, guard.main())
+                    durable.assert_called_once()
+                    review.assert_called_once()
 
 
 class DurableWorkflowTests(unittest.TestCase):
