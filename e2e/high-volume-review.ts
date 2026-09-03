@@ -90,7 +90,7 @@ export async function runHighVolumeReviewScenario(page: Page) {
     const url = new URL(request.url())
     return url.pathname === `/api/customers/${denseCustomer}` && url.searchParams.get('page') === '1'
   })
-  await page.getByLabel('Go to next page').click()
+  await page.getByTestId('activity-pagination').getByLabel('Go to next page').click()
   await secondPageRequest
   await expect(page.getByTestId('activity-pagination')).toContainText('51–100 of 250')
   await expect(page.locator('[data-testid="activity-card"]')).toHaveCount(50)
