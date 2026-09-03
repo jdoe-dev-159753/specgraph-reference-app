@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Component;
  * only and never mutates source risk facts.
  */
 @Component
-@Profile("fuzzy-detector & !bayesian-detector")
 final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     static final String DETECTOR_IDENTITY = "graded-review-fuzzy-v1";
     static final String SIGNAL_IDENTITY = "fuzzy-review-elevation";
@@ -57,13 +55,6 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
         activations.put("R5_CROSS_BORDER_WITH_SOURCE_RISK",
                 Math.min(activations.get("R2_CROSS_BORDER"), activations.get("R4_SOURCE_RISK")));
 
-        /*
-         * Every non-baseline rule represents evidence in the same direction: increased review
-         * elevation. Giving every positive rule the maximum singleton consequent makes the
-         * weighted mean monotonic in each positive activation. Feature/rule importance stays in
-         * the membership functions and coupled-rule activation instead of incompatible singleton
-         * levels that could make adding positive evidence lower the aggregate score.
-         */
         Map<String, Double> consequents = Map.of(
                 "R0_BASELINE", BASELINE_CONSEQUENT,
                 "R1_CRYPTO", ELEVATION_CONSEQUENT,

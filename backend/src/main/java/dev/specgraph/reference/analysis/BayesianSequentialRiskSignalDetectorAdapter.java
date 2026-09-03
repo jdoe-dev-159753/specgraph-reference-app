@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import org.apache.commons.math3.distribution.BetaDistribution;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Component;
  * rate. The output is derived evidence only and never mutates or replaces source risk facts.
  */
 @Component
-@Profile("bayesian-detector & !fuzzy-detector")
 final class BayesianSequentialRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     static final String DETECTOR_IDENTITY = "beta-binomial-review-elevation-v1";
     static final String SIGNAL_IDENTITY = "posterior-review-elevation-rate";
