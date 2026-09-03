@@ -6,6 +6,7 @@ on:
       - 'scripts/work_graph_guard.py'
       - 'scripts/test_work_graph_guard.py'
       - 'scripts/ci/durable-workflows.txt'
+      - '.github/workflows/work-graph-guard.yml'
       - '.github/workflows/work-graph-guard-tests.yml'
 
 permissions:
