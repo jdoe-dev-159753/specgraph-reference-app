@@ -1,0 +1,90 @@
+name: reconcile-composite-design-once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/reconcile-composite-design-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/r5-detector-composite
+          fetch-depth: 1
+      - name: Reconcile controlled Composite design authorities
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}: {old[:100]!r}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          sdd = 'docs/assignment/SDD/SDD.md'
+          replace_once(
+              sdd,
+              '| `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | explicit no-op R4 baseline; selectable Bayesian and fuzzy leaves; further statistical/graph/classical-ML adapters later |',
+              '| `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | typed ordered `specgraph.analysis.detectors` selection resolves `NO_OP`, Bayesian or fuzzy as one leaf or a bounded Composite; legacy detector profiles are compatibility aliases only when typed selection is absent |')
+          replace_once(
+              sdd,
+              '- **Strategy:** selects interchangeable identity-context, activity, detector, policy or analysis-model behavior behind stable ports.\n- **Facade/application service:** exposes one coarse-grained use case while hiding multi-port orchestration. `AnalysisService` owns the evidence-to-analysis chain.',
+              '- **Strategy:** represents interchangeable identity-context, activity, detector, policy or analysis-model behavior behind stable ports.\n- **Factory/registry:** `RiskSignalDetectorFactory` resolves the bounded ordered project-owned detector IDs without becoming a service locator; Spring still owns bean lifecycle and dependency injection.\n- **Composite:** `CompositeRiskSignalDetector` treats an ordered group of Stage-1 detector leaves through the same `RiskSignalDetectorPort`, preserving child evidence and failing the Stage-1 call if any selected child fails.\n- **Facade/application service:** exposes one coarse-grained use case while hiding multi-port orchestration. `AnalysisService` owns the evidence-to-analysis chain and remains unaware of leaf-versus-Composite topology.')
+          replace_once(
+              sdd,
+              'R4 activates the project-owned `RiskSignalDetectorPort` as an explicit stage in the chain. Its default `NoOpRiskSignalDetectorAdapter` deliberately emits no additional signals, so introducing the seam does not change the accepted deterministic R3 risk decision. `BayesianSequentialRiskSignalDetectorAdapter` and `FuzzyRiskSignalDetectorAdapter` are now selectable Stage-1 leaves behind the same port. The Bayesian leaf emits transparent synthetic-demo Beta-binomial review-elevation probability evidence; the fuzzy leaf emits deterministic graded review-elevation evidence from bounded project-owned membership functions and versioned rules. Both translate only into `RiskSignalEvidence` and explicitly retain synthetic/demo limitations in provenance. Further statistical, graph and classical-ML implementations may substitute behind the same port when justified by data and benchmark evidence. No detector output overwrites source `risk_assessments`.',
+              'R4 activates the project-owned `RiskSignalDetectorPort` as an explicit stage in the chain. Stage-1 topology is selected through the bounded ordered `specgraph.analysis.detectors` property using project-owned IDs `NO_OP`, `BAYESIAN` and `FUZZY`. `RiskSignalDetectorFactory` resolves one selected ID directly to its leaf or resolves multiple concrete IDs to `CompositeRiskSignalDetector`, which invokes children deterministically and returns their canonical evidence in configured order. `NO_OP` remains the absent-configuration baseline and deliberately emits no additional signals. The legacy `bayesian-detector` and `fuzzy-detector` profiles remain compatibility aliases only when the typed property is absent; an explicitly empty typed list, duplicate ID, `NO_OP` mixed with concrete leaves, unknown/unregistered selection or child execution failure fails clearly rather than silently changing topology or dropping evidence. The Bayesian leaf emits transparent synthetic-demo Beta-binomial review-elevation probability evidence; the fuzzy leaf emits deterministic graded review-elevation evidence from bounded project-owned membership functions and versioned rules. Both translate only into `RiskSignalEvidence` and explicitly retain synthetic/demo limitations in provenance. Further statistical, graph and classical-ML leaves may register behind the same port when justified by data and benchmark evidence. Calibrated score fusion remains separate work owned by #254. No detector output overwrites source `risk_assessments`, and `AnalysisService` remains unaware of whether Stage 1 resolved a leaf or a Composite.')
+          replace_once(
+              sdd,
+              '          [default NoOpRiskSignalDetectorAdapter => []]',
+              '          [typed selection => one leaf or bounded Composite; default NO_OP => []]')
+          replace_once(
+              sdd,
+              'This composition means RAG is one context-supply stage, not the complete AI architecture. The implemented Bayesian or fuzzy detector can replace only the Stage-1 detector adapter; further statistical/classical-ML/graph detectors may be added later. An OpenAI/live model can later replace only the analysis-model adapter. All adapters translate library/provider-native results into existing application-owned sealed record variants. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.',
+              'This composition means RAG is one context-supply stage, not the complete AI architecture. Typed Stage-1 selection can resolve Bayesian or fuzzy individually or compose both through `CompositeRiskSignalDetector`; further statistical/classical-ML/graph leaves may register later without changing `AnalysisService`. The Composite preserves child artifacts and ordering but performs no score calibration or fusion; #254 owns any later calibrated ensemble evidence. An OpenAI/live model can later replace only the analysis-model adapter. All adapters translate library/provider-native results into existing application-owned sealed record variants. Neither substitution changes the application use case or grants generated output authority over source `risk_assessments`.')
+
+          design = 'docs/assignment/SDD/design-map.yaml'
+          replace_once(
+              design,
+              '    implementation_adapters: [ADP-DETECTOR-NOOP-001, ADP-DETECTOR-BAYES-001, ADP-DETECTOR-FUZZY-001]\n    activation_ring: R4\n    adrs: [ADR-001, ADR-002]',
+              '    implementation_adapters: [ADP-DETECTOR-NOOP-001, ADP-DETECTOR-BAYES-001, ADP-DETECTOR-FUZZY-001]\n    selection_authority: specgraph.analysis.detectors\n    selection_ids: [NO_OP, BAYESIAN, FUZZY]\n    resolver: RiskSignalDetectorFactory\n    composite: CompositeRiskSignalDetector\n    selection_semantics: bounded ordered list; one ID resolves a leaf, multiple concrete IDs resolve a Composite\n    compatibility_profile_aliases: [bayesian-detector, fuzzy-detector]\n    failure_semantics: explicit empty, duplicate, invalid/unregistered, NO_OP mixed with concrete, or child failure fails closed\n    activation_ring: R4\n    adrs: [ADR-001, ADR-002]')
+          replace_once(design, '    profile: bayesian-detector\n    responsibility: derive deterministic synthetic-demo Beta-binomial review-elevation probability evidence without mutating source risk', '    selection_id: BAYESIAN\n    compatibility_profile_alias: bayesian-detector\n    responsibility: derive deterministic synthetic-demo Beta-binomial review-elevation probability evidence without mutating source risk')
+          replace_once(design, '    profile: fuzzy-detector\n    responsibility: derive deterministic graded review-elevation evidence from bounded memberships and versioned rules without mutating source risk', '    selection_id: FUZZY\n    compatibility_profile_alias: fuzzy-detector\n    responsibility: derive deterministic graded review-elevation evidence from bounded memberships and versioned rules without mutating source risk')
+          replace_once(design, '    activation_ring: R4\n    responsibility: keep the detector stage explicit and preserve the deterministic no-extra-signal baseline when no concrete detector is deliberately selected\n    adrs: [ADR-001, ADR-002]\n  ADP-DETECTOR-BAYES-001:', '    activation_ring: R4\n    selection_id: NO_OP\n    responsibility: keep the detector stage explicit and preserve the deterministic no-extra-signal baseline when no typed selection or compatibility detector profile is supplied\n    adrs: [ADR-001, ADR-002]\n  ADP-DETECTOR-BAYES-001:')
+
+          component = 'docs/assignment/SDD/diagrams/component-topology.puml'
+          replace_once(
+              component,
+              '    interface "RiskSignalDetectorPort\\nPRT-DETECTOR-001\\n<<Strategy seam>>" as DetectorPort\n    interface "PolicyKnowledgePort',
+              '    interface "RiskSignalDetectorPort\\nPRT-DETECTOR-001\\n<<Strategy seam>>" as DetectorPort\n    component "Detector Selection\\nRiskSignalDetectorFactory\\nspecgraph.analysis.detectors\\n<<Factory / Registry>>" as DetectorFactory\n    component "Composite Risk Signal Detector\\nordered bounded children\\n<<GoF Composite>>" as DetectorComposite\n    interface "PolicyKnowledgePort')
+          replace_once(component, '  component "No-op Risk Signal Detector\\nADP-DETECTOR-NOOP-001\\nR4/default\\n<<GoF Adapter>>" as DetectorNoOp\n  component "Bayesian Risk Signal Detector\\nADP-DETECTOR-BAYES-001\\nbayesian-detector\\n<<GoF Adapter>>" as DetectorBayes\n  component "Fuzzy Risk Signal Detector\\nADP-DETECTOR-FUZZY-001\\nfuzzy-detector\\n<<GoF Adapter>>" as DetectorFuzzy', '  component "No-op Risk Signal Detector\\nADP-DETECTOR-NOOP-001\\nselection ID: NO_OP\\n<<GoF Adapter>>" as DetectorNoOp\n  component "Bayesian Risk Signal Detector\\nADP-DETECTOR-BAYES-001\\nselection ID: BAYESIAN\\n<<GoF Adapter>>" as DetectorBayes\n  component "Fuzzy Risk Signal Detector\\nADP-DETECTOR-FUZZY-001\\nselection ID: FUZZY\\n<<GoF Adapter>>" as DetectorFuzzy')
+          replace_once(component, 'DetectorPort --> DetectorNoOp : default\nDetectorPort ..> DetectorBayes : selectable\nDetectorPort ..> DetectorFuzzy : selectable\nPolicyPort --> PolicyStatic', 'DetectorNoOp ..> DetectorPort : implements\nDetectorBayes ..> DetectorPort : implements\nDetectorFuzzy ..> DetectorPort : implements\nDetectorComposite ..> DetectorPort : implements\nDetectorFactory --> DetectorNoOp : NO_OP\nDetectorFactory --> DetectorBayes : BAYESIAN\nDetectorFactory --> DetectorFuzzy : FUZZY\nDetectorFactory --> DetectorComposite : 2+ concrete IDs\nDetectorComposite --> DetectorBayes : ordered child\nDetectorComposite --> DetectorFuzzy : ordered child\nPolicyPort --> PolicyStatic')
+          replace_once(component, '  OperatorContextPort. Detector implementations also stop behind the project-owned\n  RiskSignalDetectorPort and emit only derived RiskSignalEvidence. GoF Adapter labels identify\n  boundary translation roles; Strategy seams identify interchangeable implementations; the\n  analysis application service acts as a Facade over orchestration.', '  OperatorContextPort. Detector implementations also stop behind the project-owned\n  RiskSignalDetectorPort and emit only derived RiskSignalEvidence. `specgraph.analysis.detectors`\n  is the typed Stage-1 selection authority; legacy detector profiles are bootstrap aliases only\n  when that property is absent. Spring owns bean lifecycle, the factory/registry resolves leaves\n  or the bounded Composite, and child failure fails Stage 1 rather than disappearing silently.\n  GoF Adapter labels identify boundary translation roles; Strategy seams identify interchangeable\n  implementations; the analysis application service acts as a Facade over orchestration.')
+
+          verification = 'docs/assignment/VV/verification.yaml'
+          replace_once(verification, '    design: [MOD-ANALYSIS-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001]', '    design: [MOD-ANALYSIS-001, PRT-DETECTOR-001, ADP-DETECTOR-NOOP-001, ADP-DETECTOR-BAYES-001, ADP-DETECTOR-FUZZY-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001]')
+
+          vv = 'docs/assignment/VV/VV.md'
+          replace_once(vv, 'The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `OperatorContextPort`, `CustomerActivityPort`, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology.', 'The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `OperatorContextPort`, `CustomerActivityPort`, typed `RiskSignalDetectorPort` leaf/Composite selection, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology. `VFY-ANALYSIS-CONTRACT-001` covers the Stage-1 selection/factory/Composite contract, including deterministic ordering and fail-closed invalid configuration, without turning optional calibrated fusion into an accepted #224 behavior.')
+          PY
+      - name: Commit reconciliation and remove one-shot workflow
+        run: |
+          git add docs/assignment/SDD/SDD.md \
+                  docs/assignment/SDD/design-map.yaml \
+                  docs/assignment/SDD/diagrams/component-topology.puml \
+                  docs/assignment/VV/VV.md \
+                  docs/assignment/VV/verification.yaml
+          git rm -- '.github/workflows/reconcile-composite-design-once.yml'
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: reconcile Stage-1 Composite design authorities'
+          git push origin HEAD:feat/r5-detector-composite
