@@ -314,17 +314,21 @@ infrastructure:
   INF-COMPOSE-001:
     name: ComposeCheckpointTopology
     activation_ring: R0
-    responsibility: one prebuilt Spring Boot executable-JAR shape instantiated as concentric reviewer checkpoints, with PostgreSQL backing persistence-bearing rings, and distributed as a Compose OCI artifact
+    responsibility: one prebuilt Spring Boot executable-JAR shape instantiated as concentric reviewer checkpoints and isolated R4 configuration variants, with PostgreSQL/pgvector backing persistence-bearing services, distributed as a Compose OCI artifact
     runtime_boundary: Java 21 JRE with embedded Tomcat serving built React assets and Spring MVC API from one origin
     canonical_operator_entrypoint: docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo up -d --wait
-    source_checkout_entrypoint: docker compose up --build -d --wait r3
+    source_checkout_entrypoint: docker compose -p specgraph-r4-baseline -f compose.r4.yaml up -d --build --wait
     publication_semantics: demo is last-known-good and advances only after remote-pull verification
-    distribution: GHCR Compose OCI artifact with published checkpoint images and PostgreSQL resolved to exact digests
+    distribution: GHCR Compose OCI artifact with published R0-R4 checkpoint images plus PostgreSQL and pgvector resolved to exact digests
     runtime_platforms: [linux/amd64, linux/arm64]
     published_j2_services: [r0, r1, postgres, r2, r3]
+    published_reviewer_services: [r0, r1, postgres, r2, r3, r4-postgres-baseline, r4, r4-postgres-bayesian, r4-bayesian]
+    published_unique_runtime_images: [r0, r1, r2, r3, r4, postgres, pgvector]
+    r4_runtime_variants: [baseline profile r4 on host 8084, Bayesian profile r4,bayesian-detector on host 8085]
+    r4_state_isolation: baseline and Bayesian use separate pgvector/PostgreSQL services while resolving the same immutable R4 application image
     source_j2_services: [r0, r1, postgres, r2, r3]
-    checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080, R2 host 8082 to container 8080, R3 host 8083 to container 8080]
-    r4_auth_verification_profile: exact-head candidate container on host 8084 with SPRING_PROFILES_ACTIVE=r4-auth; verification-only, not a published checkpoint
+    checkpoint_ports: [R0 host 8080 to container 8080, R1 host 8081 to container 8080, R2 host 8082 to container 8080, R3 host 8083 to container 8080, R4 baseline host 8084 to container 8080, R4 Bayesian host 8085 to container 8080]
+    r4_auth_verification_profile: exact-head candidate container on an isolated CI host port with SPRING_PROFILES_ACTIVE=r4-auth; verification-only, not a published checkpoint
     operating_modes: [side_by_side_default, direct_checkpoint_debug, detached_persistent]
     adrs: [ADR-004, ADR-005, ADR-006]
   CMP-UI-001:

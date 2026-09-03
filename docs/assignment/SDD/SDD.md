@@ -269,13 +269,17 @@ Checkpoint host ports are deliberately independent so rings can be compared with
 - R0: host `8080` -> container Tomcat `8080`;
 - R1: host `8081` -> container Tomcat `8080`;
 - R2: host `8082` -> container Tomcat `8080`, private PostgreSQL dependency;
-- R3: host `8083` -> container Tomcat `8080`, same PostgreSQL infrastructure plus analysis history.
+- R3: host `8083` -> container Tomcat `8080`, same historical PostgreSQL infrastructure plus analysis history;
+- R4 baseline: host `8084` -> container Tomcat `8080`, profile `r4`, private pgvector/PostgreSQL dependency;
+- R4 Bayesian: host `8085` -> container Tomcat `8080`, profile `r4,bayesian-detector`, separate private pgvector/PostgreSQL dependency.
 
-The published Compose OCI tag `ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo` is a **last-known-good artifact**. It advances only after publication resolves immutable R0/R1/R2/R3/PostgreSQL image digests, binds the complete five-image set into the retained Compose identity, pulls the remote Compose artifact again and passes executable browser verification.
+The two R4 services are configuration variants of the same accepted R4 capability, not new delivery rings. They run the same immutable R4 application image and deliberately isolate database/retrieval/history state so reviewer comparisons cannot contaminate one another.
 
-Accepted source checkpoints are preserved through `demo/r0`, `demo/r1`, `demo/r2` and `demo/r3`. A failed publication leaves the previous `:demo` tag untouched. Repository source state and registry publication state are therefore intentionally not conflated.
+The published Compose OCI tag `ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo` is a **last-known-good artifact**. The accepted R4 reviewer publication resolves immutable R0/R1/R2/R3/R4 application digests plus PostgreSQL and pgvector digests, binds that complete seven-unique-image set into the retained Compose identity, re-pulls the remote Compose artifact, and passes executable browser verification on application ports `8080` through `8085` before promotion. The two R4 processes resolve the same R4 image digest while their two pgvector services resolve the same pinned pgvector image digest.
 
-The complete J2 reviewer contract publishes R0, R1, PostgreSQL-backed R2 and deterministic analysis/history R3 side by side. J2 publication is complete before R4 work advances the source application. Focused R4 verification profiles may run additional exact-head containers in CI, but they do not become published checkpoints or alter the last-known-good Compose contract until the complete R4 ring is accepted as one coherent reviewer capability.
+Accepted source checkpoints are preserved through `demo/r0`, `demo/r1`, `demo/r2`, `demo/r3` and `demo/r4`. A failed publication leaves the previous `:demo` tag untouched. Repository source state and registry publication state are therefore intentionally not conflated, so an accepted source contract can temporarily be newer than the last successfully promoted registry artifact.
+
+The historical J2 reviewer contract published R0, R1, PostgreSQL-backed R2 and deterministic analysis/history R3 side by side. The current accepted reviewer contract extends that lineage with the coherent R4 capability and exposes baseline and Bayesian Stage-1 configurations side by side without inventing R5/R6 delivery rings. Focused verification-only profiles such as `r4-auth` remain CI concerns and are not separately published checkpoints.
 
 Communication semantics:
 
@@ -360,5 +364,6 @@ A reviewer should be able to answer from this SDD without reconstructing PR hist
 - how deterministic analysis is validated, persisted and reloaded with either deterministic R3 attribution or authenticated R4 attribution without changing the history contract;
 - how `NFR-RES-001` prevents false authenticated/completed/history state at identity, detector, grounding, model and persistence boundaries;
 - how source and last-known-good published checkpoint states differ;
-- how the complete J2 publication preserves R0-R3 as independent reviewer checkpoints;
+- how the historical J2 R0-R3 publication lineage is extended by the accepted R4 reviewer topology while failed publication leaves the previous `:demo` artifact untouched;
+- why R4 baseline and Bayesian are isolated runtime configurations of one immutable R4 capability rather than new rings;
 - how R0-R5 extend one architecture concentrically.
