@@ -45,7 +45,7 @@ jobs:
       R1_CHECKPOINT_SHA: e2a41694290ef8b03e4485ca1a2fe2c5664d1941
       R2_CHECKPOINT_SHA: 587027b7c80339998ab49e879afefcc692e6d052
     steps:
-      - name: Reclaim stale SpecGraph runner state and require disk headroom
+      - name: Reclaim stale runtime state while preserving hot Docker caches
         run: |
           echo 'Disk before cleanup:'
           df -h "$GITHUB_WORKSPACE" || df -h /
@@ -53,24 +53,32 @@ jobs:
 
           docker ps -aq --filter 'name=specgraph-ci-' | xargs -r docker rm -f || true
           docker network ls --format '{{.Name}}' | grep '^specgraph-ci-' | xargs -r docker network rm || true
-          docker image ls --format '{{.Repository}}:{{.Tag}}' \
-            | grep -E '^specgraph-reference-app:r[123]-(ci|compat)-' \
-            | xargs -r docker image rm -f || true
-
-          # The runner is dedicated to this repository's Docker CI. Build caches are
-          # disposable acceleration data, not retained evidence.
-          docker buildx prune -af || true
-          docker builder prune -af || true
           docker container prune -f --filter 'until=24h' || true
           docker network prune -f --filter 'until=24h' || true
-          docker image prune -af --filter 'until=24h' || true
+          docker image prune -f --filter 'until=24h' || true
 
-          echo 'Disk after cleanup:'
+          # Keep immutable source-tagged application images and recent BuildKit
+          # layers hot. Only repository-owned application images unused for a
+          # week are eligible for normal garbage collection.
+          docker image prune -af \
+            --filter 'until=168h' \
+            --filter 'label=io.specgraph.source-root' || true
+          docker builder prune -f --filter 'until=168h' || true
+
+          echo 'Disk after cache-preserving cleanup:'
           df -h "$GITHUB_WORKSPACE" || df -h /
           docker system df || true
 
           available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR==2 {print $4}')"
           minimum_kb=$((8 * 1024 * 1024))
+          if [ "$available_kb" -lt "$minimum_kb" ]; then
+            echo "Runner is below 8 GiB; reclaiming repository-owned images/cache older than 24h before failing." >&2
+            docker image prune -af \
+              --filter 'until=24h' \
+              --filter 'label=io.specgraph.source-root' || true
+            docker builder prune -f --filter 'until=24h' || true
+            available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR==2 {print $4}')"
+          fi
           if [ "$available_kb" -lt "$minimum_kb" ]; then
             echo "Need at least 8 GiB free for concentric Docker verification; only $((available_kb / 1024)) MiB is available." >&2
             exit 1
@@ -133,12 +141,12 @@ jobs:
           echo "Checked-out R1 SHA:         $checked_out_sha"
           test "$checked_out_sha" = "$R1_CHECKPOINT_SHA"
 
-      - name: Verify backend against Testcontainers PostgreSQL
+      - name: Verify backend against Testcontainers PostgreSQL with persistent Maven cache
         run: >-
           docker run --rm
           --network host
           -v /var/run/docker.sock:/var/run/docker.sock
-          -e MAVEN_CONFIG=/tmp/.m2
+          -v specgraph-maven-cache:/root/.m2
           -v "$PWD/backend:/workspace"
           -w /workspace
           maven:3.9-eclipse-temurin-21
@@ -158,23 +166,29 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
-      - name: Verify frontend
+      - name: Verify frontend with persistent npm download cache
         working-directory: frontend
         run: |
-          npm install
+          mkdir -p "$HOME/.cache/specgraph-npm"
+          npm_config_cache="$HOME/.cache/specgraph-npm" npm install --prefer-offline --no-audit --no-fund
           npm run build
 
-      - name: Build exact-head R3 and archived R2/R1 compatibility images
+      - name: Reuse or build exact-head R3 and archived R2/R1 images
         run: |
-          r3_image="specgraph-reference-app:r3-ci-${SOURCE_SHA}"
-          r2_image="specgraph-reference-app:r2-compat-${R2_CHECKPOINT_SHA}"
-          r1_image="specgraph-reference-app:r1-compat-${R1_CHECKPOINT_SHA}"
-          docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=. -t "$r3_image" .
-          docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=.checkpoints/r2 -t "$r2_image" .
-          docker build -f docker/app.Dockerfile --build-arg SOURCE_ROOT=.checkpoints/r1 -t "$r1_image" .
+          r3_image="$(bash scripts/ci/ensure-app-image.sh \
+            "specgraph-reference-app:r3-ci-${SOURCE_SHA}" . "$SOURCE_SHA")"
+          r2_image="$(bash scripts/ci/ensure-app-image.sh \
+            "specgraph-reference-app:r2-compat-${R2_CHECKPOINT_SHA}" .checkpoints/r2 "$R2_CHECKPOINT_SHA")"
+          r1_image="$(bash scripts/ci/ensure-app-image.sh \
+            "specgraph-reference-app:r1-compat-${R1_CHECKPOINT_SHA}" .checkpoints/r1 "$R1_CHECKPOINT_SHA")"
           echo "APP_R3_IMAGE=$r3_image" >> "$GITHUB_ENV"
           echo "APP_R2_IMAGE=$r2_image" >> "$GITHUB_ENV"
           echo "APP_R1_IMAGE=$r1_image" >> "$GITHUB_ENV"
+
+      - name: Reuse or build immutable Playwright dependency image
+        run: |
+          image="$(bash scripts/ci/ensure-e2e-image.sh)"
+          echo "E2E_IMAGE=$image" >> "$GITHUB_ENV"
 
       - name: Validate source and published-checkpoint deployment topologies
         run: |
@@ -206,16 +220,10 @@ jobs:
           test "$amount_currency" = '248.50|CHF'
 
       - name: Verify archived R2 checkpoint with its ring-specific Playwright contract
-        run: |
-          docker run --rm --network host --ipc=host \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp \
-            -e npm_config_cache=/tmp/.npm \
-            -e BASE_URL=http://127.0.0.1:8082 \
-            -e EVIDENCE_NAME=r2 \
-            -v "$PWD/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r2-customer-review.spec.ts'
+        env:
+          BASE_URL: http://127.0.0.1:8082
+          EVIDENCE_NAME: r2
+        run: bash scripts/ci/run-playwright.sh r2-customer-review.spec.ts
 
       - name: Prove deterministic R2 reset and reseed
         run: |
@@ -269,16 +277,10 @@ jobs:
           curl -fsS http://127.0.0.1:8083/actuator/health | grep -F '"status":"UP"'
 
       - name: VFY-ANALYSIS-001 - Verify deployed R3 analysis and persistent-history path
-        run: |
-          docker run --rm --network host --ipc=host \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp \
-            -e npm_config_cache=/tmp/.npm \
-            -e BASE_URL=http://127.0.0.1:8083 \
-            -e EVIDENCE_NAME=r3 \
-            -v "$PWD/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r3-analysis-history.spec.ts'
+        env:
+          BASE_URL: http://127.0.0.1:8083
+          EVIDENCE_NAME: r3
+        run: bash scripts/ci/run-playwright.sh r3-analysis-history.spec.ts
 
       - name: Start archived R1 checkpoint for compatibility evidence
         run: docker compose up -d --no-build r1
@@ -299,16 +301,10 @@ jobs:
           exit 1
 
       - name: Verify archived R1 checkpoint with its ring-specific Playwright contract
-        run: |
-          docker run --rm --network host --ipc=host \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp \
-            -e npm_config_cache=/tmp/.npm \
-            -e BASE_URL=http://127.0.0.1:8081 \
-            -e EVIDENCE_NAME=r1 \
-            -v "$PWD/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r1-customer-review.spec.ts'
+        env:
+          BASE_URL: http://127.0.0.1:8081
+          EVIDENCE_NAME: r1
+        run: bash scripts/ci/run-playwright.sh r1-customer-review.spec.ts
 
       - name: Capture deployment evidence
         if: always()
@@ -325,7 +321,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r3-${{ env.SOURCE_SHA }}-r2-${{ env.R2_CHECKPOINT_SHA }}-r1-${{ env.R1_CHECKPOINT_SHA }}-evidence
+          name: r3-${{ env.SOURCE_SHA }}-r2-${{ env.R2_CHECKPOINT_SHA }}-r1-${{ env.R1_CHECKPOINT_SHA }}-evidence-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: |
             backend/target/surefire-reports
             e2e/playwright-report
@@ -333,13 +329,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Stop deployment and reclaim candidate images
+      - name: Stop deployment while retaining immutable images and hot caches
         if: always()
         run: |
           docker compose down --remove-orphans || true
-          [ -z "${APP_R3_IMAGE:-}" ] || docker image rm -f "$APP_R3_IMAGE" || true
-          [ -z "${APP_R2_IMAGE:-}" ] || docker image rm -f "$APP_R2_IMAGE" || true
-          [ -z "${APP_R1_IMAGE:-}" ] || docker image rm -f "$APP_R1_IMAGE" || true
-          docker buildx prune -af || true
-          docker builder prune -af || true
+          docker image prune -f --filter 'until=24h' || true
           df -h "$GITHUB_WORKSPACE" || true
