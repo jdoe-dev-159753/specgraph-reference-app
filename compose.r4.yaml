@@ -25,7 +25,10 @@ services:
       SPRING_DATASOURCE_USERNAME: specgraph
       SPRING_DATASOURCE_PASSWORD: specgraph
       SPECGRAPH_SOURCE_TIME_ZONE: "${SPECGRAPH_SOURCE_TIME_ZONE:-UTC}"
+      SPECGRAPH_ANALYSIS_BACKEND: "${SPECGRAPH_ANALYSIS_BACKEND:-deterministic}"
       SPECGRAPH_EMBEDDING_CACHE: /tmp/specgraph-embedding-model
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5-mini}"
     depends_on:
       postgres:
         condition: service_healthy
