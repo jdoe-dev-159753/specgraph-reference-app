@@ -87,5 +87,58 @@ class ReviewFreshnessTests(unittest.TestCase):
         )
 
 
+class DurableWorkflowTests(unittest.TestCase):
+    def test_parse_manifest_ignores_comments_and_blank_lines(self):
+        manifest = "# durable\napplication-ci.yml\n\n r4-acceptance-ci.yml \n"
+        self.assertEqual(
+            {"application-ci.yml", "r4-acceptance-ci.yml"},
+            guard.parse_durable_workflow_manifest(manifest),
+        )
+
+    def test_exact_durable_inventory_is_accepted(self):
+        workflows = {
+            "application-ci.yml": "name: application-ci\non:\n  workflow_dispatch:\n",
+            "r4-acceptance-ci.yml": "name: r4-acceptance-ci\non:\n  workflow_dispatch:\n",
+        }
+        manifest = "application-ci.yml\nr4-acceptance-ci.yml\n"
+        self.assertEqual([], guard.workflow_inventory_violations(workflows, manifest))
+
+    def test_undeclared_workflow_is_rejected(self):
+        workflows = {
+            "application-ci.yml": "name: application-ci\n",
+            "temporary-proof.yml": "name: temporary-proof\n",
+        }
+        findings = guard.workflow_inventory_violations(workflows, "application-ci.yml\n")
+        self.assertTrue(any("not declared durable" in finding for finding in findings))
+
+    def test_missing_declared_workflow_is_rejected(self):
+        workflows = {"application-ci.yml": "name: application-ci\n"}
+        findings = guard.workflow_inventory_violations(
+            workflows, "application-ci.yml\nr4-acceptance-ci.yml\n"
+        )
+        self.assertTrue(any("missing from repository" in finding for finding in findings))
+
+    def test_numbered_one_shot_filename_is_rejected(self):
+        workflows = {"discovery-219-fix.yml": "name: durable-looking-name\n"}
+        findings = guard.workflow_inventory_violations(
+            workflows, "discovery-219-fix.yml\n"
+        )
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
+    def test_numbered_one_shot_workflow_name_is_rejected(self):
+        workflows = {"proof.yml": "name: story-42-proof\n"}
+        findings = guard.workflow_inventory_violations(workflows, "proof.yml\n")
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
+    def test_workflow_contract_change_detection(self):
+        self.assertTrue(
+            guard.pr_changes_workflow_contract([".github/workflows/new-proof.yml"])
+        )
+        self.assertTrue(
+            guard.pr_changes_workflow_contract([guard.DURABLE_WORKFLOW_MANIFEST])
+        )
+        self.assertFalse(guard.pr_changes_workflow_contract(["backend/pom.xml"]))
+
+
 if __name__ == "__main__":
     unittest.main()
