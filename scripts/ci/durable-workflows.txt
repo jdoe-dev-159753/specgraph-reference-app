@@ -6,4 +6,5 @@ r4-acceptance-ci.yml
 r4-auth-ci.yml
 r4-gallery-ci.yml
 r4-retrieval-ci.yml
+work-graph-guard-tests.yml
 work-graph-guard.yml

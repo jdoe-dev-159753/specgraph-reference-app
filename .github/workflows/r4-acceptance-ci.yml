@@ -8,8 +8,6 @@ on:
       - 'e2e/**'
       - 'docker/**'
       - 'scripts/ci/**'
-      - 'scripts/work_graph_guard.py'
-      - 'scripts/test_work_graph_guard.py'
       - 'compose.r4.yaml'
       - 'compose.r4.ci-cache.yaml'
       - '.dockerignore'
@@ -24,25 +22,6 @@ permissions:
   contents: read
 
 jobs:
-  guard-head-tests:
-    if: ${{ github.event_name == 'pull_request' }}
-    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
-    permissions:
-      contents: read
-    env:
-      SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ env.SOURCE_SHA }}
-          persist-credentials: false
-
-      - name: Assert exact tested source revision
-        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-
-      - name: Verify proposed work-graph guard semantics
-        run: python3 -m unittest scripts/test_work_graph_guard.py
-
   verify-r4-acceptance:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
