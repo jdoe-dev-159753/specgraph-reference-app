@@ -1,6 +1,7 @@
 import { expect, Page } from '@playwright/test'
 
 const denseCustomer = '55555555-5555-5555-5555-555555555555'
+const denseCustomerReviewUrl = new RegExp(`/api/customers/${denseCustomer}(?:\\?.*)?$`)
 
 function activity(index: number, status = index % 2 === 0 ? 'Completed' : 'Declined') {
   const suffix = String(index).padStart(12, '0')
@@ -24,7 +25,7 @@ function activity(index: number, status = index % 2 === 0 ? 'Completed' : 'Decli
 }
 
 export async function runHighVolumeReviewScenario(page: Page) {
-  await page.route(`**/api/customers/${denseCustomer}**`, async route => {
+  await page.route(denseCustomerReviewUrl, async route => {
     const url = new URL(route.request().url())
     const pageIndex = Number(url.searchParams.get('page') ?? '0')
     const pageSize = Number(url.searchParams.get('pageSize') ?? '50')
