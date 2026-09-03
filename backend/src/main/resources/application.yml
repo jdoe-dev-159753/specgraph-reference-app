@@ -19,6 +19,12 @@ spring:
     validate-migration-naming: true
 specgraph:
   source-time-zone: ${SPECGRAPH_SOURCE_TIME_ZONE:UTC}
+  analysis:
+    context:
+      max-activities: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_ACTIVITIES:25}
+      max-source-risk-evidence: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_SOURCE_RISK_EVIDENCE:20}
+      max-detector-evidence: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_DETECTOR_EVIDENCE:8}
+      max-policy-evidence: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_POLICY_EVIDENCE:3}
 management:
   endpoints:
     web:
