@@ -30,10 +30,7 @@ PREFIX = re.compile(
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
 CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
 REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
-YAML_MAPPING_KEY = re.compile(
-    r"^(\s*)(?:\"((?:\\.|[^\"])*)\"|'((?:''|[^'])*)'|([A-Za-z0-9_.-]+))\s*:\s*(.*)$"
-)
-YAML_SEQUENCE_ENTRY = re.compile(r"^(\s*)-\s+(.*)$")
+CANONICAL_WORKFLOW_NAME = re.compile(r"^name: ([a-z0-9]+(?:-[a-z0-9]+)*)$")
 ONE_SHOT_WORKFLOW = re.compile(
     r"(?<![A-Za-z0-9])(?:pr|pull(?:[^A-Za-z0-9]+request)?|issue|discovery|story|fix)"
     r"[^A-Za-z0-9]*\d+(?![A-Za-z0-9])",
@@ -185,267 +182,40 @@ def parse_durable_workflow_manifest(text: str) -> set[str]:
     }
 
 
-def _strip_yaml_inline_comment(value: str) -> str:
-    """Strip a YAML comment marker only when it is outside quoted scalar text."""
-    single = False
-    double = False
-    escaped = False
-    index = 0
-    while index < len(value):
-        char = value[index]
-        if double:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                double = False
-        elif single:
-            if char == "'":
-                if index + 1 < len(value) and value[index + 1] == "'":
-                    index += 1
-                else:
-                    single = False
-        elif char == '"':
-            double = True
-        elif char == "'":
-            single = True
-        elif char == "#" and (index == 0 or value[index - 1].isspace()):
-            return value[:index].rstrip()
-        index += 1
-    return value.rstrip()
-
-
-def _double_quoted_yaml_scalar(value: str) -> str:
-    """Decode YAML 1.2 double-quoted escapes without a runtime dependency."""
-    simple = {
-        "0": "\0", "a": "\a", "b": "\b", "t": "\t", "n": "\n",
-        "v": "\v", "f": "\f", "r": "\r", "e": "\x1b", " ": " ",
-        '"': '"', "/": "/", "\\": "\\", "N": "\x85", "_": "\xa0",
-        "L": "\u2028", "P": "\u2029",
-    }
-    content = value[1:-1]
-    decoded: list[str] = []
-    index = 0
-    while index < len(content):
-        if content[index] != "\\":
-            decoded.append(content[index])
-            index += 1
-            continue
-        index += 1
-        if index >= len(content):
-            decoded.append("\\")
-            break
-        escape = content[index]
-        if escape in "xuU":
-            width = {"x": 2, "u": 4, "U": 8}[escape]
-            digits = content[index + 1 : index + 1 + width]
-            if len(digits) != width or not re.fullmatch(r"[0-9A-Fa-f]+", digits):
-                return content
-            try:
-                decoded.append(chr(int(digits, 16)))
-            except (ValueError, OverflowError):
-                return content
-            index += width + 1
-            continue
-        decoded.append(simple.get(escape, escape))
-        index += 1
-    return "".join(decoded)
-
-
-def _plain_yaml_scalar(value: str) -> str:
-    value = _strip_yaml_inline_comment(value.strip())
-    if not value:
-        return ""
-    if value[0] == '"' and value.endswith('"'):
-        return _double_quoted_yaml_scalar(value)
-    if value[0] == "'" and value.endswith("'"):
-        return value[1:-1].replace("''", "'")
-    return value
-
-def _double_quoted_scalar_is_closed(value: str) -> bool:
-    escaped = False
-    for char in value[1:]:
-        if escaped:
-            escaped = False
-        elif char == "\\":
-            escaped = True
-        elif char == '"':
-            return True
-    return False
-
-
-def _single_quoted_scalar_is_closed(value: str) -> bool:
-    index = 1
-    while index < len(value):
-        if value[index] != "'":
-            index += 1
-            continue
-        if index + 1 < len(value) and value[index + 1] == "'":
-            index += 2
-            continue
-        return True
-    return False
-
-
-def _complete_flow_scalar(
-    lines: list[str], index: int, root_indent: int, value: str
-) -> str:
-    block_header = _strip_yaml_inline_comment(value)
-    if re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", block_header):
-        return value
-
-    is_double = value.startswith('"')
-    is_single = value.startswith("'")
-    if is_double and _double_quoted_scalar_is_closed(value):
-        return value
-    if is_single and _single_quoted_scalar_is_closed(value):
-        return value
-
-    combined = value
-    for continuation in lines[index + 1 :]:
-        if not continuation.strip():
-            continue
-        continuation_indent = len(continuation) - len(continuation.lstrip(" "))
-        if continuation_indent <= root_indent:
-            break
-        piece = continuation.strip()
-        if is_double and combined.endswith("\\"):
-            combined = combined[:-1] + piece
-        else:
-            combined += " " + piece
-        if is_double and _double_quoted_scalar_is_closed(combined):
-            break
-        if is_single and _single_quoted_scalar_is_closed(combined):
-            break
-    return combined
-
-
-def _extract_yaml_scalar(
-    lines: list[str], index: int, root_indent: int, raw_value: str
-) -> str:
-    value = _complete_flow_scalar(lines, index, root_indent, raw_value.strip())
-    block_header = _strip_yaml_inline_comment(value)
-    block = re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", block_header)
-    if not block:
-        return _plain_yaml_scalar(value)
-
-    parts: list[str] = []
-    for continuation in lines[index + 1 :]:
-        if not continuation.strip():
-            parts.append("")
-            continue
-        continuation_indent = len(continuation) - len(continuation.lstrip(" "))
-        if continuation_indent <= root_indent:
-            break
-        parts.append(continuation.strip())
-    separator = "\n" if block.group(1) == "|" else " "
-    return separator.join(parts).strip()
-
-
 def extract_workflow_name(text: str) -> str:
-    """Read the resolved top-level YAML name scalar without a YAML dependency."""
+    """Return only the repository's canonical first-line workflow name."""
     lines = text.splitlines()
-    mapping_lines: list[tuple[int, int, str, str]] = []
-    for index, line in enumerate(lines):
-        if not line.strip() or line.lstrip().startswith(("#", "---", "%")):
-            continue
-        match = YAML_MAPPING_KEY.match(line)
-        if not match:
-            continue
-        indent = len(match.group(1).replace("\t", "    "))
-        if match.group(2) is not None:
-            key = _plain_yaml_scalar(f'"{match.group(2)}"')
-        elif match.group(3) is not None:
-            key = _plain_yaml_scalar(f"'{match.group(3)}'")
-        else:
-            key = match.group(4)
-        mapping_lines.append((index, indent, key, match.group(5)))
+    if not lines:
+        return UNRESOLVED_WORKFLOW_NAME
+    match = CANONICAL_WORKFLOW_NAME.fullmatch(lines[0])
+    if not match:
+        return UNRESOLVED_WORKFLOW_NAME
+    return match.group(1)
 
-    block_scalar_lines: set[int] = set()
-    for index, indent, _, raw_value in mapping_lines:
-        header = _strip_yaml_inline_comment(raw_value.strip())
-        if not re.fullmatch(r"([>|])(?:[+-]?\d?|\d?[+-]?)?", header):
-            continue
-        for continuation_index in range(index + 1, len(lines)):
-            continuation = lines[continuation_index]
-            if not continuation.strip():
-                block_scalar_lines.add(continuation_index)
-                continue
-            continuation_indent = len(continuation) - len(continuation.lstrip(" "))
-            if continuation_indent <= indent:
-                break
-            block_scalar_lines.add(continuation_index)
 
-    for index, indent, _, raw_value in mapping_lines:
-        value = raw_value.strip()
-        is_multiline_double = value.startswith('"') and not _double_quoted_scalar_is_closed(value)
-        is_multiline_single = value.startswith("'") and not _single_quoted_scalar_is_closed(value)
-        if not (is_multiline_double or is_multiline_single):
-            continue
-        for continuation_index in range(index + 1, len(lines)):
-            continuation = lines[continuation_index]
-            if not continuation.strip():
-                block_scalar_lines.add(continuation_index)
-                continue
-            continuation_indent = len(continuation) - len(continuation.lstrip(" "))
-            if continuation_indent <= indent:
-                break
-            block_scalar_lines.add(continuation_index)
+def canonical_workflow_name_violations(filename: str, text: str) -> list[str]:
+    expected = filename.rsplit(".", 1)[0]
+    workflow_name = extract_workflow_name(text)
+    if workflow_name == UNRESOLVED_WORKFLOW_NAME:
+        return [
+            f"{filename}: workflow must start with exactly "
+            f"'name: {expected}' using an unquoted, unindented plain scalar"
+        ]
+    if workflow_name != expected:
+        return [
+            f"{filename}: canonical workflow name {workflow_name!r} "
+            f"must equal filename stem {expected!r}"
+        ]
 
-    mapping_lines = [
-        item for item in mapping_lines if item[0] not in block_scalar_lines
+    duplicate_root_names = [
+        line
+        for line in text.splitlines()[1:]
+        if re.match(r"""^(?:name|"name"|'name')\s*:""", line)
     ]
+    if duplicate_root_names:
+        return [f"{filename}: duplicate top-level workflow name is forbidden"]
+    return []
 
-    sequence_lines: list[tuple[int, int, str]] = []
-    for index, line in enumerate(lines):
-        if index in block_scalar_lines:
-            continue
-        sequence = YAML_SEQUENCE_ENTRY.match(line)
-        if sequence:
-            indent = len(sequence.group(1).replace("\t", "    "))
-            sequence_lines.append((index, indent, sequence.group(2)))
-
-    if not mapping_lines:
-        return ""
-    root_indent = min(item[1] for item in mapping_lines)
-    root_entries = [item for item in mapping_lines if item[1] == root_indent]
-
-    name_entry = next((item for item in root_entries if item[2] == "name"), None)
-    if name_entry is None:
-        return ""
-    name_index, _, _, name_raw_value = name_entry
-
-    anchors: dict[str, str] = {}
-    scalar_entries = sorted(
-        [
-            (index, indent, raw_value)
-            for index, indent, _, raw_value in mapping_lines
-        ] + sequence_lines,
-        key=lambda entry: entry[0],
-    )
-    for index, indent, raw_value in scalar_entries:
-        if index >= name_index:
-            break
-        value = _extract_yaml_scalar(lines, index, indent, raw_value)
-        anchor = re.match(r"&([A-Za-z0-9_-]+)(?:\s+)(.+)$", value, re.DOTALL)
-        if anchor:
-            anchors[anchor.group(1)] = _plain_yaml_scalar(anchor.group(2))
-
-    value = _extract_yaml_scalar(lines, name_index, root_indent, name_raw_value)
-    if not value:
-        return UNRESOLVED_WORKFLOW_NAME
-    if value.startswith("*"):
-        alias = re.fullmatch(r"\*([A-Za-z0-9_-]+)", value)
-        if not alias:
-            return UNRESOLVED_WORKFLOW_NAME
-        return anchors.get(alias.group(1), UNRESOLVED_WORKFLOW_NAME)
-    if value.startswith('"') and not _double_quoted_scalar_is_closed(value):
-        return UNRESOLVED_WORKFLOW_NAME
-    if value.startswith("'") and not _single_quoted_scalar_is_closed(value):
-        return UNRESOLVED_WORKFLOW_NAME
-    return value
-    return ""
 
 def workflow_inventory_violations(
     workflow_texts: dict[str, str], manifest_text: str
@@ -468,14 +238,11 @@ def workflow_inventory_violations(
         )
 
     for filename, text in sorted(workflow_texts.items()):
+        failures.extend(canonical_workflow_name_violations(filename, text))
         workflow_name = extract_workflow_name(text)
-        if workflow_name == UNRESOLVED_WORKFLOW_NAME:
-            failures.append(
-                f"workflow name cannot be resolved safely: {filename}; "
-                "use a plain, quoted, or block scalar, or an alias with a scalar anchor"
-            )
-        elif ONE_SHOT_WORKFLOW.search(filename) or (
-            workflow_name and ONE_SHOT_WORKFLOW.search(workflow_name)
+        if ONE_SHOT_WORKFLOW.search(filename) or (
+            workflow_name != UNRESOLVED_WORKFLOW_NAME
+            and ONE_SHOT_WORKFLOW.search(workflow_name)
         ):
             failures.append(
                 f"one-shot workflow identity is forbidden: {filename} (name={workflow_name!r})"
