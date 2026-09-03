@@ -31,6 +31,9 @@ LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONAB
 CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
 REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
 CANONICAL_WORKFLOW_NAME = re.compile(r"^name: ([a-z0-9]+(?:-[a-z0-9]+)*)$")
+CANONICAL_ROOT_KEY = re.compile(
+    r"^(?:run-name|on|permissions|env|defaults|concurrency|jobs):(?:\s|$)"
+)
 ONE_SHOT_WORKFLOW = re.compile(
     r"(?<![A-Za-z0-9])(?:pr|pull(?:[^A-Za-z0-9]+request)?|issue|discovery|story|fix)"
     r"[^A-Za-z0-9]*\d+(?![A-Za-z0-9])",
@@ -207,13 +210,14 @@ def canonical_workflow_name_violations(filename: str, text: str) -> list[str]:
             f"must equal filename stem {expected!r}"
         ]
 
-    duplicate_root_names = [
-        line
-        for line in text.splitlines()[1:]
-        if re.match(r"""^(?:name|"name"|'name')\s*:""", line)
-    ]
-    if duplicate_root_names:
-        return [f"{filename}: duplicate top-level workflow name is forbidden"]
+    for line in text.splitlines()[1:]:
+        if not line or line.lstrip().startswith("#") or line[0].isspace():
+            continue
+        if not CANONICAL_ROOT_KEY.match(line):
+            return [
+                f"{filename}: non-canonical or unknown top-level YAML key is forbidden: "
+                f"{line!r}"
+            ]
     return []
 
 
