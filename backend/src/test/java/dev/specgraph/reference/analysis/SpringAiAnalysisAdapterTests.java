@@ -3,7 +3,6 @@ package dev.specgraph.reference.analysis;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.specgraph.reference.customer.Activity;
-import dev.specgraph.reference.customer.CustomerSnapshot;
 import dev.specgraph.reference.risk.RiskEvidence;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -44,13 +43,21 @@ final class SpringAiAnalysisAdapterTests {
         assertThat(output.provenance().promptIdentity()).isEqualTo("openai-grounded-analysis-v1");
         assertThat(output.provenance().metadata())
                 .containsEntry("externalTransmission", "true")
-                .containsEntry("dataPolicy", "synthetic-demo-only");
+                .containsEntry("dataPolicy", "synthetic-demo-only")
+                .containsEntry("context.activities.total", "9")
+                .containsEntry("context.activities.selected", "3");
         assertThat(output.provenance().evidenceReferences())
                 .containsExactlyElementsOf(AnalysisEvidenceReferences.from(evidence));
 
         String submitted = capturedPrompt.get().getUserMessage().getText();
         assertThat(submitted)
-                .contains("SOURCE ACTIVITIES", "SOURCE RISK ASSESSMENTS", "DERIVED DETECTOR SIGNALS", "RETRIEVED SYNTHETIC POLICY")
+                .contains(
+                        "fullHistoryActivityCount=9",
+                        "selectedActivityCount=3",
+                        "SOURCE ACTIVITIES",
+                        "SOURCE RISK ASSESSMENTS",
+                        "DERIVED DETECTOR SIGNALS",
+                        "RETRIEVED SYNTHETIC POLICY")
                 .contains("Synthetic Merchant", "receiverBankCountry=DE", "blockchain=Ethereum", "synthetic-policy:test")
                 .doesNotContain(
                         "4111111111111111",
@@ -63,6 +70,7 @@ final class SpringAiAnalysisAdapterTests {
     }
 
     private AnalysisEvidenceEnvelope evidence() {
+        UUID customerId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID cardId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
         UUID paymentId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2");
         UUID cryptoId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3");
@@ -124,10 +132,13 @@ final class SpringAiAnalysisAdapterTests {
                 "Synthetic policy says review context before escalation.",
                 Map.of("adapter", "test"));
         return new AnalysisEvidenceEnvelope(
-                new CustomerSnapshot(
-                        UUID.fromString("11111111-1111-1111-1111-111111111111"),
-                        activities,
-                        List.of(sourceRisk)),
+                customerId,
+                9,
+                4,
+                2,
+                1,
+                activities,
+                List.of(sourceRisk),
                 List.of(detector),
                 List.of(policy));
     }
