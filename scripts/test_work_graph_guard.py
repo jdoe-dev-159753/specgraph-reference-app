@@ -155,6 +155,14 @@ class MainIntegrationTests(unittest.TestCase):
                 return manifest_payload
             if "/contents/.github/workflows?" in path:
                 return []
+            if "/contents/scripts/test_work_graph_guard.py?" in path:
+                return {
+                    "type": "file",
+                    "encoding": "base64",
+                    "content": base64.b64encode(
+                        Path(__file__).read_bytes()
+                    ).decode("ascii"),
+                }
             raise AssertionError(f"unexpected API path: {path}")
 
         changed = iter(([{"filename": guard.DURABLE_WORKFLOW_MANIFEST}],))
