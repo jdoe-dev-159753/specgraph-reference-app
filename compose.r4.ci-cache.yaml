@@ -1,0 +1,9 @@
+services:
+  r4:
+    volumes:
+      - r4-embedding-cache:/tmp/specgraph-embedding-model
+
+volumes:
+  r4-embedding-cache:
+    external: true
+    name: "${R4_EMBEDDING_CACHE_VOLUME:?R4_EMBEDDING_CACHE_VOLUME must name the prepared embedding cache volume}"

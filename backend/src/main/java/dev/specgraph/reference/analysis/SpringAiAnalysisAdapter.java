@@ -67,6 +67,8 @@ final class SpringAiAnalysisAdapter implements AnalysisModelPort {
         prompt.append("customerId=").append(evidence.customerId()).append('\n');
         prompt.append("fullHistoryActivityCount=").append(evidence.totalActivityCount()).append('\n');
         prompt.append("fullHistorySourceRiskCount=").append(evidence.totalSourceRiskCount()).append('\n');
+        prompt.append("fullHistoryDetectorEvidenceCount=").append(evidence.totalDetectorEvidenceCount()).append('\n');
+        prompt.append("fullHistoryPolicyEvidenceCount=").append(evidence.totalPolicyEvidenceCount()).append('\n');
         prompt.append("selectedActivityCount=").append(evidence.activities().size()).append('\n');
         prompt.append("selectedSourceRiskCount=").append(evidence.sourceRiskEvidence().size()).append('\n');
         prompt.append("selectedDetectorEvidenceCount=").append(evidence.detectorEvidence().size()).append('\n');

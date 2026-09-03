@@ -21,7 +21,7 @@ obligations:
     covers: [FR-AI-001, FR-AI-002, INV-AI-001, CON-AI-001]
     acceptance: [AC-AI-001, AC-AI-002]
     methods: [unit_property, port_contract, api_acceptance, ui_e2e]
-    design: [MOD-ANALYSIS-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001]
+    design: [MOD-ANALYSIS-001, PRT-DETECTOR-001, PRT-POLICY-001, CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, PRT-MODEL-001, CTR-ANALYSIS-RESULT-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
     executable_evidence: discovered_by_markers
   VFY-RAG-001:
     covers: [FR-RAG-001, INV-RAG-001]
@@ -57,7 +57,7 @@ obligations:
     covers: [CON-AI-002]
     acceptance: []
     methods: [configuration_check, integration_negative, backend_selection_integration, isolated_compose_variants]
-    design: [CTR-ANALYSIS-BACKEND-ID-001, CMP-ANALYSIS-BACKEND-FACTORY-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001, INF-COMPOSE-001]
+    design: [CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, CTR-ANALYSIS-BACKEND-ID-001, CMP-ANALYSIS-BACKEND-FACTORY-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001, INF-COMPOSE-001]
     executable_evidence: discovered_by_markers
   VFY-DELIVERY-001:
     covers: [NFR-REP-001]

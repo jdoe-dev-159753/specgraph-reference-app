@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test'
 
 const seededCustomer = '44444444-4444-4444-4444-444444444444'
+const expectedDetector = process.env.EXPECT_DETECTOR ?? 'none'
+const evidenceName = process.env.EVIDENCE_NAME ?? 'r4-complete-flow'
 
 type EvidenceReference = {
   kind: 'ACTIVITY' | 'SOURCE_RISK' | 'DETECTOR_SIGNAL' | 'POLICY_RETRIEVAL'
@@ -54,7 +56,37 @@ async function loadCustomer(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('analysis-workspace')).toBeVisible()
 }
 
-test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DETERMINISM-001 prove the complete authenticated grounded R4 flow', async ({ page, request }, testInfo) => {
+async function annotateReviewerEvidence(page: import('@playwright/test').Page, completed: Analysis) {
+  const detectorLabel = expectedDetector === 'none'
+    ? 'Stage 1: no-op baseline'
+    : `Stage 1: ${expectedDetector}`
+  const modelLabel = `Stage 3: ${completed.modelProvenance.backendIdentity} / ${completed.modelProvenance.modelIdentity}`
+
+  await page.evaluate(({ detectorLabel, modelLabel }) => {
+    document.querySelector('[data-testid="reviewer-evidence-provenance"]')?.remove()
+    const banner = document.createElement('aside')
+    banner.dataset.testid = 'reviewer-evidence-provenance'
+    banner.setAttribute('aria-label', 'Executable reviewer evidence provenance')
+    banner.style.boxSizing = 'border-box'
+    banner.style.width = '100%'
+    banner.style.padding = '12px 20px'
+    banner.style.background = '#111827'
+    banner.style.color = '#f9fafb'
+    banner.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+    banner.style.fontSize = '13px'
+    banner.style.lineHeight = '1.5'
+    banner.style.borderBottom = '3px solid #38bdf8'
+    banner.textContent = `Executable evidence overlay · ${detectorLabel} · Stage 2: pgvector + all-MiniLM-L6-v2 · ${modelLabel}`
+    document.body.prepend(banner)
+  }, { detectorLabel, modelLabel })
+
+  const banner = page.getByTestId('reviewer-evidence-provenance')
+  await expect(banner).toContainText(detectorLabel)
+  await expect(banner).toContainText('Stage 2: pgvector + all-MiniLM-L6-v2')
+  await expect(banner).toContainText(modelLabel)
+}
+
+test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DETERMINISM-001 prove the configured authenticated grounded R4 flow and retain reviewer evidence', async ({ page, request }, testInfo) => {
   const anonymous = await request.get(`/api/customers/${seededCustomer}`)
   expect(anonymous.status()).toBe(401)
 
@@ -89,7 +121,17 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DET
   expect(completed.findingsSummary.trim()).not.toBe('')
   expect(completed.recommendations.length).toBeGreaterThan(0)
 
-  expect(completed.detectorProvenance).toEqual([])
+  if (expectedDetector === 'none') {
+    expect(completed.detectorProvenance).toEqual([])
+  } else {
+    const detector = completed.detectorProvenance.find(item => item.detectorIdentity === expectedDetector)
+    expect(detector).toBeDefined()
+    expect(detector?.signalIdentity).toBe('posterior-review-elevation-rate')
+    expect(detector?.score).toBeGreaterThanOrEqual(0)
+    expect(detector?.score).toBeLessThanOrEqual(1)
+    expect(detector?.provenance.library).toBe('apache-commons-math3-3.6.1')
+  }
+
   expect(completed.evidenceProvenance.length).toBeGreaterThan(0)
   for (const evidence of completed.evidenceProvenance) {
     expect(evidence.sourceIdentity).not.toBe('')
@@ -108,6 +150,11 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DET
   expect(referenceKinds).toContain('ACTIVITY')
   expect(referenceKinds).toContain('SOURCE_RISK')
   expect(referenceKinds).toContain('POLICY_RETRIEVAL')
+  if (expectedDetector === 'none') {
+    expect(referenceKinds).not.toContain('DETECTOR_SIGNAL')
+  } else {
+    expect(referenceKinds).toContain('DETECTOR_SIGNAL')
+  }
 
   await expect(page.getByTestId('analysis-result')).toBeVisible()
   const currentGrounding = page.getByTestId('analysis-result').getByTestId('analysis-grounding-evidence')
@@ -124,7 +171,8 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DET
   const after = await afterResponse.json() as CustomerSnapshot
   expect(after.riskEvidence).toEqual(before.riskEvidence)
 
-  await page.screenshot({ path: testInfo.outputPath('r4-customer-444-complete-grounded-history.png'), fullPage: true })
+  await annotateReviewerEvidence(page, completed)
+  await page.screenshot({ path: testInfo.outputPath(`${evidenceName}-customer-444.png`), fullPage: true })
 
   await page.reload()
   await expect(page.getByTestId('operator-session')).toContainText('operator-alpha')
@@ -138,6 +186,9 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DET
   expect(reloaded?.operatorId).toBe('operator-alpha')
   expect(reloaded?.modelProvenance.backendIdentity).toBe('deterministic')
   expect(reloaded?.evidenceProvenance.some(evidence => evidence.retrievalMetadata.adapter === 'pgvector')).toBe(true)
+  if (expectedDetector !== 'none') {
+    expect(reloaded?.detectorProvenance.some(item => item.detectorIdentity === expectedDetector)).toBe(true)
+  }
 
   await expect(page.getByTestId(`analysis-history-${completed.analysisId}`)).toBeVisible()
 })

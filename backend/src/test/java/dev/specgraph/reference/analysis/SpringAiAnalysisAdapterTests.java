@@ -53,7 +53,13 @@ final class SpringAiAnalysisAdapterTests {
         assertThat(submitted)
                 .contains(
                         "fullHistoryActivityCount=9",
+                        "fullHistorySourceRiskCount=4",
+                        "fullHistoryDetectorEvidenceCount=2",
+                        "fullHistoryPolicyEvidenceCount=1",
                         "selectedActivityCount=3",
+                        "selectedSourceRiskCount=1",
+                        "selectedDetectorEvidenceCount=1",
+                        "selectedPolicyEvidenceCount=1",
                         "SOURCE ACTIVITIES",
                         "SOURCE RISK ASSESSMENTS",
                         "DERIVED DETECTOR SIGNALS",

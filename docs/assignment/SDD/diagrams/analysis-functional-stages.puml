@@ -30,7 +30,7 @@ package "STAGE 1 — PRIMITIVE SIGNAL ANALYSIS" as stage1 {
   detectorPort --> signals
 }
 
-package "STAGE 2 — EVIDENCE GROUNDING & FUSION" as stage2 {
+package "STAGE 2 — EVIDENCE GROUNDING & RETRIEVAL" as stage2 {
   interface "PolicyKnowledgePort" as policyPort
   rectangle "Policy retrieval adapter\npgvector + local embeddings\nimplementation detail" as retrieval
   rectangle "Canonical PolicyEvidence\nranked retrieved artifacts\nprovider-neutral provenance" as policies

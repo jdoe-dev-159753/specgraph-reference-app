@@ -122,6 +122,25 @@ final class AnalysisContextBuilderTests {
     }
 
     @Test
+    void boundedEnvelopeRejectsSourceRiskDetailWithoutBackingSelectedActivity() {
+        Activity selectedActivity = activity(0);
+        RiskEvidence orphan = sourceRisk(0, new UUID(9L, 9L));
+
+        assertThatThrownBy(() -> new AnalysisEvidenceEnvelope(
+                        CUSTOMER_ID,
+                        1,
+                        1,
+                        0,
+                        0,
+                        List.of(selectedActivity),
+                        List.of(orphan),
+                        List.of(),
+                        List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("backing selected activity");
+    }
+
+    @Test
     void omittedSourceDetailCannotBeCitedAsIfItHadBeenSuppliedToTheModel() {
         List<Activity> activities = IntStream.range(0, 30).mapToObj(this::activity).toList();
         var policy = new PolicyEvidence(

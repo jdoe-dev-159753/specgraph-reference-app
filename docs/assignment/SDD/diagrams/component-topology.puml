@@ -25,6 +25,7 @@ package "Spring Boot modular monolith" as Backend {
   package "customer module" as CustomerModule {
     component "Customer Review HTTP Adapter\nADP-CUST-HTTP-001\n<<GoF Adapter>>" as CustomerHttp
     component "Customer Application\nMOD-CUSTOMER-001" as Customer
+    interface "CustomerReviewQueryPort\nPRT-CUSTOMER-REVIEW-001\n<<Bounded query seam>>" as CustomerReviewPort
     interface "CustomerActivityPort\nPRT-ACTIVITY-001\n<<Strategy seam>>" as ActivityPort
   }
 
@@ -91,10 +92,11 @@ OperatorSecurity --> SecurityFilter : translate Authentication/SecurityContext
 
 CustomerHttp --> Customer
 Customer --> Risk : public RiskEvidence contract
-Customer --> ActivityPort
+Customer --> CustomerReviewPort : bounded operator page
 
 AnalysisHttp --> Analysis : analyze(customerId, OperatorId)
 Analysis --> Customer : complete CustomerSnapshot
+Customer --> ActivityPort : complete snapshot for internal consumers
 Analysis --> DetectorPort : complete snapshot
 Analysis --> PolicyPort : complete snapshot
 Analysis --> ContextBuilder : full source facts + Stage 1/2 evidence
@@ -103,6 +105,8 @@ Analysis --> HistoryPort
 
 ActivityPort --> ActivitySynthetic
 ActivityPort ..> ActivityJdbc
+CustomerReviewPort --> ActivitySynthetic
+CustomerReviewPort ..> ActivityJdbc
 DetectorPort --> DetectorNoOp : default
 DetectorPort ..> DetectorBayes : selectable
 DetectorPort ..> DetectorFuzzy : selectable
@@ -123,12 +127,14 @@ note bottom of Backend
   The four packages are the Spring Modulith application modules. Spring Security remains an
   adapter/runtime boundary: Authentication, SecurityContext and session types stop before
   OperatorContextPort. Detector implementations also stop behind the project-owned
-  RiskSignalDetectorPort and emit only derived RiskSignalEvidence. AnalysisContextBuilder is an
-  application-layer projection: Stage 1 and Stage 2 retain complete CustomerSnapshot semantics,
-  then exact full-history totals are separated from bounded model-facing details immediately
-  before AnalysisModelPort. AnalysisBackendId is the single Stage-3 selection dimension;
-  provider credentials configure a leaf but never select it. GoF Adapter labels identify boundary
-  translation roles, Strategy seams identify interchangeable implementations, Factory/registry
-  resolves the selected Stage-3 leaf, and the analysis application service remains the Facade.
+  RiskSignalDetectorPort and emit only derived RiskSignalEvidence. CustomerReviewQueryPort
+  bounds the operator surface independently of the complete CustomerActivityPort snapshot used
+  by analysis. AnalysisContextBuilder is an application-layer projection: Stage 1 and Stage 2
+  retain complete CustomerSnapshot semantics, then exact full-history totals are separated from
+  bounded model-facing details immediately before AnalysisModelPort. AnalysisBackendId is the
+  single Stage-3 selection dimension; provider credentials configure a leaf but never select it.
+  GoF Adapter labels identify boundary translation roles, Strategy seams identify interchangeable
+  implementations, Factory/registry resolves the selected Stage-3 leaf, and the analysis
+  application service remains the Facade over orchestration.
 end note
 @enduml

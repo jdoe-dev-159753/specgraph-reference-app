@@ -33,7 +33,7 @@ The baseline currently defines ten stable obligations. This table is a human rea
 | --- | --- | --- |
 | `VFY-CUSTOMER-READ-001` | Customer lookup, CARD/PAYMENT/CRYPTO activity and risk evidence on the operator dashboard, including bounded high-volume pagination/filtering | focused UI E2E + HTTP acceptance + real PostgreSQL/Testcontainers port/integration |
 | `VFY-AUTH-001` | Multiple authenticated operators and protected capabilities | Spring Security integration + HTTP acceptance + focused browser E2E |
-| `VFY-ANALYSIS-CONTRACT-001` | Structured risk level, findings and recommendations | contract/unit + acceptance |
+| `VFY-ANALYSIS-CONTRACT-001` | Structured result plus deterministic bounded Stage-3 context with truthful complete-input totals and citable selected evidence | contract/unit + acceptance |
 | `VFY-RAG-001` | Relevant policy grounding, explicit absent-grounding behavior and provenance | port/integration + failure-path acceptance |
 | `VFY-HISTORY-001` | Persisted analysis and authenticated later review with operator/time attribution, including bounded history-page semantics | PostgreSQL integration + HTTP/browser acceptance |
 | `VFY-REPRODUCIBILITY-001` | Clean-checkout local/demo startup and deterministic project assembly | deployment/Compose + smoke validation |
@@ -54,6 +54,8 @@ Use for project-owned domain values, structured result validation, deterministic
 
 Each stable project-owned port receives contract tests that can run against the deterministic baseline adapter and the production-like adapter. The purpose is substitution safety: changing `SyntheticActivityAdapter` to a PostgreSQL-backed adapter or deterministic analysis to a live provider must not change the application contract.
 
+`VFY-ANALYSIS-CONTRACT-001` also verifies the model-context cut itself. High-volume fixtures prove that Stage 1 detection and Stage 2 retrieval receive all 250 activities while `AnalysisModelPort` receives at most the configured 25 activity details; complete totals remain 250. Builder tests cover the independent 25/20/8/3 defaults, deterministic selection, source-risk-to-activity backing, orphan exclusion with truthful totals, impossible-configuration rejection and grounding rejection for omitted detail. Adapter tests separately prove that complete totals and selected counts are not conflated.
+
 ### Integration verification
 
 Use real infrastructure at boundaries where the design depends on infrastructure semantics: Spring Security, HTTP serialization, Spring JDBC/Flyway/PostgreSQL, pgvector retrieval and analysis-history persistence. Integration tests verify boundaries, not framework internals.
@@ -72,6 +74,8 @@ The dashboard criteria `AC-CUST-001`, `AC-ACT-001`, `AC-ACT-002` and `AC-RISK-00
 
 Mechanically check dependency direction and forbidden coupling: project-owned domain/application contracts must not depend on Spring, JDBC or provider-specific types, and adapter substitution must remain possible behind the declared ports. Spring Modulith/architecture checks are executable evidence for the modular-monolith boundary, not a substitute for behavioral tests.
 
+For bounded analysis context, architecture review also checks the placement of `AnalysisContextBuilder`: the complete `CustomerSnapshot` must reach `RiskSignalDetectorPort` and `PolicyKnowledgePort`, and only the application-owned projection immediately before `AnalysisModelPort` may bound Stage-3 details. Operator-review pagination values are not accepted as model-context limits, and provider tokenization/redaction remains adapter-local.
+
 For identity, the architectural ratchet is the same rule applied to security: Spring Security `Authentication`, `SecurityContext`, session and authority types stay inside the security/web adapter boundary. Application analysis receives only the project-owned `OperatorId` selected through the sealed `OperatorContext`/`OperatorContextPort` contract.
 
 ### Failure-path verification
@@ -84,6 +88,7 @@ In particular, failure injection must demonstrate that:
 - invalid credentials do not create authenticated operator state;
 - state-changing secured requests preserve CSRF enforcement rather than disabling it to simplify the demo;
 - absent relevant policy evidence is explicit and does not fabricate grounding provenance;
+- source-risk detail without a backing selected activity is rejected or omitted before the model boundary, and impossible context limits fail closed;
 - model/provider failure does not create a completed history entry;
 - invalid structured output is rejected before persistence;
 - persistence failure is surfaced and cannot be represented as retained history.
@@ -153,7 +158,7 @@ Evidence should be cheap to reproduce and close to the behavior it proves:
 - database evidence: migration + repository/integration tests against real PostgreSQL where semantics matter, including high-density fixtures that prove filtering/count/`LIMIT`/`OFFSET` occurs before activity/history payloads cross the operator boundary;
 - architecture evidence: deterministic dependency/import/module checks;
 - UI evidence: focused E2E assertions for dashboard and authentication acceptance plus human review of comprehensibility;
-- provider evidence: typed factory/configuration tests, deterministic no-credential integration, explicit OpenAI selection separately tagged, and fail-closed unsupported/invalid selection;
+- provider evidence: typed factory/configuration tests, deterministic no-credential integration, bounded-envelope and confidentiality tests for the live-provider adapter, explicit OpenAI selection separately tagged, fail-closed unsupported/invalid selection, and optional live-provider smoke evidence;
 - deployment evidence: clean-checkout Compose startup/readiness and the same documented browser-ready demo path locally or on the configured Docker VM;
 - delivery evidence: repository artifact/link checks plus focused human validation for the demo and reviewer-facing summaries.
 

@@ -20,7 +20,9 @@ services:
       args:
         SOURCE_ROOT: "${R4_SOURCE_ROOT:-.}"
     environment:
-      SPRING_PROFILES_ACTIVE: r4
+      # Detector selection remains profile-based in this stack. Stage-3 selection is
+      # independently owned by the typed SPECGRAPH_ANALYSIS_BACKEND dimension.
+      SPRING_PROFILES_ACTIVE: "${R4_PROFILES:-r4}"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/specgraph
       SPRING_DATASOURCE_USERNAME: specgraph
       SPRING_DATASOURCE_PASSWORD: specgraph
