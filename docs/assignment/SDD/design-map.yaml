@@ -47,6 +47,16 @@ contracts:
     contains: [customer_identity, activities, risk_evidence]
     uses_contracts_from: [MOD-RISK-001]
     invariants: [INV-DATA-001, INV-DATA-002, INV-RISK-001]
+  CTR-CUSTOMER-REVIEW-QUERY-001:
+    name: CustomerReviewQuery
+    owner: MOD-CUSTOMER-001
+    contains: [page, page_size, activity_type, status, created_from, created_to]
+    bounds: [default_page_size_50, maximum_page_size_200]
+  CTR-CUSTOMER-REVIEW-PAGE-001:
+    name: CustomerReviewPage
+    owner: MOD-CUSTOMER-001
+    contains: [customer_identity, bounded_activities, page_scoped_risk_evidence, page, page_size, total_activities, total_risk_evidence, navigation]
+    uses_contracts_from: [MOD-RISK-001]
   CTR-ANALYSIS-RESULT-001:
     name: AnalysisResult
     owner: MOD-ANALYSIS-001
@@ -120,6 +130,16 @@ contracts:
     owner: MOD-ANALYSIS-001
     contains: [analysis_identity, customer_identity, operator_identity, generated_at, result, evidence_provenance, detector_provenance, model_provenance]
     invariants: [INV-HIST-001]
+  CTR-ANALYSIS-HISTORY-QUERY-001:
+    name: AnalysisHistoryQuery
+    owner: MOD-ANALYSIS-001
+    contains: [page, page_size]
+    bounds: [default_page_size_20, maximum_page_size_100]
+  CTR-ANALYSIS-HISTORY-PAGE-001:
+    name: AnalysisHistoryPage
+    owner: MOD-ANALYSIS-001
+    contains: [entries, page, page_size, total_entries, navigation]
+    invariants: [INV-HIST-001]
 
 ports:
   PRT-OPERATOR-CONTEXT-001:
@@ -137,7 +157,18 @@ ports:
     owner: MOD-CUSTOMER-001
     direction: outbound
     returns: CTR-CUSTOMER-SNAPSHOT-001
+    semantics: complete snapshot for analysis-compatible consumers; not the operator pagination boundary
     activation_ring: R0
+    adrs: [ADR-001, ADR-003, ADR-007]
+  PRT-CUSTOMER-REVIEW-QUERY-001:
+    name: CustomerReviewQueryPort
+    owner: MOD-CUSTOMER-001
+    direction: outbound
+    accepts: CTR-CUSTOMER-REVIEW-QUERY-001
+    returns: CTR-CUSTOMER-REVIEW-PAGE-001
+    implementation_adapters: [ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
+    semantics: bounded operator-facing query applied before HTTP serialization
+    activation_ring: R1
     adrs: [ADR-001, ADR-003, ADR-007]
   PRT-DETECTOR-001:
     name: RiskSignalDetectorPort
@@ -170,6 +201,9 @@ ports:
     direction: outbound
     accepts: CTR-ANALYSIS-HISTORY-CREATE-001
     returns: CTR-ANALYSIS-HISTORY-ENTRY-001
+    paged_query: CTR-ANALYSIS-HISTORY-QUERY-001
+    paged_result: CTR-ANALYSIS-HISTORY-PAGE-001
+    semantics: persistence and complete-list compatibility plus bounded operator page queries
     activation_ring: R0
     adrs: [ADR-001, ADR-003, ADR-007]
 
@@ -356,15 +390,16 @@ infrastructure:
     runtime_session_types: [LEGACY, SECURED_AUTHENTICATED, SECURED_UNAUTHENTICATED]
     r4_auth_view: login, authenticated operator identity, logout, protected customer and analysis navigation
     r4_policy_provenance_view: source identity, content, adapter, corpus, revision, source document, chunk position, embedding identity and similarity score when present
+    high_volume_review: bounded activity page with sticky table header, explicit filters/navigation and bounded analysis-history pages
     adrs: [ADR-004]
 
 requirement_design:
   FR-CUST-001:
-    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
+    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-PAGE-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R1
   FR-ACT-001:
-    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
+    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-PAGE-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R1
   FR-ACT-002:
@@ -396,7 +431,7 @@ requirement_design:
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R3
   FR-HIST-002:
-    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-ANALYSIS-HISTORY-ENTRY-001]
+    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-ANALYSIS-HISTORY-QUERY-001, CTR-ANALYSIS-HISTORY-PAGE-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-REP-001:
