@@ -6,7 +6,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Application-owned bounded evidence boundary supplied to advisory analysis models.
@@ -36,6 +38,16 @@ public record AnalysisEvidenceEnvelope(
         requireTotalAtLeastSelected(totalSourceRiskCount, sourceRiskEvidence.size(), "totalSourceRiskCount");
         requireTotalAtLeastSelected(totalDetectorEvidenceCount, detectorEvidence.size(), "totalDetectorEvidenceCount");
         requireTotalAtLeastSelected(totalPolicyEvidenceCount, policyEvidence.size(), "totalPolicyEvidenceCount");
+
+        Set<UUID> selectedActivityIds = activities.stream()
+                .map(Activity::transactionId)
+                .collect(Collectors.toUnmodifiableSet());
+        sourceRiskEvidence.forEach(risk -> {
+            if (!selectedActivityIds.contains(risk.transactionId())) {
+                throw new IllegalArgumentException(
+                        "selected source-risk evidence must retain its backing selected activity");
+            }
+        });
     }
 
     Map<String, String> contextDiagnostics() {
