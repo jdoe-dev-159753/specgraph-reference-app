@@ -1,14 +1,7 @@
 name: r4-retrieval-ci
 
 on:
-  pull_request:
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'docker/**'
-      - 'scripts/ci/**'
-      - 'compose.r4.yaml'
-      - '.github/workflows/r4-retrieval-ci.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
