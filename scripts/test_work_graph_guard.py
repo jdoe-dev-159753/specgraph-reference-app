@@ -145,7 +145,7 @@ class DurableWorkflowTests(unittest.TestCase):
                 self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
 
     def test_escaped_double_quoted_yaml_name_key_is_rejected(self):
-        workflow = '"na\\\\u006de": issue-42-proof\\n'
+        workflow = r'"na\u006de": issue-42-proof' + "\n"
         self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
         findings = guard.workflow_inventory_violations({"proof.yml": workflow}, "proof.yml\\n")
         self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
