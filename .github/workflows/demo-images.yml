@@ -30,38 +30,35 @@ jobs:
       R1_PORT: '8081'
       R2_PORT: '8082'
       R3_PORT: '8083'
+      R4_PORT: '8084'
+      R4_BAYESIAN_PORT: '8085'
 
     steps:
-      - name: Reclaim stale publication state and require disk headroom
+      - name: Reclaim stale publication state
         run: |
           echo 'Disk before publication cleanup:'
           df -h "$GITHUB_WORKSPACE" || df -h /
           docker system df || true
 
           docker ps -aq --filter 'name=specgraph-prepublish-' | xargs -r docker rm -f || true
-          docker network ls --format '{{.Name}}' | grep '^specgraph-prepublish-' | xargs -r docker network rm || true
+          docker ps -aq --filter 'name=specgraph-remote-proof-' | xargs -r docker rm -f || true
+          docker network ls --format '{{.Name}}' | grep -E '^specgraph-(prepublish|remote-proof)-' | xargs -r docker network rm || true
           docker buildx ls --format '{{.Name}}' 2>/dev/null | grep '^specgraph-multiarch-' | xargs -r -n1 docker buildx rm || true
           docker image rm -f \
             specgraph-reference-app:r0 \
             specgraph-reference-app:r1 \
             specgraph-reference-app:r2 \
-            specgraph-reference-app:r3 2>/dev/null || true
+            specgraph-reference-app:r3 \
+            specgraph-reference-app:r4 2>/dev/null || true
           docker buildx prune -af || true
           docker builder prune -af || true
-          docker container prune -f --filter 'until=24h' || true
-          docker network prune -f --filter 'until=24h' || true
-          docker image prune -af --filter 'until=24h' || true
+          docker container prune -f || true
+          docker network prune -f || true
+          docker image prune -af || true
 
           echo 'Disk after publication cleanup:'
           df -h "$GITHUB_WORKSPACE" || df -h /
           docker system df || true
-
-          available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR==2 {print $4}')"
-          minimum_kb=$((16 * 1024 * 1024))
-          if [ "$available_kb" -lt "$minimum_kb" ]; then
-            echo "Need at least 16 GiB free for four native images plus multi-platform publication; only $((available_kb / 1024)) MiB is available." >&2
-            exit 1
-          fi
 
       - name: Checkout packaging authority
         uses: actions/checkout@v7
@@ -97,6 +94,13 @@ jobs:
           path: packaging/checkpoints/r3
           persist-credentials: false
 
+      - name: Checkout R4 source checkpoint
+        uses: actions/checkout@v7
+        with:
+          ref: demo/r4
+          path: packaging/checkpoints/r4
+          persist-credentials: false
+
       - name: Confirm OCI-capable Docker tooling
         working-directory: packaging
         run: |
@@ -112,10 +116,11 @@ jobs:
           r1_sha="$(git -C checkpoints/r1 rev-parse HEAD)"
           r2_sha="$(git -C checkpoints/r2 rev-parse HEAD)"
           r3_sha="$(git -C checkpoints/r3 rev-parse HEAD)"
+          r4_sha="$(git -C checkpoints/r4 rev-parse HEAD)"
           packaging_short="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
           compose_packaging_short="$(printf '%s' "$GITHUB_SHA" | cut -c1-9)"
 
-          for ring in r0 r1 r2 r3; do
+          for ring in r0 r1 r2 r3 r4; do
             ring_upper="$(printf '%s' "$ring" | tr '[:lower:]' '[:upper:]')"
             ring_sha="$(eval "printf '%s' \"\$${ring}_sha\"")"
             ring_short="$(printf '%s' "$ring_sha" | cut -c1-12)"
@@ -123,15 +128,15 @@ jobs:
             echo "${ring_upper}_IMMUTABLE=${ring}-${ring_short}-pkg-${packaging_short}" >> "$GITHUB_ENV"
           done
 
-          # Full checkpoint identities remain in environment/labels/evidence. The complete
-          # five-manifest set hash below is the compact immutable binding for the Compose tag.
+          # R4 baseline and Bayesian are two configured processes of one immutable R4 image.
+          # The compact Compose identity binds five application manifests plus PostgreSQL and pgvector.
           echo "COMPOSE_IDENTITY_PREFIX=demo-pkg-${compose_packaging_short}" >> "$GITHUB_ENV"
           echo "BUILDER_NAME=specgraph-multiarch-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
 
       - name: Build native checkpoint images for pre-publication verification
         working-directory: packaging
         run: |
-          for ring in r0 r1 r2 r3; do
+          for ring in r0 r1 r2 r3 r4; do
             ring_upper="$(printf '%s' "$ring" | tr '[:lower:]' '[:upper:]')"
             ring_sha="$(eval "printf '%s' \"\$${ring_upper}_SHA\"")"
             docker build -f docker/app.Dockerfile \
@@ -142,26 +147,30 @@ jobs:
               -t "specgraph-reference-app:$ring" .
           done
 
-      - name: Verify R0 through R3 side by side before publication
+      - name: Verify R0 through R4 side by side before publication
         working-directory: packaging
         env:
           APP_R0_IMAGE: specgraph-reference-app:r0
           APP_R1_IMAGE: specgraph-reference-app:r1
           APP_R2_IMAGE: specgraph-reference-app:r2
           APP_R3_IMAGE: specgraph-reference-app:r3
+          APP_R4_IMAGE: specgraph-reference-app:r4
           COMPOSE_PROJECT_NAME: specgraph-prepublish-${{ github.run_id }}
         run: |
-          # The application checkpoints must come from the native builds above. PostgreSQL is
-          # an upstream runtime dependency, so provision it explicitly before forbidding pulls.
+          # App checkpoints come from the native builds above. Runtime databases are upstream
+          # dependencies, so provision them explicitly before forbidding pulls.
           docker pull postgres:17-alpine
-          docker compose -f compose.oci.yaml up -d --no-build --pull never r0 r1 postgres r2 r3
+          docker pull pgvector/pgvector:0.8.6-pg17
+          docker compose -f compose.oci.yaml up -d --no-build --pull never \
+            r0 r1 postgres r2 r3 \
+            r4-postgres-baseline r4 r4-postgres-bayesian r4-bayesian
 
-          for service in r0 r1 r2 r3; do
+          for service in r0 r1 r2 r3 r4 r4-bayesian; do
             container_id="$(docker compose -f compose.oci.yaml ps -q "$service")"
-            for attempt in $(seq 1 90); do
+            for attempt in $(seq 1 150); do
               health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id" 2>/dev/null || true)"
               [ "$health" = healthy ] && break
-              if [ "$attempt" -eq 90 ]; then
+              if [ "$attempt" -eq 150 ]; then
                 docker compose -f compose.oci.yaml ps
                 docker compose -f compose.oci.yaml logs --no-color
                 exit 1
@@ -170,7 +179,7 @@ jobs:
             done
           done
 
-          for port in 8080 8081 8082 8083; do
+          for port in 8080 8081 8082 8083 8084 8085; do
             curl -fsS "http://127.0.0.1:$port/" >/dev/null
           done
 
@@ -198,7 +207,38 @@ jobs:
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r3-analysis-history.spec.ts'
 
-          docker compose -f compose.oci.yaml down --remove-orphans
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL=http://127.0.0.1:8084 \
+            -e EVIDENCE_NAME=r4-baseline \
+            -e EXPECT_DETECTOR=none \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
+
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL=http://127.0.0.1:8085 \
+            -e EVIDENCE_NAME=r4-bayesian \
+            -e EXPECT_DETECTOR=beta-binomial-review-elevation-v1 \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
+
+          docker compose -f compose.oci.yaml down -v --remove-orphans
+
+      - name: Reclaim native pre-publication images
+        run: |
+          docker image rm -f \
+            specgraph-reference-app:r0 \
+            specgraph-reference-app:r1 \
+            specgraph-reference-app:r2 \
+            specgraph-reference-app:r3 \
+            specgraph-reference-app:r4 2>/dev/null || true
+          docker builder prune -af || true
+          df -h "$GITHUB_WORKSPACE" || true
 
       - name: Authenticate to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -211,7 +251,7 @@ jobs:
       - name: Publish amd64 and arm64 checkpoint images
         working-directory: packaging
         run: |
-          for ring in r0 r1 r2 r3; do
+          for ring in r0 r1 r2 r3 r4; do
             ring_upper="$(printf '%s' "$ring" | tr '[:lower:]' '[:upper:]')"
             ring_sha="$(eval "printf '%s' \"\$${ring_upper}_SHA\"")"
             ring_immutable="$(eval "printf '%s' \"\$${ring_upper}_IMMUTABLE\"")"
@@ -226,10 +266,11 @@ jobs:
               -t "$APP_PACKAGE:$ring_immutable" \
               --push .
           done
+          docker buildx prune -af --builder "$BUILDER_NAME" || true
 
-      - name: Verify published multi-platform manifests and pin PostgreSQL
+      - name: Verify published manifests and pin runtime databases
         run: |
-          for ring in r0 r1 r2 r3; do
+          for ring in r0 r1 r2 r3 r4; do
             ring_upper="$(printf '%s' "$ring" | tr '[:lower:]' '[:upper:]')"
             ring_immutable="$(eval "printf '%s' \"\$${ring_upper}_IMMUTABLE\"")"
             inspect="$(docker buildx imagetools inspect "$APP_PACKAGE:$ring_immutable")"
@@ -246,9 +287,16 @@ jobs:
           printf '%s\n' "$postgres_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
           echo "POSTGRES_DIGEST=$postgres_digest" >> "$GITHUB_ENV"
 
-      - name: Bind retained Compose identity to complete image set
+          pgvector_inspect="$(docker buildx imagetools inspect pgvector/pgvector:0.8.6-pg17)"
+          pgvector_digest="$(printf '%s\n' "$pgvector_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
+          printf '%s\n' "$pgvector_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          echo "PGVECTOR_DIGEST=$pgvector_digest" >> "$GITHUB_ENV"
+
+      - name: Bind retained Compose identity to complete unique image set
         run: |
-          image_set_hex="$(printf '%s\n' "$R0_DIGEST" "$R1_DIGEST" "$R2_DIGEST" "$R3_DIGEST" "$POSTGRES_DIGEST" | sha256sum | awk '{print $1}')"
+          image_set_hex="$(printf '%s\n' \
+            "$R0_DIGEST" "$R1_DIGEST" "$R2_DIGEST" "$R3_DIGEST" "$R4_DIGEST" \
+            "$POSTGRES_DIGEST" "$PGVECTOR_DIGEST" | sha256sum | awk '{print $1}')"
           compose_immutable="${COMPOSE_IDENTITY_PREFIX}-set-${image_set_hex}"
           test "${#compose_immutable}" -le 128
           echo "COMPOSE_IMMUTABLE=$compose_immutable" >> "$GITHUB_ENV"
@@ -260,81 +308,76 @@ jobs:
           export APP_R1_IMAGE="$APP_PACKAGE:$R1_IMMUTABLE"
           export APP_R2_IMAGE="$APP_PACKAGE:$R2_IMMUTABLE"
           export APP_R3_IMAGE="$APP_PACKAGE:$R3_IMMUTABLE"
+          export APP_R4_IMAGE="$APP_PACKAGE:$R4_IMMUTABLE"
           export POSTGRES_IMAGE="postgres:17-alpine@$POSTGRES_DIGEST"
+          export PGVECTOR_IMAGE="pgvector/pgvector:0.8.6-pg17@$PGVECTOR_DIGEST"
 
           docker compose -f compose.oci.yaml publish -y --resolve-image-digests "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
           docker buildx imagetools inspect "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
 
-      - name: Assert immutable Compose provenance resolves this run's complete image set
+      - name: Assert immutable Compose provenance resolves complete reviewer topology
         working-directory: packaging
         run: |
           compose_ref="oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
           images="$(docker compose -f "$compose_ref" config --images)"
           printf 'Resolved images for %s:\n%s\n' "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" "$images"
           image_count="$(printf '%s\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')"
-          if [ "$image_count" -ne 5 ]; then
-            printf 'Compose provenance image-cardinality mismatch\nexpected count: 5\nactual count: %s\nactual images:\n%s\n' \
+          if [ "$image_count" -ne 9 ]; then
+            printf 'Compose provenance image-cardinality mismatch\nexpected services/images: 9\nactual: %s\nactual images:\n%s\n' \
               "$image_count" "$images" >&2
             exit 1
           fi
-          printf 'Compose provenance image cardinality OK: expected=5 actual=%s\n' "$image_count"
 
-          assert_app_identity() {
+          assert_image_identity() {
             service="$1"
-            expected_digest="$2"
+            expected_repository="$2"
+            expected_digest="$3"
             actual_images="$(docker compose -f "$compose_ref" config --images "$service")"
             printf '%s provenance dependency closure:\n%s\n' "$service" "$actual_images"
-
             matched=false
             while IFS= read -r actual; do
               case "$actual" in
-                "$APP_PACKAGE@$expected_digest"|"$APP_PACKAGE":*"@$expected_digest")
+                "$expected_repository@$expected_digest"|"$expected_repository":*"@$expected_digest")
                   matched=true
                   printf '%s provenance match: %s\n' "$service" "$actual"
                   break
                   ;;
               esac
             done <<< "$actual_images"
-
             if [ "$matched" != true ]; then
               printf 'Compose provenance mismatch for %s\nexpected repository: %s\nexpected digest: %s\nactual dependency closure:\n%s\n' \
-                "$service" "$APP_PACKAGE" "$expected_digest" "$actual_images" >&2
+                "$service" "$expected_repository" "$expected_digest" "$actual_images" >&2
               exit 1
             fi
           }
 
-          assert_app_identity r0 "$R0_DIGEST"
-          assert_app_identity r1 "$R1_DIGEST"
-          assert_app_identity r2 "$R2_DIGEST"
-          assert_app_identity r3 "$R3_DIGEST"
-
-          postgres_actual="$(docker compose -f "$compose_ref" config --images postgres)"
-          case "$postgres_actual" in
-            *"@$POSTGRES_DIGEST")
-              printf 'postgres provenance OK: %s\n' "$postgres_actual"
-              ;;
-            *)
-              printf 'Compose provenance mismatch for postgres\nexpected digest: %s\nactual image: %s\n' \
-                "$POSTGRES_DIGEST" "$postgres_actual" >&2
-              exit 1
-              ;;
-          esac
+          assert_image_identity r0 "$APP_PACKAGE" "$R0_DIGEST"
+          assert_image_identity r1 "$APP_PACKAGE" "$R1_DIGEST"
+          assert_image_identity r2 "$APP_PACKAGE" "$R2_DIGEST"
+          assert_image_identity r3 "$APP_PACKAGE" "$R3_DIGEST"
+          assert_image_identity r4 "$APP_PACKAGE" "$R4_DIGEST"
+          assert_image_identity r4-bayesian "$APP_PACKAGE" "$R4_DIGEST"
+          assert_image_identity postgres postgres "$POSTGRES_DIGEST"
+          assert_image_identity r4-postgres-baseline pgvector/pgvector "$PGVECTOR_DIGEST"
+          assert_image_identity r4-postgres-bayesian pgvector/pgvector "$PGVECTOR_DIGEST"
 
       - name: Prove immutable remote Compose deployment pulls from registry
         working-directory: packaging
         env:
           COMPOSE_PROJECT_NAME: specgraph-remote-proof-${{ github.run_id }}
         run: |
-          docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" down --remove-orphans || true
+          compose_ref="oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
+          docker compose -f "$compose_ref" down -v --remove-orphans || true
           docker image rm -f \
             specgraph-reference-app:r0 \
             specgraph-reference-app:r1 \
             specgraph-reference-app:r2 \
-            specgraph-reference-app:r3 || true
+            specgraph-reference-app:r3 \
+            specgraph-reference-app:r4 2>/dev/null || true
 
-          docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" up -d --wait
+          docker compose -f "$compose_ref" up -d --wait
 
-          for port in 8080 8081 8082 8083; do
+          for port in 8080 8081 8082 8083 8084 8085; do
             curl -fsS "http://127.0.0.1:$port/" >/dev/null
           done
 
@@ -362,8 +405,28 @@ jobs:
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r3-analysis-history.spec.ts'
 
-          docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" ps
-          docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" down --remove-orphans
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL=http://127.0.0.1:8084 \
+            -e EVIDENCE_NAME=r4-baseline-remote \
+            -e EXPECT_DETECTOR=none \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
+
+          docker run --rm --network host --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
+            -e BASE_URL=http://127.0.0.1:8085 \
+            -e EVIDENCE_NAME=r4-bayesian-remote \
+            -e EXPECT_DETECTOR=beta-binomial-review-elevation-v1 \
+            -v "$PWD/e2e:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
+
+          docker compose -f "$compose_ref" ps
+          docker compose -f "$compose_ref" down -v --remove-orphans
 
       - name: Promote proven Compose application to reviewer demo tag
         working-directory: packaging
@@ -372,7 +435,9 @@ jobs:
           export APP_R1_IMAGE="$APP_PACKAGE:$R1_IMMUTABLE"
           export APP_R2_IMAGE="$APP_PACKAGE:$R2_IMMUTABLE"
           export APP_R3_IMAGE="$APP_PACKAGE:$R3_IMMUTABLE"
+          export APP_R4_IMAGE="$APP_PACKAGE:$R4_IMMUTABLE"
           export POSTGRES_IMAGE="postgres:17-alpine@$POSTGRES_DIGEST"
+          export PGVECTOR_IMAGE="pgvector/pgvector:0.8.6-pg17@$PGVECTOR_DIGEST"
 
           docker compose -f compose.oci.yaml publish -y --resolve-image-digests "$COMPOSE_PACKAGE:demo"
           docker buildx imagetools inspect "$COMPOSE_PACKAGE:demo"
@@ -384,53 +449,42 @@ jobs:
           images="$(docker compose -f "$compose_ref" config --images)"
           printf 'Resolved images for %s:\n%s\n' "$COMPOSE_PACKAGE:demo" "$images"
           image_count="$(printf '%s\n' "$images" | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')"
-          if [ "$image_count" -ne 5 ]; then
-            printf 'Promoted demo provenance image-cardinality mismatch\nexpected count: 5\nactual count: %s\nactual images:\n%s\n' \
+          if [ "$image_count" -ne 9 ]; then
+            printf 'Promoted demo provenance image-cardinality mismatch\nexpected services/images: 9\nactual: %s\nactual images:\n%s\n' \
               "$image_count" "$images" >&2
             exit 1
           fi
-          printf 'Promoted demo provenance image cardinality OK: expected=5 actual=%s\n' "$image_count"
 
-          assert_app_identity() {
+          assert_image_identity() {
             service="$1"
-            expected_digest="$2"
+            expected_repository="$2"
+            expected_digest="$3"
             actual_images="$(docker compose -f "$compose_ref" config --images "$service")"
-            printf '%s promoted provenance dependency closure:\n%s\n' "$service" "$actual_images"
-
             matched=false
             while IFS= read -r actual; do
               case "$actual" in
-                "$APP_PACKAGE@$expected_digest"|"$APP_PACKAGE":*"@$expected_digest")
+                "$expected_repository@$expected_digest"|"$expected_repository":*"@$expected_digest")
                   matched=true
-                  printf '%s promoted provenance match: %s\n' "$service" "$actual"
                   break
                   ;;
               esac
             done <<< "$actual_images"
-
             if [ "$matched" != true ]; then
               printf 'Promoted demo provenance mismatch for %s\nexpected repository: %s\nexpected digest: %s\nactual dependency closure:\n%s\n' \
-                "$service" "$APP_PACKAGE" "$expected_digest" "$actual_images" >&2
+                "$service" "$expected_repository" "$expected_digest" "$actual_images" >&2
               exit 1
             fi
           }
 
-          assert_app_identity r0 "$R0_DIGEST"
-          assert_app_identity r1 "$R1_DIGEST"
-          assert_app_identity r2 "$R2_DIGEST"
-          assert_app_identity r3 "$R3_DIGEST"
-
-          postgres_actual="$(docker compose -f "$compose_ref" config --images postgres)"
-          case "$postgres_actual" in
-            *"@$POSTGRES_DIGEST")
-              printf 'postgres provenance OK: %s\n' "$postgres_actual"
-              ;;
-            *)
-              printf 'Promoted demo provenance mismatch for postgres\nexpected digest: %s\nactual image: %s\n' \
-                "$POSTGRES_DIGEST" "$postgres_actual" >&2
-              exit 1
-              ;;
-          esac
+          assert_image_identity r0 "$APP_PACKAGE" "$R0_DIGEST"
+          assert_image_identity r1 "$APP_PACKAGE" "$R1_DIGEST"
+          assert_image_identity r2 "$APP_PACKAGE" "$R2_DIGEST"
+          assert_image_identity r3 "$APP_PACKAGE" "$R3_DIGEST"
+          assert_image_identity r4 "$APP_PACKAGE" "$R4_DIGEST"
+          assert_image_identity r4-bayesian "$APP_PACKAGE" "$R4_DIGEST"
+          assert_image_identity postgres postgres "$POSTGRES_DIGEST"
+          assert_image_identity r4-postgres-baseline pgvector/pgvector "$PGVECTOR_DIGEST"
+          assert_image_identity r4-postgres-bayesian pgvector/pgvector "$PGVECTOR_DIGEST"
 
       - name: Summarize published reviewer deployment
         working-directory: packaging
@@ -444,10 +498,12 @@ jobs:
             printf '| R1 image | `%s` | `%s` | `%s` |\n' "$R1_SHA" "$GITHUB_SHA" "$R1_DIGEST"
             printf '| R2 image | `%s` | `%s` | `%s` |\n' "$R2_SHA" "$GITHUB_SHA" "$R2_DIGEST"
             printf '| R3 image | `%s` | `%s` | `%s` |\n' "$R3_SHA" "$GITHUB_SHA" "$R3_DIGEST"
+            printf '| R4 image | `%s` | `%s` | `%s` |\n' "$R4_SHA" "$GITHUB_SHA" "$R4_DIGEST"
             printf '| PostgreSQL 17 | upstream | `%s` | `%s` |\n' "$GITHUB_SHA" "$POSTGRES_DIGEST"
-            printf '| Compose OCI | R0 + R1 + R2 + R3 + PostgreSQL | `%s` | `%s:%s` |\n' "$GITHUB_SHA" "$COMPOSE_PACKAGE" "$COMPOSE_IMMUTABLE"
+            printf '| pgvector 0.8.6-pg17 | upstream | `%s` | `%s` |\n' "$GITHUB_SHA" "$PGVECTOR_DIGEST"
+            printf '| Compose OCI | R0-R4 + PostgreSQL + pgvector | `%s` | `%s:%s` |\n' "$GITHUB_SHA" "$COMPOSE_PACKAGE" "$COMPOSE_IMMUTABLE"
             echo
-            echo "Published application image manifests contain both \`linux/amd64\` and \`linux/arm64\`. The immutable Compose candidate passed the remote browser proof before \`:demo\` was promoted, and the promoted tag resolves the same complete five-image set."
+            echo "The immutable Compose candidate passed remote browser proof on ports 8080-8085 before \`:demo\` was promoted. R4 baseline and Bayesian are isolated processes of the same immutable R4 image, each with independent pgvector state."
             echo
             printf 'Reviewer command: `docker compose -f oci://%s:demo up -d --wait`\n' "$COMPOSE_PACKAGE"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -456,17 +512,17 @@ jobs:
         if: always()
         working-directory: packaging
         run: |
-          COMPOSE_PROJECT_NAME="specgraph-prepublish-${GITHUB_RUN_ID}" docker compose -f compose.oci.yaml down --remove-orphans || true
+          COMPOSE_PROJECT_NAME="specgraph-prepublish-${GITHUB_RUN_ID}" docker compose -f compose.oci.yaml down -v --remove-orphans || true
           if [ -n "${COMPOSE_IMMUTABLE:-}" ]; then
-            COMPOSE_PROJECT_NAME="specgraph-remote-proof-${GITHUB_RUN_ID}" docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" down --remove-orphans || true
+            COMPOSE_PROJECT_NAME="specgraph-remote-proof-${GITHUB_RUN_ID}" docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" down -v --remove-orphans || true
           fi
-          docker compose -f "oci://$COMPOSE_PACKAGE:demo" down --remove-orphans || true
           [ -z "${BUILDER_NAME:-}" ] || docker buildx rm "$BUILDER_NAME" || true
           docker image rm -f \
             specgraph-reference-app:r0 \
             specgraph-reference-app:r1 \
             specgraph-reference-app:r2 \
-            specgraph-reference-app:r3 2>/dev/null || true
+            specgraph-reference-app:r3 \
+            specgraph-reference-app:r4 2>/dev/null || true
           docker buildx prune -af || true
           docker builder prune -af || true
           docker logout ghcr.io || true
