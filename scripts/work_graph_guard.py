@@ -30,7 +30,7 @@ PROTECTED_ASSET_SHA256 = {
         {"0e6865bb537e7b837ff47ec501a09b8e2a06d674fc391740b89a7ccd6c5b767c"}
     ),
     "scripts/test_work_graph_guard.py": frozenset(
-        {"9c41fe1b4ffa3bb0aa59dffbd923b1baaecb6c731b49f31522b0ac6ba383f05b"}
+        {"8c896f77a1260d009021ce16b33863017401201d8a3e8ad355774373309e0fb1"}
     ),
 }
 
@@ -261,7 +261,9 @@ def protected_asset_violations(path: str, text: str) -> list[str]:
 
 
 def workflow_inventory_violations(
-    workflow_texts: dict[str, str], manifest_text: str
+    workflow_texts: dict[str, str],
+    manifest_text: str,
+    require_protected_workflows: bool = False,
 ) -> list[str]:
     failures: list[str] = []
     actual = set(workflow_texts)
@@ -285,10 +287,13 @@ def workflow_inventory_violations(
         if not protected_path.startswith(prefix):
             continue
         filename = protected_path.removeprefix(prefix)
-        if filename in workflow_texts:
-            failures.extend(
-                protected_asset_violations(protected_path, workflow_texts[filename])
-            )
+        if filename not in workflow_texts:
+            if require_protected_workflows:
+                failures.append(f"{protected_path}: protected asset is missing")
+            continue
+        failures.extend(
+            protected_asset_violations(protected_path, workflow_texts[filename])
+        )
 
     for filename, text in sorted(workflow_texts.items()):
         failures.extend(canonical_workflow_name_violations(filename, text))
@@ -349,7 +354,9 @@ def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> Non
         payload = api(f"/repos/{REPO}/contents/{WORKFLOW_DIR}/{name}?ref={ref}")
         workflow_texts[name] = decode_contents_payload(payload, f"{WORKFLOW_DIR}/{name}")
 
-    inventory_failures = workflow_inventory_violations(workflow_texts, manifest_text)
+    inventory_failures = workflow_inventory_violations(
+        workflow_texts, manifest_text, require_protected_workflows=True
+    )
     for protected_path in sorted(PROTECTED_ASSET_SHA256):
         if protected_path.startswith(f"{WORKFLOW_DIR}/"):
             continue
