@@ -1,0 +1,126 @@
+name: reconcile-j4-high-volume-docs-once
+
+on:
+  push:
+    branches: [feat/j4-bounded-customer-review]
+    paths:
+      - '.github/workflows/reconcile-j4-high-volume-docs-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/j4-bounded-customer-review
+      - name: Reconcile controlled authorities
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'docs/assignment/SDD/SDD.md',
+              '| `CustomerActivityPort` | load one project-owned `CustomerSnapshot` | synthetic R1, Spring JDBC R2+ |',
+              '| `CustomerActivityPort` | load one complete project-owned `CustomerSnapshot` for analysis/detector/retrieval semantics | synthetic R1, Spring JDBC R2+ |\n'
+              '| `CustomerReviewQueryPort` | load one bounded operator-facing activity/risk page without changing complete-snapshot semantics | synthetic bounded projection R1; filtered/count/`LIMIT`/`OFFSET` Spring JDBC R2+ |')
+
+          replace_once(
+              'docs/assignment/SDD/SDD.md',
+              '| `AnalysisHistoryPort` | persist/list/inspect validated analysis history | Spring JDBC R3+ |',
+              '| `AnalysisHistoryPort` | persist validated history, retain complete-list compatibility, and expose bounded page queries for operator review | in-memory baseline; Spring JDBC count/`LIMIT`/`OFFSET` R3+ |')
+
+          replace_once(
+              'docs/assignment/SDD/SDD.md',
+              'Stable contracts include `CustomerSnapshot`, activity/risk projections, the sealed `AnalysisPipelineArtifact` pivot, `RiskSignalEvidence`, `PolicyEvidence`, `AnalysisEvidenceEnvelope`, `AnalysisResult`, `AnalysisModelProvenance`, `AnalysisModelOutput`, `OperatorId`, the sealed `OperatorContext`, `AnalysisHistoryCreateCommand`, and `AnalysisHistoryEntry`.',
+              'Stable contracts include `CustomerSnapshot`, `CustomerReviewQuery`, `CustomerReviewPage`, activity/risk projections, the sealed `AnalysisPipelineArtifact` pivot, `RiskSignalEvidence`, `PolicyEvidence`, `AnalysisEvidenceEnvelope`, `AnalysisResult`, `AnalysisModelProvenance`, `AnalysisModelOutput`, `OperatorId`, the sealed `OperatorContext`, `AnalysisHistoryCreateCommand`, `AnalysisHistoryEntry`, `AnalysisHistoryQuery`, and `AnalysisHistoryPage`.')
+
+          replace_once(
+              'docs/assignment/SDD/SDD.md',
+              'Multi-query customer aggregate reads execute under PostgreSQL `REPEATABLE READ`, so activities and risk evidence cannot be assembled from different committed snapshots.\n\nR3 adds project-owned `analysis_history` through Flyway and `JdbcAnalysisHistoryAdapter`. Only a validated analysis whose persistence succeeds is represented as completed retained history.',
+              'Multi-query customer aggregate reads execute under PostgreSQL `REPEATABLE READ`, so activities and risk evidence cannot be assembled from different committed snapshots. The operator-facing `CustomerReviewQueryPort` is deliberately separate from that complete-snapshot port: `JdbcCustomerActivityAdapter` applies type/status/date filters, obtains a filtered count, reads only one stable `created_at, transaction_id` page through `LIMIT/OFFSET`, and then loads source-risk evidence only for transactions present in that page. The synthetic adapter implements the same bounded contract for compatibility, but the PostgreSQL/Testcontainers path is the high-volume scalability authority.\n\nR3 adds project-owned `analysis_history` through Flyway and `JdbcAnalysisHistoryAdapter`. Only a validated analysis whose persistence succeeds is represented as completed retained history. Operator-facing history review is also bounded: `AnalysisHistoryQuery` defaults to 20 entries and is capped at 100, while the JDBC adapter performs a count plus descending `LIMIT/OFFSET` page query. The HTTP body remains the historical array shape for compatibility; page/total metadata is carried in response headers.')
+
+          replace_once(
+              'docs/assignment/SDD/SDD.md',
+              '`CustomerReviewHttpAdapter -> CustomerReviewUseCase -> CustomerReviewService -> CustomerActivityPort` is the stable read path. R1 uses the synthetic adapter; R2+ substitutes `JdbcCustomerActivityAdapter` without changing the application-owned contract.\n\nUnknown customers return an explicit not-found result rather than fabricated data.',
+              '`CustomerReviewUseCase` deliberately exposes two read semantics instead of pretending that one collection shape fits every consumer. Internal analysis-compatible callers retain `findCustomer(customerId) -> CustomerSnapshot`, which traverses the complete `CustomerActivityPort`. The operator HTTP path uses `findCustomer(customerId, CustomerReviewQuery) -> CustomerReviewPage`, which traverses `CustomerReviewQueryPort` and is bounded before data crosses the HTTP boundary. R1 uses the synthetic adapter for both semantics; R2+ uses `JdbcCustomerActivityAdapter` for both without leaking JDBC types into either project-owned contract.\n\nThe operator query defaults to 50 activities and is capped at 200. It supports project-owned activity-type, status, and creation-time filters and preserves the established deterministic `created_at, transaction_id` ordering. `CustomerReviewPage` carries total counts and previous/next semantics; source-risk evidence in the page is scoped to the transactions actually returned. The React table keeps a bounded scroll surface with a sticky header and explicit pagination/filter controls. The unfiltered first page deliberately keeps the historical `/api/customers/{id}` URL so R1/R2 compatibility evidence remains valid.\n\nUnknown customers return an explicit not-found result rather than fabricated data. Invalid bounds or date windows fail as invalid requests rather than being silently widened.')
+
+          replace_once(
+              'docs/assignment/SDD/SDD.md',
+              '- how R2 preserves exact PostgreSQL source semantics and snapshot consistency;\n- how deterministic analysis is validated, persisted and reloaded with either deterministic R3 attribution or authenticated R4 attribution without changing the history contract;',
+              '- how R2 preserves exact PostgreSQL source semantics and snapshot consistency;\n- why complete `CustomerActivityPort` snapshot semantics remain separate from bounded `CustomerReviewQueryPort` operator queries, and how PostgreSQL filtering/count/`LIMIT`/`OFFSET` avoids loading an unbounded customer history;\n- how customer-review pagination keeps source-risk evidence scoped to visible transactions and preserves deterministic ordering;\n- how deterministic analysis is validated, persisted and reloaded with either deterministic R3 attribution or authenticated R4 attribution while operator history review remains bounded through `AnalysisHistoryQuery`/`AnalysisHistoryPage`;')
+
+          replace_once(
+              'docs/assignment/SDD/design-map.yaml',
+              '  CTR-CUSTOMER-SNAPSHOT-001:\n    name: CustomerSnapshot\n    owner: MOD-CUSTOMER-001\n    contains: [customer_identity, activities, risk_evidence]\n    uses_contracts_from: [MOD-RISK-001]\n    invariants: [INV-DATA-001, INV-DATA-002, INV-RISK-001]\n',
+              '  CTR-CUSTOMER-SNAPSHOT-001:\n    name: CustomerSnapshot\n    owner: MOD-CUSTOMER-001\n    contains: [customer_identity, activities, risk_evidence]\n    uses_contracts_from: [MOD-RISK-001]\n    invariants: [INV-DATA-001, INV-DATA-002, INV-RISK-001]\n  CTR-CUSTOMER-REVIEW-QUERY-001:\n    name: CustomerReviewQuery\n    owner: MOD-CUSTOMER-001\n    contains: [page, page_size, activity_type, status, created_from, created_to]\n    bounds: [default_page_size_50, maximum_page_size_200]\n  CTR-CUSTOMER-REVIEW-PAGE-001:\n    name: CustomerReviewPage\n    owner: MOD-CUSTOMER-001\n    contains: [customer_identity, bounded_activities, page_scoped_risk_evidence, page, page_size, total_activities, total_risk_evidence, navigation]\n    uses_contracts_from: [MOD-RISK-001]\n')
+
+          replace_once(
+              'docs/assignment/SDD/design-map.yaml',
+              '  CTR-ANALYSIS-HISTORY-ENTRY-001:\n    name: AnalysisHistoryEntry\n    owner: MOD-ANALYSIS-001\n    contains: [analysis_identity, customer_identity, operator_identity, generated_at, result, evidence_provenance, detector_provenance, model_provenance]\n    invariants: [INV-HIST-001]\n',
+              '  CTR-ANALYSIS-HISTORY-ENTRY-001:\n    name: AnalysisHistoryEntry\n    owner: MOD-ANALYSIS-001\n    contains: [analysis_identity, customer_identity, operator_identity, generated_at, result, evidence_provenance, detector_provenance, model_provenance]\n    invariants: [INV-HIST-001]\n  CTR-ANALYSIS-HISTORY-QUERY-001:\n    name: AnalysisHistoryQuery\n    owner: MOD-ANALYSIS-001\n    contains: [page, page_size]\n    bounds: [default_page_size_20, maximum_page_size_100]\n  CTR-ANALYSIS-HISTORY-PAGE-001:\n    name: AnalysisHistoryPage\n    owner: MOD-ANALYSIS-001\n    contains: [entries, page, page_size, total_entries, navigation]\n    invariants: [INV-HIST-001]\n')
+
+          replace_once(
+              'docs/assignment/SDD/design-map.yaml',
+              '  PRT-ACTIVITY-001:\n    name: CustomerActivityPort\n    owner: MOD-CUSTOMER-001\n    direction: outbound\n    returns: CTR-CUSTOMER-SNAPSHOT-001\n    activation_ring: R0\n    adrs: [ADR-001, ADR-003, ADR-007]\n',
+              '  PRT-ACTIVITY-001:\n    name: CustomerActivityPort\n    owner: MOD-CUSTOMER-001\n    direction: outbound\n    returns: CTR-CUSTOMER-SNAPSHOT-001\n    semantics: complete snapshot for analysis-compatible consumers; not the operator pagination boundary\n    activation_ring: R0\n    adrs: [ADR-001, ADR-003, ADR-007]\n  PRT-CUSTOMER-REVIEW-QUERY-001:\n    name: CustomerReviewQueryPort\n    owner: MOD-CUSTOMER-001\n    direction: outbound\n    accepts: CTR-CUSTOMER-REVIEW-QUERY-001\n    returns: CTR-CUSTOMER-REVIEW-PAGE-001\n    implementation_adapters: [ADP-ACT-SYN-001, ADP-ACT-JDBC-001]\n    semantics: bounded operator-facing query applied before HTTP serialization\n    activation_ring: R1\n    adrs: [ADR-001, ADR-003, ADR-007]\n')
+
+          replace_once(
+              'docs/assignment/SDD/design-map.yaml',
+              '  PRT-HISTORY-001:\n    name: AnalysisHistoryPort\n    owner: MOD-ANALYSIS-001\n    direction: outbound\n    accepts: CTR-ANALYSIS-HISTORY-CREATE-001\n    returns: CTR-ANALYSIS-HISTORY-ENTRY-001\n    activation_ring: R0\n    adrs: [ADR-001, ADR-003, ADR-007]\n',
+              '  PRT-HISTORY-001:\n    name: AnalysisHistoryPort\n    owner: MOD-ANALYSIS-001\n    direction: outbound\n    accepts: CTR-ANALYSIS-HISTORY-CREATE-001\n    returns: CTR-ANALYSIS-HISTORY-ENTRY-001\n    paged_query: CTR-ANALYSIS-HISTORY-QUERY-001\n    paged_result: CTR-ANALYSIS-HISTORY-PAGE-001\n    semantics: persistence and complete-list compatibility plus bounded operator page queries\n    activation_ring: R0\n    adrs: [ADR-001, ADR-003, ADR-007]\n')
+
+          replace_once(
+              'docs/assignment/SDD/design-map.yaml',
+              '    r4_policy_provenance_view: source identity, content, adapter, corpus, revision, source document, chunk position, embedding identity and similarity score when present\n',
+              '    r4_policy_provenance_view: source identity, content, adapter, corpus, revision, source document, chunk position, embedding identity and similarity score when present\n    high_volume_review: bounded activity page with sticky table header, explicit filters/navigation and bounded analysis-history pages\n')
+
+          replace_once(
+              'docs/assignment/SDD/design-map.yaml',
+              '  FR-CUST-001:\n    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]',
+              '  FR-CUST-001:\n    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-PAGE-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]')
+
+          replace_once(
+              'docs/assignment/SDD/design-map.yaml',
+              '  FR-ACT-001:\n    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]',
+              '  FR-ACT-001:\n    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-PAGE-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]')
+
+          replace_once(
+              'docs/assignment/SDD/design-map.yaml',
+              '  FR-HIST-002:\n    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-ANALYSIS-HISTORY-ENTRY-001]',
+              '  FR-HIST-002:\n    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-ANALYSIS-HISTORY-QUERY-001, CTR-ANALYSIS-HISTORY-PAGE-001]')
+
+          replace_once(
+              'docs/assignment/VV/VV.md',
+              '| `VFY-CUSTOMER-READ-001` | Customer lookup, CARD/PAYMENT/CRYPTO activity and risk evidence on the operator dashboard | focused UI E2E + HTTP acceptance + port/integration |',
+              '| `VFY-CUSTOMER-READ-001` | Customer lookup, CARD/PAYMENT/CRYPTO activity and risk evidence on the operator dashboard, including bounded high-volume pagination/filtering | focused UI E2E + HTTP acceptance + real PostgreSQL/Testcontainers port/integration |')
+
+          replace_once(
+              'docs/assignment/VV/VV.md',
+              '| `VFY-HISTORY-001` | Persisted analysis and authenticated later review with operator/time attribution | PostgreSQL integration + acceptance |',
+              '| `VFY-HISTORY-001` | Persisted analysis and authenticated later review with operator/time attribution, including bounded history-page semantics | PostgreSQL integration + HTTP/browser acceptance |')
+
+          replace_once(
+              'docs/assignment/VV/VV.md',
+              '- database evidence: migration + repository/integration tests against real PostgreSQL where semantics matter;',
+              '- database evidence: migration + repository/integration tests against real PostgreSQL where semantics matter, including high-density fixtures that prove filtering/count/`LIMIT`/`OFFSET` occurs before activity/history payloads cross the operator boundary;')
+
+      - name: Commit controlled-authority reconciliation and remove this workflow
+        run: |
+          rm .github/workflows/reconcile-j4-high-volume-docs-once.yml
+          git add docs/assignment/SDD/SDD.md docs/assignment/SDD/design-map.yaml docs/assignment/VV/VV.md .github/workflows/reconcile-j4-high-volume-docs-once.yml
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: reconcile bounded review design authority'
+          git push origin HEAD:feat/j4-bounded-customer-review
