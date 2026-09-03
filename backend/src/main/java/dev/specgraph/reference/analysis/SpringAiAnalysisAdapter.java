@@ -7,11 +7,11 @@ import java.util.Map;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("openai-model")
+@ConditionalOnProperty(prefix = "specgraph.analysis", name = "backend", havingValue = "openai")
 final class SpringAiAnalysisAdapter implements AnalysisModelPort {
     static final String BACKEND_IDENTITY = "openai";
     static final String PROMPT_IDENTITY = "openai-grounded-analysis-v1";
