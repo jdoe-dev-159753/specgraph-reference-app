@@ -15,8 +15,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: r4-gallery-ci-shared-docker-host
-  cancel-in-progress: false
+  group: r4-gallery-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -30,16 +30,15 @@ jobs:
       matrix:
         include:
           - variant: baseline
-            port: '18184'
+            port_offset: '0'
             profiles: r4
             expected_detector: none
           - variant: bayesian
-            port: '18185'
+            port_offset: '1'
             profiles: r4,bayesian-detector
             expected_detector: beta-binomial-review-elevation-v1
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      R4_PORT: ${{ matrix.port }}
       R4_PROFILES: ${{ matrix.profiles }}
       COMPOSE_PROJECT_NAME: specgraph-r4-gallery-${{ matrix.variant }}-${{ github.run_id }}
       EVIDENCE_NAME: r4-${{ matrix.variant }}
@@ -54,6 +53,19 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Allocate run-isolated gallery port
+        run: |
+          # Each workflow run receives a stable high port pair. This keeps separate PRs from
+          # contending on one self-hosted Docker host without a global concurrency group that
+          # can discard the newest pending exact-head proof.
+          port=$((20000 + (GITHUB_RUN_ID % 18000) * 2 + ${{ matrix.port_offset }}))
+          if [ "$port" -lt 20000 ] || [ "$port" -gt 55999 ]; then
+            echo "Calculated gallery port is outside the reserved CI range: $port" >&2
+            exit 1
+          fi
+          echo "R4_PORT=$port" >> "$GITHUB_ENV"
+          printf 'Allocated R4 gallery port %s for run %s variant %s\n' "$port" "$GITHUB_RUN_ID" '${{ matrix.variant }}'
 
       - name: Assert exact source and gallery configuration
         run: |
@@ -100,6 +112,7 @@ jobs:
           printf '%s\n' \
             "sourceSha=$SOURCE_SHA" \
             "variant=${{ matrix.variant }}" \
+            "port=$R4_PORT" \
             "profiles=$R4_PROFILES" \
             "expectedDetector=$EXPECT_DETECTOR" \
             "stage2=pgvector+all-MiniLM-L6-v2" \
