@@ -8,6 +8,7 @@ import dev.specgraph.reference.customer.CustomerSnapshot;
 import dev.specgraph.reference.risk.RiskEvidence;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -56,11 +57,21 @@ final class AnalysisContextBuilderTests {
         assertThat(context.detectorEvidence()).hasSize(8);
         assertThat(context.policyEvidence()).hasSize(3);
 
+        List<UUID> selectedRiskTransactionIds = context.sourceRiskEvidence().stream()
+                .map(RiskEvidence::transactionId)
+                .toList();
         assertThat(context.activities())
                 .extracting(Activity::transactionId)
-                .containsExactlyElementsOf(IntStream.iterate(249, index -> index >= 225, index -> index - 1)
-                        .mapToObj(index -> new UUID(0L, index + 1L))
-                        .toList());
+                .containsAll(selectedRiskTransactionIds)
+                .contains(
+                        new UUID(0L, 250L),
+                        new UUID(0L, 249L),
+                        new UUID(0L, 248L),
+                        new UUID(0L, 247L),
+                        new UUID(0L, 246L));
+        assertThat(context.activities())
+                .extracting(Activity::createdAt)
+                .isSortedAccordingTo(Comparator.reverseOrder());
         assertThat(context.sourceRiskEvidence())
                 .extracting(RiskEvidence::assessmentId)
                 .containsExactlyElementsOf(IntStream.iterate(24, index -> index >= 5, index -> index - 1)
@@ -80,6 +91,34 @@ final class AnalysisContextBuilderTests {
                 .containsEntry("context.activities.selected", "25")
                 .containsEntry("context.sourceRisk.total", "25")
                 .containsEntry("context.sourceRisk.selected", "20");
+    }
+
+    @Test
+    void sourceRiskWithoutBackingActivityIsNotSuppliedAsCitableModelDetail() {
+        Activity activity = activity(0);
+        RiskEvidence linked = sourceRisk(0, activity.transactionId());
+        RiskEvidence orphan = sourceRisk(1, new UUID(9L, 9L));
+        var builder = new AnalysisContextBuilder(new AnalysisContextProperties(2, 2, 2, 2));
+
+        AnalysisEvidenceEnvelope context = builder.build(
+                new CustomerSnapshot(CUSTOMER_ID, List.of(activity), List.of(linked, orphan)),
+                List.of(),
+                List.of(new PolicyEvidence(
+                        "synthetic-policy:orphan-test",
+                        "Synthetic policy evidence.",
+                        Map.of("rank", "0"))));
+
+        assertThat(context.totalSourceRiskCount()).isEqualTo(2);
+        assertThat(context.sourceRiskEvidence()).containsExactly(linked);
+        assertThat(context.activities()).containsExactly(activity);
+    }
+
+    @Test
+    void contextConfigurationCannotReserveMoreRiskFactsThanBackingActivitySlots() {
+        assertThatThrownBy(() -> new AnalysisContextProperties(4, 5, 1, 1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxActivities")
+                .hasMessageContaining("maxSourceRiskEvidence");
     }
 
     @Test
