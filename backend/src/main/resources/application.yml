@@ -3,7 +3,7 @@ spring:
     name: specgraph-reference-app
   ai:
     model:
-      chat: none
+      chat: ${specgraph.analysis.backend:deterministic}
       embedding: none
       image: none
       moderation: none
@@ -20,6 +20,7 @@ spring:
 specgraph:
   source-time-zone: ${SPECGRAPH_SOURCE_TIME_ZONE:UTC}
   analysis:
+    backend: ${SPECGRAPH_ANALYSIS_BACKEND:deterministic}
     context:
       max-activities: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_ACTIVITIES:25}
       max-source-risk-evidence: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_SOURCE_RISK_EVIDENCE:20}
