@@ -59,16 +59,16 @@ jobs:
       - name: Ratchet normative SRS to design-map coverage
         run: python3 scripts/validate_design_map.py
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-          cache-dependency-path: backend/pom.xml
-
       - name: Verify backend against Testcontainers PostgreSQL
-        working-directory: backend
-        run: mvn -B -q verify
+        run: >-
+          docker run --rm
+          --network host
+          -v /var/run/docker.sock:/var/run/docker.sock
+          -v specgraph-maven-cache:/root/.m2
+          -v "$PWD/backend:/workspace"
+          -w /workspace
+          maven:3.9-eclipse-temurin-21
+          mvn -B -q verify
 
       - name: Report backend test failures
         if: failure()
