@@ -2,7 +2,13 @@ package dev.specgraph.reference.customer;
 
 import java.time.Instant;
 
-/** Application-owned query contract for bounded operator-facing customer review. */
+/**
+ * Application-owned query contract for bounded operator-facing customer review.
+ *
+ * <p>The default and maximum page sizes are HTTP/UI workload bounds. They deliberately do not
+ * encode model-context or token-budget semantics; #124 owns the separate provider-neutral analysis
+ * context boundary.
+ */
 public record CustomerReviewQuery(
         int page,
         int pageSize,
