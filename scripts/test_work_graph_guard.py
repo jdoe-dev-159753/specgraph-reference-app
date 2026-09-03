@@ -276,6 +276,49 @@ class DurableWorkflowTests(unittest.TestCase):
             [], guard.workflow_inventory_violations({"proof.yml": workflow}, "proof.yml\n")
         )
 
+    def test_block_scalar_sequence_text_does_not_override_real_anchor(self):
+        workflow = (
+            "env:\n"
+            "  DISPLAY: &identity issue-42-proof\n"
+            "  NOTES: |\n"
+            "    - &identity durable-name\n"
+            "name: *identity\n"
+        )
+        self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
+        findings = guard.workflow_inventory_violations(
+            {"proof.yml": workflow}, "proof.yml\n"
+        )
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
+    def test_forward_anchor_reference_fails_closed(self):
+        workflow = (
+            "name: *identity\n"
+            "env:\n"
+            "  DISPLAY: &identity issue-42-proof\n"
+        )
+        self.assertEqual(
+            guard.UNRESOLVED_WORKFLOW_NAME,
+            guard.extract_workflow_name(workflow),
+        )
+        findings = guard.workflow_inventory_violations(
+            {"proof.yml": workflow}, "proof.yml\n"
+        )
+        self.assertTrue(any("cannot be resolved safely" in finding for finding in findings))
+
+    def test_anchor_redefinition_after_name_does_not_override_resolution(self):
+        workflow = (
+            "env:\n"
+            "  DISPLAY: &identity issue-42-proof\n"
+            "name: *identity\n"
+            "later:\n"
+            "  - &identity durable-name\n"
+        )
+        self.assertEqual("issue-42-proof", guard.extract_workflow_name(workflow))
+        findings = guard.workflow_inventory_violations(
+            {"proof.yml": workflow}, "proof.yml\n"
+        )
+        self.assertTrue(any("one-shot workflow identity" in finding for finding in findings))
+
     def test_full_pull_request_identities_are_rejected(self):
         workflows = {"pull-request-42-proof.yml": "name: durable-looking-name\n"}
         findings = guard.workflow_inventory_violations(workflows, "pull-request-42-proof.yml\n")
