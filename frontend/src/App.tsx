@@ -225,7 +225,9 @@ async function loadAnalysisHistory(
   if (!response.ok) throw new Error(`Analysis history request failed (${response.status})`)
   const entries = await response.json() as Analysis[]
   const headerNumber = (name: string, fallback: number) => {
-    const value = Number(response.headers.get(name))
+    const raw = response.headers.get(name)
+    if (raw === null || raw.trim() === '') return fallback
+    const value = Number(raw)
     return Number.isFinite(value) ? value : fallback
   }
   return {
