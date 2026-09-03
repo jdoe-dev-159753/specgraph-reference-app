@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  * only and never mutates source risk facts.
  */
 @Component
-@Profile("fuzzy-detector")
+@Profile("fuzzy-detector & !bayesian-detector")
 final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     static final String DETECTOR_IDENTITY = "graded-review-fuzzy-v1";
     static final String SIGNAL_IDENTITY = "fuzzy-review-elevation";
