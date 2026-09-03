@@ -107,7 +107,6 @@ class MainIntegrationTests(unittest.TestCase):
                     patch.object(guard, "require_durable_workflow_surface") as durable,
                     patch.object(guard, "require_current_head_codex_review") as review,
                 ):
-                    {"durable" if False else ""}
                     selected = {
                         "require_durable_workflow_surface": durable,
                         "require_current_head_codex_review": review,
