@@ -239,10 +239,12 @@ def extract_workflow_name(text: str) -> str:
         if not match:
             continue
         indent = len(match.group(1).replace("\t", "    "))
-        key = next(
-            (candidate for candidate in match.group(2, 3, 4) if candidate is not None),
-            "",
-        )
+        if match.group(2) is not None:
+            key = _plain_yaml_scalar(f'"{match.group(2)}"')
+        elif match.group(3) is not None:
+            key = _plain_yaml_scalar(f"'{match.group(3)}'")
+        else:
+            key = match.group(4)
         mapping_lines.append((index, indent, key, match.group(5)))
 
     if not mapping_lines:
