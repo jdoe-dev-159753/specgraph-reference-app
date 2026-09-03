@@ -6,10 +6,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("specgraph.analysis")
 record RiskSignalDetectorProperties(List<RiskSignalDetectorId> detectors) {
     RiskSignalDetectorProperties {
-        detectors = detectors == null ? List.of() : List.copyOf(detectors);
+        detectors = detectors == null ? null : List.copyOf(detectors);
     }
 
     boolean hasExplicitSelection() {
-        return !detectors.isEmpty();
+        return detectors != null;
+    }
+
+    List<RiskSignalDetectorId> configuredDetectors() {
+        return detectors == null ? List.of() : detectors;
     }
 }
