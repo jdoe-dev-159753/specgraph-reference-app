@@ -71,7 +71,11 @@ final class AnalysisServiceTests {
 
         AnalysisHistoryEntry completed = service.analyze(CUSTOMER_ID, OPERATOR_ID);
 
-        assertThat(receivedEvidence.get().snapshot()).isEqualTo(SNAPSHOT);
+        assertThat(receivedEvidence.get().customerId()).isEqualTo(CUSTOMER_ID);
+        assertThat(receivedEvidence.get().totalActivityCount()).isEqualTo(1);
+        assertThat(receivedEvidence.get().totalSourceRiskCount()).isZero();
+        assertThat(receivedEvidence.get().activities()).containsExactly(ACTIVITY);
+        assertThat(receivedEvidence.get().sourceRiskEvidence()).isEmpty();
         assertThat(receivedEvidence.get().detectorEvidence()).containsExactly(DETECTOR_SIGNAL);
         assertThat(receivedEvidence.get().policyEvidence()).containsExactly(POLICY);
         assertThat(completed.customerId()).isEqualTo(CUSTOMER_ID);
@@ -345,10 +349,10 @@ final class AnalysisServiceTests {
 
     private AnalysisModelProvenance provenance(AnalysisEvidenceEnvelope evidence) {
         List<AnalysisEvidenceReference> references = new ArrayList<>();
-        evidence.snapshot().activities().forEach(activity -> references.add(new AnalysisEvidenceReference(
+        evidence.activities().forEach(activity -> references.add(new AnalysisEvidenceReference(
                 AnalysisEvidenceReference.Kind.ACTIVITY,
                 activity.transactionId().toString())));
-        evidence.snapshot().riskEvidence().forEach(risk -> references.add(new AnalysisEvidenceReference(
+        evidence.sourceRiskEvidence().forEach(risk -> references.add(new AnalysisEvidenceReference(
                 AnalysisEvidenceReference.Kind.SOURCE_RISK,
                 risk.assessmentId().toString())));
         evidence.detectorEvidence().forEach(signal -> references.add(new AnalysisEvidenceReference(
@@ -371,6 +375,7 @@ final class AnalysisServiceTests {
             PolicyKnowledgePort policyKnowledge,
             AnalysisModelPort model,
             AnalysisHistoryPort history) {
-        return new AnalysisService(customerActivity, detector, policyKnowledge, model, history);
+        var contextBuilder = new AnalysisContextBuilder(new AnalysisContextProperties(25, 20, 8, 3));
+        return new AnalysisService(customerActivity, detector, policyKnowledge, contextBuilder, model, history);
     }
 }
