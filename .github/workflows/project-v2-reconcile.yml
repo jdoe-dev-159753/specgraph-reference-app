@@ -20,11 +20,8 @@ concurrency:
 
 jobs:
   reconcile:
-    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    runs-on: ubuntu-latest
     steps:
-      - name: Clean trusted checkout before reuse
-        run: docker run --rm -v "$PWD:/workspace" alpine:3.22 rm -rf /workspace/.workgraph-trusted
-
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
