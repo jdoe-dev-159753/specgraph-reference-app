@@ -294,10 +294,37 @@ class DurableWorkflowTests(unittest.TestCase):
         self.assertTrue(guard.protected_asset_violations(test_path, no_op_tests))
 
     def test_inventory_applies_pinned_trusted_guard_contract(self):
-        workflow = "name: work-graph-guard\\non:\\n  workflow_dispatch:\\n"
+        workflow = "name: work-graph-guard\non:\n  workflow_dispatch:\n"
+        self.assertEqual(
+            [],
+            guard.canonical_workflow_name_violations(
+                "work-graph-guard.yml", workflow
+            ),
+        )
         findings = guard.workflow_inventory_violations(
-            {"work-graph-guard.yml": workflow}, "work-graph-guard.yml\\n")
+            {"work-graph-guard.yml": workflow}, "work-graph-guard.yml\n")
         self.assertTrue(any("protected asset changed" in finding for finding in findings))
+
+    def test_protected_workflow_deletion_cannot_hide_in_manifest_change(self):
+        findings = guard.workflow_inventory_violations(
+            {},
+            "",
+            require_protected_workflows=True,
+        )
+        self.assertTrue(
+            any(
+                ".github/workflows/work-graph-guard.yml: protected asset is missing"
+                == finding
+                for finding in findings
+            )
+        )
+        self.assertTrue(
+            any(
+                ".github/workflows/work-graph-guard-tests.yml: protected asset is missing"
+                == finding
+                for finding in findings
+            )
+        )
 
 
 if __name__ == "__main__":
