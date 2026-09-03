@@ -35,6 +35,7 @@ package "Spring Boot modular monolith" as Backend {
   package "analysis module" as AnalysisModule {
     component "Analysis HTTP Adapter\nADP-ANALYSIS-HTTP-001\nR3+\n<<GoF Adapter>>" as AnalysisHttp
     component "Analysis Application\nMOD-ANALYSIS-001\napplication-service facade" as Analysis
+    component "Analysis Context Builder\napplication-owned bounded model projection\nexact totals + selected details" as ContextBuilder
     interface "RiskSignalDetectorPort\nPRT-DETECTOR-001\n<<Strategy seam>>" as DetectorPort
     interface "PolicyKnowledgePort\nPRT-POLICY-001\n<<Strategy seam>>" as PolicyPort
     interface "AnalysisModelPort\nPRT-MODEL-001\n<<Strategy seam>>" as ModelPort
@@ -90,10 +91,11 @@ Customer --> Risk : public RiskEvidence contract
 Customer --> ActivityPort
 
 AnalysisHttp --> Analysis : analyze(customerId, OperatorId)
-Analysis --> Customer : customer/activity context
-Analysis --> DetectorPort
-Analysis --> PolicyPort
-Analysis --> ModelPort
+Analysis --> Customer : complete CustomerSnapshot
+Analysis --> DetectorPort : complete snapshot
+Analysis --> PolicyPort : complete snapshot
+Analysis --> ContextBuilder : full source facts + Stage 1/2 evidence
+ContextBuilder --> ModelPort : bounded AnalysisEvidenceEnvelope
 Analysis --> HistoryPort
 
 ActivityPort --> ActivitySynthetic
@@ -116,8 +118,10 @@ note bottom of Backend
   The four packages are the Spring Modulith application modules. Spring Security remains an
   adapter/runtime boundary: Authentication, SecurityContext and session types stop before
   OperatorContextPort. Detector implementations also stop behind the project-owned
-  RiskSignalDetectorPort and emit only derived RiskSignalEvidence. GoF Adapter labels identify
-  boundary translation roles; Strategy seams identify interchangeable implementations; the
-  analysis application service acts as a Facade over orchestration.
+  RiskSignalDetectorPort and emit only derived RiskSignalEvidence. AnalysisContextBuilder is an
+  application-layer projection: Stage 1 and Stage 2 retain complete CustomerSnapshot semantics,
+  then exact full-history totals are separated from bounded model-facing details immediately
+  before AnalysisModelPort. GoF Adapter labels identify boundary translation roles; Strategy seams
+  identify interchangeable implementations; the analysis application service acts as a Facade.
 end note
 @enduml
