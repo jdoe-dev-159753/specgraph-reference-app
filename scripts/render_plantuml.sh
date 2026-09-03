@@ -24,16 +24,29 @@ docker run --rm \
   -tsvg \
   "${SOURCES[@]}"
 
-missing=0
+invalid=0
 for source in "${SOURCES[@]}"; do
   rendered="${source%.puml}.svg"
   if [[ ! -s "$rendered" ]]; then
     echo "Missing generated SVG for $source: $rendered" >&2
-    missing=1
+    invalid=1
   fi
 done
 
-if (( missing != 0 )); then
+# A retained PlantUML-generated SVG with no sibling source is stale design evidence.
+# Hand-authored/separately sourced SVGs are intentionally ignored because they do not
+# carry PlantUML's embedded processing-instruction marker.
+while IFS= read -r -d '' rendered; do
+  if grep -q '<\?plantuml ' "$rendered"; then
+    source="${rendered%.svg}.puml"
+    if [[ ! -f "$source" ]]; then
+      echo "Orphaned generated PlantUML SVG without authoritative source: $rendered" >&2
+      invalid=1
+    fi
+  fi
+done < <(git ls-files -z 'docs/assignment/**/*.svg')
+
+if (( invalid != 0 )); then
   exit 1
 fi
 
