@@ -21,9 +21,9 @@ Use the following baseline composition:
 - Spring Modulith;
 - Spring MVC;
 - Spring Security;
-- Spring Framework JDBC (`JdbcClient`) for explicit relational adapters, as decided by [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md);
-- Flyway;
-- Spring AI only inside AI/vector adapters;
+- Jakarta Persistence with Hibernate ORM inside relational adapters, as decided by [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md);
+- Flyway as the sole schema and migration authority;
+- Spring AI only inside AI/vector adapters, with pgvector persistence kept separate from Hibernate/JPA;
 - springdoc-openapi for generated API documentation.
 
 ### Frontend
@@ -52,7 +52,7 @@ The following map makes the service rendered by the browser/application stack ex
 
 Framework types stay outside durable domain/application contracts. The selected libraries supply commodity capability; project-owned code focuses on domain composition, ports and assignment-specific behaviour.
 
-The relational access subdecision was refined after R2 implementation evidence showed that the source-shaped activity/risk workload used explicit query orchestration and mapping but did not use the persistence-context, lazy-loading, dirty-tracking or object-graph lifecycle services that would justify retaining Hibernate/JPA. [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md) therefore supersedes only that earlier access-layer choice while keeping the solution inside the preferred Java/Spring/PostgreSQL ecosystem.
+The relational access subdecision was refined after the accepted R2 Spring JDBC baseline. [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md) selects Jakarta Persistence with Hibernate ORM for the final relational adapters while preserving project-owned ports and values. Flyway remains the sole schema and migration authority, and the Spring AI pgvector adapter remains a separate persistence concern outside Hibernate/JPA.
 
 Remote-demo ingress, TLS termination, reverse proxies, load balancers, hosting products and public DNS are deliberately **not** selected by this ADR. The source does not prescribe an external deployment target, and `AMB-DEP-001` leaves that choice unresolved. If a concrete remote demonstration later requires edge infrastructure, it must be selected from the actual deployment constraints rather than precommitted here.
 
@@ -60,7 +60,8 @@ Remote-demo ingress, TLS termination, reverse proxies, load balancers, hosting p
 
 - the implementation follows the assignment's preferred ecosystem without pretending those preferences are functional requirements;
 - common security, relational access, HTTP, UI, API-documentation and container concerns are reused rather than reimplemented;
-- the relational stack reuses Spring's own JDBC infrastructure instead of introducing a second persistence lifecycle that the accepted workload does not need;
+- the relational stack reuses Jakarta Persistence with Hibernate ORM behind project-owned ports while Flyway alone owns the schema;
+- Spring AI pgvector retrieval remains separate from the Hibernate/JPA business-persistence adapters;
 - Java 21 remains within the source's Java 17+ preference;
 - the mandatory application topology is reproducible locally through Compose;
 - no edge component becomes an architectural dependency before a remote deployment target exists.
@@ -71,11 +72,11 @@ The trade-off is a moderately broad dependency surface, controlled by requiring 
 
 ### Custom UI/component stack or hand-written persistence/security infrastructure
 
-Rejected because it adds code without increasing assignment value. Direct Spring JDBC is not hand-written infrastructure: Spring still owns datasource, transaction, resource, parameter-binding and exception-translation plumbing while project adapters own only explicit SQL and source-to-contract mapping.
+Rejected because it adds code without increasing assignment value. Hibernate/JPA, Spring Security and the selected browser libraries supply the mature infrastructure while project code owns domain-specific composition and mappings.
 
-### Hibernate/JPA as the relational baseline
+### Keep Spring JDBC as the relational baseline
 
-Refined by [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md). Hibernate/JPA remains a valid mature option, but the accepted source-shaped workload currently does not need enough ORM lifecycle services to justify the extra behavioral layer.
+Not selected for the final implementation. [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md) records the Hibernate/JPA substitution and its verification constraints.
 
 ### Kubernetes as the baseline runtime
 
