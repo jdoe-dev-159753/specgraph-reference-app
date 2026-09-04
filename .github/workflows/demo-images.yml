@@ -31,6 +31,12 @@ jobs:
       R4_BAYESIAN_PORT: '8085'
 
     steps:
+      - name: Refuse non-main publication dispatch
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            test "$GITHUB_REF" = refs/heads/main
+          fi
+
       - name: Reclaim stale publication state
         run: |
           echo 'Disk before publication cleanup:'
@@ -61,6 +67,10 @@ jobs:
         with:
           path: packaging
           persist-credentials: false
+
+      - name: Assert exact packaging authority
+        working-directory: packaging
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Checkout R0 source checkpoint
         uses: actions/checkout@v7
@@ -455,11 +465,11 @@ jobs:
       - name: Promote proven Compose application to reviewer demo tag
         working-directory: packaging
         run: |
-          export APP_R0_IMAGE="$APP_PACKAGE:$R0_IMMUTABLE"
-          export APP_R1_IMAGE="$APP_PACKAGE:$R1_IMMUTABLE"
-          export APP_R2_IMAGE="$APP_PACKAGE:$R2_IMMUTABLE"
-          export APP_R3_IMAGE="$APP_PACKAGE:$R3_IMMUTABLE"
-          export APP_R4_IMAGE="$APP_PACKAGE:$R4_IMMUTABLE"
+          export APP_R0_IMAGE="$APP_PACKAGE@$R0_DIGEST"
+          export APP_R1_IMAGE="$APP_PACKAGE@$R1_DIGEST"
+          export APP_R2_IMAGE="$APP_PACKAGE@$R2_DIGEST"
+          export APP_R3_IMAGE="$APP_PACKAGE@$R3_DIGEST"
+          export APP_R4_IMAGE="$APP_PACKAGE@$R4_DIGEST"
           export POSTGRES_IMAGE="postgres:17-alpine@$POSTGRES_DIGEST"
           export PGVECTOR_IMAGE="pgvector/pgvector:0.8.6-pg17@$PGVECTOR_DIGEST"
 
