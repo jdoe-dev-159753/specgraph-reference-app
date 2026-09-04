@@ -135,7 +135,8 @@ class PaymentActivityEntity {
     @Column(name = "receiver_account", nullable = false)
     private String receiverAccount;
 
-    @Column(name = "receiver_bank_country", nullable = false, length = 2)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "receiver_bank_country", nullable = false, length = 2, columnDefinition = "char(2)")
     private String receiverBankCountry;
 
     protected PaymentActivityEntity() {}

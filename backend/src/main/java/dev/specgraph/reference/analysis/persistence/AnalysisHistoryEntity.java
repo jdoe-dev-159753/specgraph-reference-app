@@ -36,7 +36,7 @@ class AnalysisHistoryEntity {
     @Column(name = "risk_level", nullable = false, length = 16)
     private AnalysisResult.RiskLevel riskLevel;
 
-    @Column(name = "findings_summary", nullable = false)
+    @Column(name = "findings_summary", nullable = false, columnDefinition = "text")
     private String findingsSummary;
 
     @JdbcTypeCode(SqlTypes.JSON)
