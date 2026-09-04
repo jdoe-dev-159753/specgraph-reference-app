@@ -36,7 +36,8 @@ final class LmStudioAnalysisAdapterIntegrationTests {
 
     @BeforeAll
     static void startServer() throws IOException {
-        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        InetAddress ipv4Loopback = InetAddress.getByAddress(new byte[] {127, 0, 0, 1});
+        server = HttpServer.create(new InetSocketAddress(ipv4Loopback, 0), 0);
         server.createContext("/v1/chat/completions", exchange -> {
             REQUEST_PATH.set(exchange.getRequestURI().getPath());
             AUTHORIZATION.set(exchange.getRequestHeaders().getFirst("Authorization"));
