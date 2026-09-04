@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import unittest
 
 from scripts import codex_review_fan_in as fan_in
