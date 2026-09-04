@@ -56,7 +56,18 @@ The ring number describes **capability maturity**. Detector/backend choice is an
 | `8086` | R4 local, optional | configured detector(s) | same RAG | LM Studio/local model | no, planned in #251 |
 | `8087` | R4 external, optional | configured detector(s) | same RAG | OpenAI | yes, optional only |
 
-The canonical demo runtime is **`watch-infra-01`**, a Linux Docker host. Run the following from a repository checkout on that host. Each R4 Compose project gets its own network, PostgreSQL/pgvector state and analysis history, so experiments do not contaminate each other.
+The canonical manual J4 acceptance runtime is **`watch-infra-01`**, a Linux Docker host. Run every command in this section on that host, not on the Windows workstation. These commands build the merged source directly and do not depend on the GHCR `:demo` tag.
+
+First synchronize the checkout with the accepted `main` head:
+
+```bash
+git fetch origin
+git switch main
+git pull --ff-only origin main
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+```
+
+Each R4 Compose project gets its own network, PostgreSQL/pgvector state and analysis history, so the baseline and Bayesian checks do not contaminate each other.
 
 Baseline on port 8084:
 
@@ -79,6 +90,17 @@ R4 Bayesian: http://watch-infra-01:8085/
 ```
 
 Use the host IP instead if local DNS does not resolve `watch-infra-01`.
+
+Before browser review, confirm both endpoints answer from `watch-infra-01`:
+
+```bash
+curl -fsS http://127.0.0.1:8084/ >/dev/null
+curl -fsS http://127.0.0.1:8085/ >/dev/null
+```
+
+Open the baseline and Bayesian instances in **separate browser profiles** (or one normal and one private window) so their cookies cannot collide while [#379](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/379) aligns the source-built Compose path with the distinct cookie names already used by the published OCI topology. Sign in with a different demo operator in each window, run customer `44444444-4444-4444-4444-444444444444`, then reload both pages: each window must retain its own operator and analysis history.
+
+The current UI does not render detector provenance. In each window, use the browser developer tools **Network** panel, open the successful `POST .../analyses` response and inspect its JSON: the baseline response must contain `"detectorProvenance": []`; the Bayesian response must contain an entry with `"detectorIdentity": "beta-binomial-review-elevation-v1"`. This API response is the detector-selection proof; the visible page remains the operator/history proof.
 
 Stop either experiment independently:
 
