@@ -1,0 +1,286 @@
+package dev.specgraph.reference.analysis.randomforest;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.google.protobuf.Any;
+import dev.specgraph.reference.analysis.RiskSignalEvidence;
+import dev.specgraph.reference.customer.Activity;
+import dev.specgraph.reference.customer.CustomerSnapshot;
+import dev.specgraph.reference.risk.RiskEvidence;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.UUID;
+import org.tribuo.protos.core.ModelProto;
+import org.tribuo.protos.core.WeightedEnsembleModelProto;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+@Tag("VFY-ANALYSIS-CONTRACT-001")
+final class RandomForestRiskSignalDetectorAdapterTests {
+    private static final SyntheticRandomForestModelTrainer.GeneratedModel GENERATED =
+            SyntheticRandomForestModelTrainer.train(SyntheticRandomForestModelTrainer.trainingPartition());
+    private final RandomForestRiskSignalDetectorAdapter detector =
+            new RandomForestRiskSignalDetectorAdapter(GENERATED.protobuf(), GENERATED.manifest());
+
+    @Test
+    void fixedModelInferenceIsRepeatableBoundedAndSeparatesUnseenGoldenFeatureRows() {
+        CustomerSnapshot baseline = snapshot(
+                card(1, "Completed", "Merchant A"),
+                payment(2, "Completed", "CH", "CH00-A"),
+                card(3, "Completed", "Merchant B"),
+                payment(4, "Completed", "CH", "CH00-B"));
+        CustomerSnapshot elevated = snapshot(
+                crypto(5, "Completed", "0x-a"),
+                crypto(6, "Declined", "0x-b"),
+                payment(7, "Completed", "DE", "DE00-C"),
+                card(8, "Declined", "Merchant C"));
+
+        RiskSignalEvidence low = onlySignal(baseline);
+        RiskSignalEvidence high = onlySignal(elevated);
+
+        assertThat(low.score()).isBetween(0.0, 1.0);
+        assertThat(high.score()).isBetween(0.0, 1.0).isGreaterThan(low.score());
+        assertThat(onlySignal(elevated)).isEqualTo(high);
+        assertThat(high.detectorIdentity()).isEqualTo("random-forest-review-v1");
+        assertThat(high.provenance())
+                .containsEntry("detectorFamily", "RANDOM_FOREST")
+                .containsEntry("modelSha256", GENERATED.manifest().artifactSha256())
+                .containsEntry("trainingPartitionSha256", GENERATED.manifest().trainingPartitionSha256())
+                .containsEntry("labelDefinitionIdentity", SyntheticRandomForestModelTrainer.LABEL_DEFINITION_IDENTITY)
+                .containsEntry("treeSeed", Long.toString(SyntheticRandomForestModelTrainer.TREE_SEED))
+                .containsEntry("inferenceMode", "fixed-protobuf-model; no request-time training")
+                .containsEntry("demoLimitation",
+                        "hand-assigned synthetic labels separable by construction; no production AML accuracy claim");
+    }
+
+    @Test
+    void independentlyTrainedFixedModelsProduceTheSameGoldenScores() {
+        var second = SyntheticRandomForestModelTrainer.train(
+                SyntheticRandomForestModelTrainer.trainingPartition());
+        var secondDetector = new RandomForestRiskSignalDetectorAdapter(second.protobuf(), second.manifest());
+        CustomerSnapshot scenario = snapshot(
+                crypto(10, "Completed", "0x-c"),
+                payment(11, "Completed", "GB", "GB00-D"),
+                card(12, "Declined", "Merchant D"));
+
+        assertThat(secondDetector.detect(scenario).getFirst().score())
+                .isEqualTo(detector.detect(scenario).getFirst().score());
+        assertThat(second.manifest().trainingPartitionSha256())
+                .isEqualTo(GENERATED.manifest().trainingPartitionSha256());
+    }
+
+    @Test
+    void featureProjectionIsOrderAndPiiInvariantAndExcludesSourceRiskFromInputs() {
+        Activity first = payment(20, "Completed", "DE", "DE00-SECRET-A");
+        Activity second = crypto(21, "Declined", "0x-secret-a");
+        CustomerSnapshot original = snapshot(first, second);
+        CustomerSnapshot reorderedAndRedacted = snapshot(
+                crypto(31, "Declined", "0x-redacted"),
+                payment(30, "Completed", "DE", "DE00-REDACTED"));
+        RiskEvidence sourceRisk = new RiskEvidence(
+                UUID.randomUUID(),
+                first.transactionId(),
+                "SOURCE-RULE",
+                "Source-only risk",
+                Instant.parse("2026-08-30T09:00:00Z"),
+                new BigDecimal("0.99"));
+        CustomerSnapshot withSourceRisk = new CustomerSnapshot(
+                original.customerId(), original.activities(), List.of(sourceRisk));
+
+        assertThat(RandomForestRiskFeatures.from(original))
+                .isEqualTo(RandomForestRiskFeatures.from(reorderedAndRedacted))
+                .isEqualTo(RandomForestRiskFeatures.from(withSourceRisk));
+        assertThat(RandomForestRiskFeatures.ORDERED_NAMES)
+                .containsExactly("activity-volume", "crypto-ratio", "cross-border-payment-ratio", "incomplete-ratio");
+        assertThat(onlySignal(withSourceRisk).score()).isEqualTo(onlySignal(original).score());
+        assertThat(withSourceRisk.riskEvidence()).containsExactly(sourceRisk);
+    }
+
+    @Test
+    void modelBytesAndManifestAreValidatedBeforeInference() {
+        byte[] tampered = GENERATED.protobuf();
+        tampered[tampered.length - 1] ^= 1;
+        assertThatThrownBy(() -> new RandomForestRiskSignalDetectorAdapter(tampered, GENERATED.manifest()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SHA-256");
+
+        RandomForestModelManifest wrongSchema = copyWithSchema("wrong-schema");
+        assertThatThrownBy(() -> new RandomForestRiskSignalDetectorAdapter(GENERATED.protobuf(), wrongSchema))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("feature schema");
+
+        RandomForestModelManifest wrongTreeSeed = copyWithTreeSeed(GENERATED.manifest().treeSeed() + 1);
+        assertThatThrownBy(() -> new RandomForestRiskSignalDetectorAdapter(GENERATED.protobuf(), wrongTreeSeed))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("provenance")
+                .hasMessageContaining("seed");
+    }
+
+    @Test
+    void serializedEnsembleRejectsUnexpectedCombinerWithMatchingArtifactSha() throws IOException {
+        WeightedEnsembleModelProto ensemble = serializedEnsemble();
+        byte[] tampered = replaceSerializedEnsemble(ensemble.toBuilder()
+                .setCombiner(ensemble.getCombiner().toBuilder()
+                        .setClassName("org.tribuo.classification.ensemble.FullyWeightedVotingCombiner")
+                        .build())
+                .build());
+
+        assertThatThrownBy(() -> new RandomForestRiskSignalDetectorAdapter(
+                        tampered, copyWithArtifactSha(tampered)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("combiner")
+                .hasMessageContaining("VotingCombiner");
+    }
+
+    @Test
+    void serializedEnsembleRejectsNonUniformNonFiniteAndNonPositiveWeightsWithMatchingArtifactSha()
+            throws IOException {
+        WeightedEnsembleModelProto ensemble = serializedEnsemble();
+        float validWeight = ensemble.getWeights(0);
+        float[] invalidWeights = {
+            validWeight * 2.0f,
+            Float.NaN,
+            Float.POSITIVE_INFINITY,
+            0.0f,
+            -validWeight
+        };
+
+        for (float invalidWeight : invalidWeights) {
+            byte[] tampered = replaceSerializedEnsemble(
+                    ensemble.toBuilder().setWeights(0, invalidWeight).build());
+
+            assertThatThrownBy(() -> new RandomForestRiskSignalDetectorAdapter(
+                            tampered, copyWithArtifactSha(tampered)))
+                    .as("first serialized ensemble weight %s", invalidWeight)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("weights");
+        }
+    }
+
+    @Test
+    void manifestRejectsNonFiniteFeatureSubsampling() {
+        var manifest = GENERATED.manifest();
+
+        assertThatThrownBy(() -> new RandomForestModelManifest(
+                manifest.modelVersion(), manifest.artifactSha256(), manifest.featureSchemaVersion(),
+                manifest.trainingDatasetIdentity(), manifest.trainingPartitionSha256(), manifest.splitIdentity(),
+                manifest.trainingSeed(), manifest.treeSeed(), manifest.treeCount(), manifest.maxDepth(),
+                Double.NaN, manifest.libraryVersion(), manifest.outputLabels(), manifest.labelDefinitionIdentity(),
+                manifest.scoreSemantics(), manifest.limitation()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("hyperparameters");
+    }
+
+    @Test
+    void provenanceNumberMatchingRejectsNonFiniteAndNonIntegralRepresentations() {
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesIntegralProvenance(0L, 0L)).isTrue();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesIntegralProvenance(Double.NaN, 0L)).isFalse();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesIntegralProvenance(Double.POSITIVE_INFINITY, 0L))
+                .isFalse();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesIntegralProvenance(0.5d, 0L)).isFalse();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesDecimalProvenance(0.5d, 0.5d)).isTrue();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesDecimalProvenance(Double.NaN, 0.5d)).isFalse();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesDecimalProvenance(Double.NEGATIVE_INFINITY, 0.5d))
+                .isFalse();
+    }
+
+    @Test
+    void emptyHistoryProducesNoInventedSignal() {
+        assertThat(detector.detect(new CustomerSnapshot(UUID.randomUUID(), List.of(), List.of()))).isEmpty();
+    }
+
+    private RandomForestModelManifest copyWithSchema(String schema) {
+        var manifest = GENERATED.manifest();
+        return new RandomForestModelManifest(
+                manifest.modelVersion(), manifest.artifactSha256(), schema,
+                manifest.trainingDatasetIdentity(), manifest.trainingPartitionSha256(), manifest.splitIdentity(),
+                manifest.trainingSeed(), manifest.treeSeed(), manifest.treeCount(), manifest.maxDepth(),
+                manifest.featureSubsampling(), manifest.libraryVersion(), manifest.outputLabels(),
+                manifest.labelDefinitionIdentity(),
+                manifest.scoreSemantics(), manifest.limitation());
+    }
+
+    private RandomForestModelManifest copyWithTreeSeed(long treeSeed) {
+        var manifest = GENERATED.manifest();
+        return new RandomForestModelManifest(
+                manifest.modelVersion(), manifest.artifactSha256(), manifest.featureSchemaVersion(),
+                manifest.trainingDatasetIdentity(), manifest.trainingPartitionSha256(), manifest.splitIdentity(),
+                manifest.trainingSeed(), treeSeed, manifest.treeCount(), manifest.maxDepth(),
+                manifest.featureSubsampling(), manifest.libraryVersion(), manifest.outputLabels(),
+                manifest.labelDefinitionIdentity(), manifest.scoreSemantics(), manifest.limitation());
+    }
+
+    private RandomForestModelManifest copyWithArtifactSha(byte[] artifact) {
+        var manifest = GENERATED.manifest();
+        return new RandomForestModelManifest(
+                manifest.modelVersion(), sha256(artifact), manifest.featureSchemaVersion(),
+                manifest.trainingDatasetIdentity(), manifest.trainingPartitionSha256(), manifest.splitIdentity(),
+                manifest.trainingSeed(), manifest.treeSeed(), manifest.treeCount(), manifest.maxDepth(),
+                manifest.featureSubsampling(), manifest.libraryVersion(), manifest.outputLabels(),
+                manifest.labelDefinitionIdentity(), manifest.scoreSemantics(), manifest.limitation());
+    }
+
+    private WeightedEnsembleModelProto serializedEnsemble() throws IOException {
+        ModelProto serialized = ModelProto.parseFrom(GENERATED.protobuf());
+        return serialized.getSerializedData().unpack(WeightedEnsembleModelProto.class);
+    }
+
+    private byte[] replaceSerializedEnsemble(WeightedEnsembleModelProto ensemble) throws IOException {
+        ModelProto serialized = ModelProto.parseFrom(GENERATED.protobuf());
+        return serialized.toBuilder()
+                .setSerializedData(Any.pack(ensemble))
+                .build()
+                .toByteArray();
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+    }
+
+    private RiskSignalEvidence onlySignal(CustomerSnapshot snapshot) {
+        return detector.detect(snapshot).getFirst();
+    }
+
+    private CustomerSnapshot snapshot(Activity... activities) {
+        return new CustomerSnapshot(
+                UUID.fromString("77777777-7777-7777-7777-777777777777"),
+                List.of(activities),
+                List.of());
+    }
+
+    private Activity card(int suffix, String status, String merchant) {
+        return new Activity(
+                id(suffix), Activity.ActivityType.CARD, new BigDecimal("100.00"), "CHF", status, time(suffix),
+                new Activity.CardDetails("****0000", "VISA", merchant, "0000", true, "AUTH", null));
+    }
+
+    private Activity payment(int suffix, String status, String country, String account) {
+        return new Activity(
+                id(suffix), Activity.ActivityType.PAYMENT, new BigDecimal("1000.00"), "CHF", status, time(suffix),
+                new Activity.PaymentDetails("BANK_TRANSFER", "CH00-SENDER", account, country));
+    }
+
+    private Activity crypto(int suffix, String status, String wallet) {
+        return new Activity(
+                id(suffix), Activity.ActivityType.CRYPTO, new BigDecimal("1.00"), "ETH", status, time(suffix),
+                new Activity.CryptoDetails("Ethereum", wallet, "0xto", "hash", "Synthetic Exchange"));
+    }
+
+    private Instant time(int suffix) {
+        return Instant.parse("2026-08-30T08:00:00Z").plusSeconds(suffix);
+    }
+
+    private UUID id(int suffix) {
+        return UUID.fromString("eeeeeeee-eeee-eeee-eeee-" + String.format("%012d", suffix));
+    }
+}
