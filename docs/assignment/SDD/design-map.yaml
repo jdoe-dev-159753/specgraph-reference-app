@@ -171,6 +171,7 @@ ports:
     owner: MOD-CUSTOMER-001
     direction: outbound
     returns: CTR-CUSTOMER-SNAPSHOT-001
+    implementation_adapters: [ADP-ACT-SYN-001, ADP-ACT-JPA-001]
     semantics: complete snapshot for analysis-compatible consumers; not the operator pagination boundary
     activation_ring: R0
     adrs: [ADR-001, ADR-003, ADR-007]
@@ -180,7 +181,7 @@ ports:
     direction: outbound
     accepts: CTR-CUSTOMER-REVIEW-QUERY-001
     returns: CTR-CUSTOMER-REVIEW-PAGE-001
-    implementation_adapters: [ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
+    implementation_adapters: [ADP-ACT-SYN-001, ADP-ACT-JPA-001]
     semantics: bounded operator-facing query applied before HTTP serialization
     activation_ring: R1
     adrs: [ADR-001, ADR-003, ADR-007]
@@ -225,6 +226,7 @@ ports:
     returns: CTR-ANALYSIS-HISTORY-ENTRY-001
     paged_query: CTR-ANALYSIS-HISTORY-QUERY-001
     paged_result: CTR-ANALYSIS-HISTORY-PAGE-001
+    implementation_adapters: [ADP-HIST-JPA-001]
     semantics: persistence and complete-list compatibility plus bounded operator page queries
     activation_ring: R0
     adrs: [ADR-001, ADR-003, ADR-007]
@@ -304,13 +306,19 @@ adapters:
     implements: PRT-ACTIVITY-001
     activation_ring: R0
     adrs: [ADR-001]
-  ADP-ACT-JDBC-001:
-    name: JdbcCustomerActivityAdapter
+  ADP-ACT-JPA-001:
+    name: JpaCustomerActivityAdapter
     kind: outbound
     owner: MOD-CUSTOMER-001
     package: dev.specgraph.reference.customer.persistence
-    technology: Spring JDBC JdbcClient
-    implements: PRT-ACTIVITY-001
+    technology: Jakarta Persistence with Hibernate ORM
+    implements: [PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001]
+    implementation_status: selected target pending issue 164
+    schema_authority: Flyway
+    hibernate_schema_action: validate
+    exact_decimal_mappings: ["DECIMAL(18,2) to BigDecimal", "DECIMAL(5,2) to BigDecimal"]
+    adapter_local_types: [JPA entities, EntityManager, Hibernate types]
+    query_semantics: complete snapshot uses consistent PostgreSQL transaction; operator page filters counts orders and paginates in the database
     activation_ring: R2
     adrs: [ADR-003, ADR-004, ADR-007]
   ADP-DETECTOR-NOOP-001:
@@ -403,13 +411,18 @@ adapters:
     returns: CTR-POLICY-EVIDENCE-001
     adapter_local_types: [Spring AI Document, VectorStore, SearchRequest]
     adrs: [ADR-002, ADR-003]
-  ADP-HIST-JDBC-001:
-    name: JdbcAnalysisHistoryAdapter
+  ADP-HIST-JPA-001:
+    name: JpaAnalysisHistoryAdapter
     kind: outbound
     owner: MOD-ANALYSIS-001
     package: dev.specgraph.reference.analysis.persistence
-    technology: Spring JDBC JdbcClient
+    technology: Jakarta Persistence with Hibernate ORM
     implements: PRT-HISTORY-001
+    implementation_status: selected target pending issue 164
+    schema_authority: Flyway
+    hibernate_schema_action: validate
+    adapter_local_types: [JPA entities, EntityManager, Hibernate types]
+    query_semantics: validated history persistence plus descending count and bounded database pagination
     activation_ring: R3
     adrs: [ADR-003, ADR-004, ADR-007]
 
@@ -417,7 +430,10 @@ infrastructure:
   INF-DB-001:
     name: PostgreSqlPgVector
     activation_ring: R2
-    used_by: [ADP-ACT-JDBC-001, ADP-HIST-JDBC-001, ADP-POL-PGV-001]
+    used_by: [ADP-ACT-JPA-001, ADP-HIST-JPA-001, ADP-POL-PGV-001]
+    relational_schema_authority: Flyway
+    relational_orm: Hibernate validates but never creates or updates the schema
+    vector_adapter_separation: ADP-POL-PGV-001 remains outside Hibernate/JPA behind PRT-POLICY-001
     r4_vector_schema: policy_vector_store managed by dedicated Flyway R4 migration
     r4_extensions: [vector, hstore, uuid-ossp]
     r4_vector_table_shape: [UUID id, text content, JSONB metadata, vector(384) embedding]
@@ -458,19 +474,19 @@ infrastructure:
 
 requirement_design:
   FR-CUST-001:
-    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-PAGE-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
+    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-PAGE-001, ADP-ACT-SYN-001, ADP-ACT-JPA-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R1
   FR-ACT-001:
-    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-PAGE-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001]
+    elements: [CMP-UI-001, ADP-CUST-HTTP-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-QUERY-001, CTR-CUSTOMER-REVIEW-PAGE-001, ADP-ACT-SYN-001, ADP-ACT-JPA-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R1
   FR-ACT-002:
-    elements: [CMP-UI-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001, CTR-CUSTOMER-SNAPSHOT-001]
+    elements: [CMP-UI-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JPA-001, CTR-CUSTOMER-SNAPSHOT-001]
     adrs: [ADR-001, ADR-003, ADR-007]
     first_acceptance_ring: R1
   FR-RISK-001:
-    elements: [CMP-UI-001, MOD-RISK-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JDBC-001, CTR-CUSTOMER-SNAPSHOT-001]
+    elements: [CMP-UI-001, MOD-RISK-001, MOD-CUSTOMER-001, PRT-ACTIVITY-001, ADP-ACT-SYN-001, ADP-ACT-JPA-001, CTR-CUSTOMER-SNAPSHOT-001]
     adrs: [ADR-001, ADR-003, ADR-007]
     first_acceptance_ring: R1
   FR-AI-001:
@@ -490,11 +506,11 @@ requirement_design:
     adrs: [ADR-002, ADR-003, ADR-004]
     first_acceptance_ring: R4
   FR-HIST-001:
-    elements: [MOD-ANALYSIS-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, INF-DB-001, CTR-ANALYSIS-HISTORY-CREATE-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001, CTR-RISK-SIGNAL-EVIDENCE-001, CTR-POLICY-EVIDENCE-001, CTR-ANALYSIS-MODEL-PROVENANCE-001]
+    elements: [MOD-ANALYSIS-001, CTR-ANALYSIS-PIPELINE-ARTIFACT-001, PRT-HISTORY-001, ADP-HIST-JPA-001, INF-DB-001, CTR-ANALYSIS-HISTORY-CREATE-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001, CTR-RISK-SIGNAL-EVIDENCE-001, CTR-POLICY-EVIDENCE-001, CTR-ANALYSIS-MODEL-PROVENANCE-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R3
   FR-HIST-002:
-    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-ANALYSIS-HISTORY-QUERY-001, CTR-ANALYSIS-HISTORY-PAGE-001]
+    elements: [CMP-UI-001, ADP-ANALYSIS-HTTP-001, MOD-ANALYSIS-001, PRT-HISTORY-001, ADP-HIST-JPA-001, CTR-ANALYSIS-HISTORY-ENTRY-001, CTR-ANALYSIS-HISTORY-QUERY-001, CTR-ANALYSIS-HISTORY-PAGE-001]
     adrs: [ADR-001, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-REP-001:
@@ -506,7 +522,7 @@ requirement_design:
     adrs: [ADR-001, ADR-002, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-RES-001:
-    elements: [MOD-IDENTITY-001, PRT-OPERATOR-CONTEXT-001, ADP-AUTH-SPRING-001, MOD-ANALYSIS-001, PRT-DETECTOR-001, PRT-POLICY-001, PRT-MODEL-001, PRT-HISTORY-001, ADP-DETECTOR-NOOP-001, ADP-POL-STATIC-001, ADP-MODEL-DET-001, ADP-HIST-JDBC-001]
+    elements: [MOD-IDENTITY-001, PRT-OPERATOR-CONTEXT-001, ADP-AUTH-SPRING-001, MOD-ANALYSIS-001, PRT-DETECTOR-001, PRT-POLICY-001, PRT-MODEL-001, PRT-HISTORY-001, ADP-DETECTOR-NOOP-001, ADP-POL-STATIC-001, ADP-MODEL-DET-001, ADP-HIST-JPA-001]
     adrs: [ADR-001, ADR-002, ADR-003, ADR-004, ADR-007]
     first_acceptance_ring: R3
   NFR-SEC-001:
