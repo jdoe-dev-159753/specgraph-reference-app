@@ -124,16 +124,18 @@ Inspect what the published artifact actually contains:
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo config --services
 ```
 
-The established publication lineage exposes the immutable concentric checkpoints side by side:
+The accepted reviewer publication topology extends the historical R0-R3 set with two isolated R4 runtime variants. R4 baseline and R4 Bayesian use the same immutable R4 application image but separate pgvector/PostgreSQL services, so browser comparisons do not share retrieval state or analysis history.
 
 ```text
-R0: http://<docker-host>:8080/
-R1: http://<docker-host>:8081/
-R2: http://<docker-host>:8082/
-R3: http://<docker-host>:8083/
+R0:          http://<docker-host>:8080/
+R1:          http://<docker-host>:8081/
+R2:          http://<docker-host>:8082/
+R3:          http://<docker-host>:8083/
+R4 baseline: http://<docker-host>:8084/
+R4 Bayesian: http://<docker-host>:8085/
 ```
 
-The source R4 gallery above is intentionally independent of the last-known-good GHCR publication contract. A source capability is not advertised as remotely published until `demo-images` proves the corresponding pulled artifact.
+The `:demo` tag remains last-known-good rather than source-head-following. Until a publication run for this contract succeeds, the registry may still resolve to the previous accepted R0-R3 artifact. Promotion to the R0-R4 topology occurs only after the remote Compose artifact is re-pulled and all six application endpoints, including baseline/Bayesian detector provenance, pass executable verification.
 
 R0 is the intentionally hollow deployable shell. R1 is the first MANDATORY synthetic customer/activity/risk slice. R2 preserves that application-owned contract while loading customer activity and source risk evidence from PostgreSQL through Spring JDBC. R3 keeps the same source evidence and adds deterministic structured analysis plus persisted reviewable history. R4 preserves those seams while adding real grounding, authentication, detector artifacts and provider-neutral synthesis.
 
@@ -143,7 +145,7 @@ Stop the published deployment with:
 docker compose -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo down
 ```
 
-The reviewer topology uses an ephemeral PostgreSQL container for deterministic fixture state. Removing the deployment resets the fixture database for the next launch.
+The reviewer topology uses ephemeral database containers for deterministic fixture state. R2/R3 share the historical PostgreSQL service; R4 baseline and R4 Bayesian each use an isolated pgvector/PostgreSQL service. Removing the deployment resets all reviewer fixture state for the next launch.
 
 ## Run the current checkout from source
 
