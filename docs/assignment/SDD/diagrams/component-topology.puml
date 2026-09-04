@@ -55,6 +55,7 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   component "No-op Risk Signal Detector\nADP-DETECTOR-NOOP-001\nselection ID: NO_OP\n<<GoF Adapter>>" as DetectorNoOp
   component "Bayesian Risk Signal Detector\nADP-DETECTOR-BAYES-001\nselection ID: BAYESIAN\n<<GoF Adapter>>" as DetectorBayes
   component "Fuzzy Risk Signal Detector\nADP-DETECTOR-FUZZY-001\nselection ID: FUZZY\n<<GoF Adapter>>" as DetectorFuzzy
+  component "Random Forest Risk Signal Detector\nADP-DETECTOR-RF-001\nselection ID: RANDOM_FOREST\nTribuo packaged model\n<<GoF Adapter>>" as DetectorRandomForest
   component "Static Policy\nADP-POL-STATIC-001\nR3/default\n<<GoF Adapter>>" as PolicyStatic
   component "pgvector Policy\nADP-POL-PGV-001\nR4\n<<GoF Adapter>>" as PolicyPg
   component "Deterministic Model\nADP-MODEL-DET-001\ndefault / no credential\n<<GoF Adapter>>" as ModelDet
@@ -68,7 +69,8 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   ActivityJpa -[hidden]down-> DetectorNoOp
   DetectorNoOp -[hidden]right-> DetectorBayes
   DetectorBayes -[hidden]right-> DetectorFuzzy
-  DetectorFuzzy -[hidden]right-> PolicyStatic
+  DetectorFuzzy -[hidden]right-> DetectorRandomForest
+  DetectorRandomForest -[hidden]right-> PolicyStatic
   PolicyStatic -[hidden]right-> PolicyPg
   PolicyPg -[hidden]down-> ModelDet
   ModelDet -[hidden]right-> ModelAi
@@ -113,13 +115,16 @@ CustomerReviewPort ..> ActivityJpa
 DetectorNoOp ..> DetectorPort : implements
 DetectorBayes ..> DetectorPort : implements
 DetectorFuzzy ..> DetectorPort : implements
+DetectorRandomForest ..> DetectorPort : implements
 DetectorComposite ..> DetectorPort : implements
 DetectorFactory --> DetectorNoOp : NO_OP
 DetectorFactory --> DetectorBayes : BAYESIAN
 DetectorFactory --> DetectorFuzzy : FUZZY
+DetectorFactory --> DetectorRandomForest : RANDOM_FOREST
 DetectorFactory --> DetectorComposite : 2+ concrete IDs
 DetectorComposite --> DetectorBayes : ordered child
 DetectorComposite --> DetectorFuzzy : ordered child
+DetectorComposite --> DetectorRandomForest : ordered child
 PolicyPort --> PolicyStatic
 PolicyPort ..> PolicyPg
 BackendFactory --> ModelPort : publish selected @Primary strategy
@@ -142,6 +147,8 @@ note bottom of Backend
   is the typed Stage-1 selection authority; legacy detector profiles are bootstrap aliases only
   when that property is absent. Spring owns bean lifecycle, the factory/registry resolves leaves
   or the bounded Composite, and child failure fails Stage 1 rather than disappearing silently.
+  RANDOM_FOREST lazily loads and memoizes one manifest-pinned packaged Tribuo model when selected;
+  invalid packaged resources fail startup and its evidence retains bounded synthetic limitations.
   CustomerReviewQueryPort bounds the operator surface independently of the complete
   CustomerActivityPort snapshot used by analysis. AnalysisContextBuilder is an application-layer
   projection: Stage 1 and Stage 2 retain complete CustomerSnapshot semantics, then exact full-history
