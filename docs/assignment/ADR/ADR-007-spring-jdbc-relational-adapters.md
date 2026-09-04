@@ -1,103 +1,115 @@
-# ADR-007 — Use Spring JDBC for explicit relational adapters
+# ADR-007 — Select Hibernate/JPA for relational persistence adapters
 
-**Decision date:** 2026-09-01  
-**Decision owner:** relational persistence adapters  
+**Decision date:** 2026-09-04
+**Decision owner:** relational persistence adapters
 **Normative inputs:** `CAA-SRS-001`, supplied relational schema, `ADR-001`, `ADR-003`, `ADR-004`
 
 ## Context
 
-R2 replaces the deterministic synthetic customer-activity source with the supplied PostgreSQL-shaped relational model while preserving the project-owned `CustomerActivityPort`. Later rings add persisted analysis history and pgvector-backed policy retrieval behind their own project-owned ports.
+R2 replaces the deterministic synthetic customer-activity source with the supplied PostgreSQL-shaped relational model while preserving the project-owned `CustomerActivityPort` and `CustomerReviewQueryPort`. R3 adds persisted analysis history behind `AnalysisHistoryPort`. R4 adds pgvector-backed policy retrieval behind the separate `PolicyKnowledgePort`.
 
-The first R2 implementation used Spring Data JPA/Hibernate because Hibernate/JPA is named as a preferred technology in the assignment and is the conventional Spring relational default. Exact-head PostgreSQL/Testcontainers verification then exposed a Hibernate schema-validation mismatch for exact decimal columns, but the more important architectural observation is broader than that defect: the R2 adapter already performs explicit query orchestration and explicit mapping across customer, transaction-specialization and risk tables while using little of the persistence-context, lazy-loading, dirty-tracking, cascade or object-graph lifecycle machinery that distinguishes a full ORM.
+The first accepted relational implementation used Spring JDBC and explicit SQL. A later design direction proposed replacing that query layer with jOOQ. The final delivery instead selects the mature Hibernate ORM implementation of Jakarta Persistence named by the assignment. One relational persistence model is easier to explain, verify and maintain than a permanent mixture of JDBC, jOOQ and ORM adapters.
 
-The selected architecture is reuse-first, but reuse does not mean adding an abstraction merely because it is mature. The dependency surface should contain the smallest set of broad, well-supported frameworks that actually render durable services to the application. Flyway is already the authority for schema evolution, PostgreSQL is already the production-like store, and Spring already owns dependency injection, transaction management, configuration and JDBC infrastructure.
+The supplied schema remains authoritative and source-shaped. Selecting an ORM does not transfer schema ownership to Hibernate, turn persistence entities into domain contracts, or require the application core to adopt entity lifecycle semantics.
 
 ## Decision
 
-For the **R2 delivery baseline**, use **Spring Framework JDBC**, with `JdbcClient` as the default relational access API and `JdbcTemplate`/named-parameter support only where `JdbcClient` does not cover a concrete need, for project-owned relational persistence adapters.
+Use **Jakarta Persistence with Hibernate ORM** as the single relational persistence technology family for application-owned PostgreSQL adapters.
 
-The R2 application therefore uses this persistence composition:
+The design retains separate adapters for separate project-owned ports:
 
-- PostgreSQL owns relational storage and PostgreSQL-specific query semantics;
-- Flyway is the sole schema and migration authority;
-- Spring Boot configures the datasource, transactions and JDBC infrastructure;
-- Spring Framework `JdbcClient` executes explicit SQL and maps database rows inside outbound adapters;
-- the PostgreSQL JDBC driver provides the wire-level database integration;
-- project-owned ports and contracts remain independent of Spring JDBC, SQL and PostgreSQL types.
+- `JpaCustomerActivityAdapter` implements `CustomerActivityPort` and `CustomerReviewQueryPort`;
+- `JpaAnalysisHistoryAdapter` implements `AnalysisHistoryPort`.
 
-The R2 activity implementation is `JdbcCustomerActivityAdapter` behind `CustomerActivityPort`. This explicit-SQL implementation is a bounded delivery bridge, not the desired permanent query-construction style.
+They share one Hibernate/JPA infrastructure but do not become one cross-module persistence facade. The existing ports, commands and returned project-owned values remain unchanged. Jakarta Persistence annotations, `EntityManager`, Hibernate types, persistence entities and repository helpers stay inside outbound adapter packages.
 
-Issue #164 owns the mandatory hardening follow-up that replaces hand-written runtime persistence SQL with a mature type-safe jOOQ query layer behind the same hexagonal ports. That migration must preserve Flyway as schema authority, exact decimal semantics, PostgreSQL Testcontainers evidence and the existing application/domain contracts. jOOQ is intended to **replace** the hand-written query layer, not coexist indefinitely as a second competing relational model.
+### Schema authority
 
-`BigDecimal` remains the Java representation for exact decimal values. SQL `NUMERIC`/`DECIMAL` remains exact in PostgreSQL, and the HTTP/OpenAPI boundary may choose an exact decimal string where the reviewer contract must not imply binary floating-point semantics. No ORM type inference is allowed to redefine the controlled schema.
+Flyway is the **sole schema and migration authority**. Hibernate must never create, update or migrate the schema:
 
-### Scope of the decision
+- Flyway migrations run before relational adapters accept traffic;
+- Hibernate schema handling is limited to `validate` for executable compatibility checking;
+- `create`, `create-drop` and `update` are forbidden outside disposable experiments and are not repository runtime modes;
+- JPA mappings conform to the Flyway-owned PostgreSQL names, nullability, lengths, precision, scale, keys and relationships.
 
-This ADR selects the R2 access layer for project-owned relational adapters. It does not replace [`ADR-003`](ADR-003-postgresql-pgvector-persistence.md), whose durable decision is PostgreSQL plus pgvector as the unified persistent store, and it does not replace [`ADR-004`](ADR-004-baseline-web-stack.md), whose durable decision is the broader Java/Spring/React ecosystem. It supersedes only their earlier implicit choice of JPA/Hibernate for relational adapter implementation.
+Hibernate validation is evidence that mappings agree with the migrated schema, not a second source of schema truth.
 
-The pgvector-backed `PolicyKnowledgePort` remains a separate adapter concern. It may use a mature Spring AI vector-store facility or the later jOOQ-based relational layer if that materially reduces custom retrieval code while preserving the same application-owned port. This ADR does not force the R4 pgvector implementation before its concrete query needs exist.
+### Exact decimal semantics
 
-## Why this is the minimal mature R2 stack
+All SQL `NUMERIC`/`DECIMAL` values remain exact:
 
-`JdbcClient` keeps R2 inside the already-selected Spring platform while removing an additional persistence model and lifecycle. Spring continues to solve commodity concerns such as datasource configuration, transaction demarcation, resource handling, parameter binding and exception translation. Project code temporarily owns explicit source-shaped SQL and assignment-specific assembly from rows into application contracts.
+- `DECIMAL(18,2)` activity amounts map to `BigDecimal` with explicit precision `18` and scale `2`;
+- `DECIMAL(5,2)` risk score contributions and adapter-local rule weights map to `BigDecimal` with explicit precision `5` and scale `2`;
+- no relational mapping or projection may use `float` or `double` for those values;
+- currency remains a separate value and is never inferred from scale;
+- mapping into the existing project-owned `Activity` and `RiskEvidence` contracts preserves `BigDecimal` without lossy conversion;
+- the HTTP/OpenAPI boundary continues to expose exact decimal strings where JSON number semantics could imply binary floating point.
 
-This is intentionally different from raw JDBC: connection/resource/error plumbing is not reimplemented by the project.
+Database-backed contract tests must compare exact values and scale-sensitive serialization where the public contract fixes scale.
 
-It is also intentionally different from a full ORM: the current source-shaped, join-oriented schema is not treated as an object graph whose lifecycle should be managed by a persistence context.
+### Query and transaction boundary
 
-The remaining hand-written query construction is explicitly recognized as transitional debt. The project does not intend to grow home-made query builders, binding helpers or generic mapping infrastructure around it; #164 replaces that layer with jOOQ during hardening.
+Hibernate/JPA owns relational query execution, parameter binding, pagination and persistence for customer activity, customer review and analysis history. JPQL, Criteria or adapter-private projections may be used where they keep the mapping clear. A bounded Hibernate native query is acceptable only for a demonstrated PostgreSQL-specific residual gap; it remains part of the JPA adapter and must not introduce a parallel Spring JDBC or jOOQ runtime path.
+
+Complete multi-query customer snapshots retain one consistent PostgreSQL transaction snapshot. Bounded customer-review and analysis-history queries continue to apply filtering, stable ordering, counts and pagination in the database before mapping results into project-owned page contracts.
+
+### pgvector remains separate
+
+`PgVectorPolicyAdapter` remains a separate outbound adapter behind `PolicyKnowledgePort`. Its Spring AI `PgVectorStore`, local embeddings, vector types and retrieval semantics do not become JPA entities or Hibernate repositories. Flyway still owns the `vector` extension and `policy_vector_store` table. Sharing the same PostgreSQL service does not merge relational business persistence with vector retrieval semantics.
+
+### Migration boundary
+
+The accepted Spring JDBC adapters remain historical/current implementation evidence until #164 lands the code substitution. The #164 implementation must replace them rather than keep selectable JDBC and JPA alternatives. After migration:
+
+- no Spring JDBC or jOOQ dependency is retained for application relational adapters without a separately demonstrated owner;
+- old JDBC adapter classes are removed after the same port contracts pass against JPA;
+- repository runtime configuration exposes one relational adapter family, not a new end-user selector;
+- PostgreSQL/Flyway/Testcontainers evidence remains mandatory.
 
 ## Alternatives considered
 
-### Spring Data JPA / Hibernate
+### Keep Spring JDBC
 
-Not selected for the current workload. It is mature and would be appropriate if the application needed persistence-context identity, dirty tracking, lazy loading, cascaded object-graph lifecycle management or substantial aggregate mutation through mapped entities. The current R2 read path does not use those services: it explicitly coordinates queries and explicitly maps source-shaped rows into project-owned values. Hibernate therefore adds mapping/schema interpretation and runtime lifecycle semantics without removing enough assignment-specific mapping code to justify that layer.
+Not selected for the final implementation. It keeps SQL explicit but leaves query text, row mapping and association assembly largely project-owned. The final delivery prefers the mature ORM requested by the assignment while keeping it confined behind the same ports.
 
-The exact-decimal schema-validation failure discovered in #159 is evidence of the additional interpretation layer, but it is not by itself the reason for this decision.
+### Replace JDBC with jOOQ
 
-### Spring Data JDBC
+Not selected. jOOQ offers a mature typed SQL DSL, but adding generated query types alongside Hibernate/JPA would create two relational models. The former jOOQ direction in this ADR is superseded.
 
-Not selected as the baseline. It is simpler than JPA and remains a viable Spring technology when aggregate-root/repository semantics match the model. The supplied activity/risk schema is source-shaped and join-oriented rather than designed around Spring Data JDBC aggregate ownership. Adding repository/aggregate semantics merely to avoid writing explicit queries would add another conceptual layer without reducing the difficult part of the mapping.
+### Spring Data JDBC or raw JDBC
 
-A later bounded aggregate-shaped persistence need may justify Spring Data JDBC, but such an addition must earn a concrete service rather than becoming a second default persistence model.
+Not selected. Spring Data JDBC introduces another aggregate model, while raw JDBC reintroduces solved resource, transaction and exception-handling plumbing.
 
-### jOOQ
+### Let Hibernate generate the schema
 
-Not included in the R2 implementation because the immediate goal is to complete the relational substitution behind an already-stable port without expanding the ring. **Accepted as the intended J4 hardening successor for hand-written runtime SQL in #164.** jOOQ provides the type-safe SQL DSL, schema-derived generation, mature binding/mapping support and PostgreSQL dialect capability that should prevent the bounded R2 text-query bridge from becoming a project-owned SQL framework.
+Rejected. It would compete with the supplied schema and Flyway migrations, weaken reviewability and make environment-specific ORM inference part of the data contract.
 
-The jOOQ migration must be design-first: update or supersede the relevant access-layer decision and propagate SDD/design-map/V&V semantics before changing the adapter implementation, then prove contract equivalence with PostgreSQL Testcontainers.
+### Map pgvector through Hibernate
 
-### MyBatis
-
-Not selected. It provides explicit SQL and mapping but currently offers no material service beyond what the selected R2 Spring JDBC platform already provides, while #164 already owns the intended type-safe hardening direction.
-
-### Raw JDBC
-
-Rejected because it would move solved connection, resource, transaction and exception-handling plumbing into project-owned code.
+Rejected for this delivery. Policy retrieval has a separate port, evidence model and Spring AI adapter. Moving it into the relational ORM would couple independent semantics without removing a demonstrated gap.
 
 ## Consequences
 
-- the relational schema has one authority: Flyway migrations;
-- PostgreSQL types and SQL are visible and directly reviewable at the R2 adapter boundary;
-- the application removes JPA entity classes, Hibernate runtime semantics and Hibernate-specific annotations from the R2 path;
-- exact decimal behavior is verified against PostgreSQL rather than inferred through ORM metadata;
-- a bounded amount of SQL and row-to-contract assembly remains explicit in R2, confined to outbound adapters and covered by database-backed tests;
-- that explicit query text is transitional debt with a named MUST_HAVE owner, #164, rather than an endorsed long-term style;
-- R2 activity reads use Spring transaction/JDBC infrastructure without creating a second schema authority;
-- jOOQ must replace, not duplicate, the hand-written query-construction layer when #164 is implemented;
-- no project-specific query-builder/binding framework should be grown around the transitional JDBC code;
-- Testcontainers continues to verify real PostgreSQL behavior behind stable ports before and after the later query-layer substitution.
-
-The main R2 trade-off is less ORM automation in exchange for immediate schema fidelity and a narrow integration surface. The later hardening trade-off is different: once the relational query surface is stable enough, jOOQ is preferred over retaining or expanding hand-written SQL because it reuses mature typed query, binding and dialect machinery.
+- Hibernate/JPA is the only application relational persistence technology after #164;
+- Flyway remains the only DDL/migration authority;
+- schema validation fails fast when mappings drift from the migrated PostgreSQL schema;
+- exact decimal behavior is explicit in mappings, project-owned `BigDecimal` contracts and database-backed tests;
+- application ports and domain/application values do not depend on ORM types;
+- customer activity and analysis history retain separate adapters and module ownership while sharing one persistence technology;
+- pgvector retrieval remains independently replaceable behind `PolicyKnowledgePort`;
+- ORM convenience must not create unbounded collection loading, N+1 query behavior or lazy proxies crossing the adapter boundary;
+- the migration removes the transitional JDBC implementation rather than preserving two production paths.
 
 ## Verification consequences
 
-- `CustomerActivityPort` contract tests must pass unchanged when `SyntheticActivityAdapter` is replaced by `JdbcCustomerActivityAdapter`;
-- PostgreSQL Testcontainers tests must verify source-shaped joins, exact `NUMERIC`/`DECIMAL` values, currency separation and risk-evidence mapping;
-- architecture tests must prevent Spring JDBC/SQL classes from leaking into project-owned domain/application contracts;
-- Flyway migration validation plus database-backed contract tests replace Hibernate schema validation as the executable check that migrated schema and adapter expectations agree;
-- #164 must preserve the same port-level and PostgreSQL-backed evidence when the query implementation moves to jOOQ;
-- after #164, a static/architecture ratchet must reject new hand-written runtime SQL text blocks or home-grown SQL-builder abstractions in application persistence adapters.
+- unchanged port-contract suites must pass against `JpaCustomerActivityAdapter` and `JpaAnalysisHistoryAdapter`;
+- PostgreSQL Testcontainers must run Flyway first and Hibernate schema validation second;
+- integration tests must cover complete snapshot consistency, source-shaped joins, bounded filtering/count/pagination and persisted analysis-history attribution;
+- exact `DECIMAL(18,2)` and `DECIMAL(5,2)` values must round-trip as `BigDecimal` with no binary floating-point conversion;
+- architecture tests must reject Jakarta Persistence, Hibernate and persistence-entity types outside adapter/infrastructure packages and project-owned port implementations;
+- query-count or equivalent integration evidence must prevent N+1 loading on bounded and complete customer paths;
+- pgvector verification continues through `PgVectorPolicyAdapter` with Flyway-owned vector schema and real PostgreSQL/pgvector integration;
+- a static dependency ratchet must reject reintroduction of parallel Spring JDBC or jOOQ application adapters after migration.
 
 ## Requirement and invariant links
 

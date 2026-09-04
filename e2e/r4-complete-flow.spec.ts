@@ -51,7 +51,12 @@ async function signIn(page: import('@playwright/test').Page) {
 
 async function loadCustomer(page: import('@playwright/test').Page) {
   await page.getByLabel('Customer ID').fill(seededCustomer)
+  const customerResponsePromise = page.waitForResponse(response =>
+    response.url().endsWith(`/api/customers/${seededCustomer}`) &&
+    response.request().method() === 'GET')
   await page.getByRole('button', { name: 'Search' }).click()
+  const customerResponse = await customerResponsePromise
+  expect(customerResponse.status()).toBe(200)
   await expect(page.getByTestId('customer-activity')).toBeVisible()
   await expect(page.getByTestId('analysis-workspace')).toBeVisible()
 }
