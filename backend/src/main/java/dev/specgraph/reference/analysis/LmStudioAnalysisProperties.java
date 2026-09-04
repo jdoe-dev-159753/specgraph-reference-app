@@ -36,7 +36,7 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
         }
         if (!isNetworkLocal(uri.getHost())) {
             throw new IllegalStateException(
-                    "SPECGRAPH_LOCAL_BASE_URL must target a loopback or private-network LM Studio host");
+                    "SPECGRAPH_LOCAL_BASE_URL must target a loopback or private-network LM Studio IP literal");
         }
         return baseUrl;
     }

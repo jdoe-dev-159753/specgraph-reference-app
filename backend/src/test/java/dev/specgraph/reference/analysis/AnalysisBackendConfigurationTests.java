@@ -53,7 +53,7 @@ final class AnalysisBackendConfigurationTests {
                 .run(context -> {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure())
-                            .hasStackTraceContaining("must target a loopback or private-network LM Studio host");
+                            .hasStackTraceContaining("must target a loopback or private-network LM Studio IP literal");
                 });
     }
 
@@ -82,7 +82,7 @@ final class AnalysisBackendConfigurationTests {
                                 "http://localhost:1234/v1", "ministral-test", "", Duration.ofSeconds(60))
                         .validatedBaseUrl())
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("must target a loopback or private-network LM Studio host");
+                .hasMessageContaining("must target a loopback or private-network LM Studio IP literal");
         assertThatThrownBy(() -> new LmStudioAnalysisProperties(
                                 "http://lmstudio.internal:1234/v1",
                                 "ministral-test",
@@ -90,7 +90,7 @@ final class AnalysisBackendConfigurationTests {
                                 Duration.ofSeconds(60))
                         .validatedBaseUrl())
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("must target a loopback or private-network LM Studio host");
+                .hasMessageContaining("must target a loopback or private-network LM Studio IP literal");
     }
 
     @Test
