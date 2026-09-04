@@ -164,7 +164,11 @@ class OpenApiContractTests {
         Schema<?> modelProvenance = api.getComponents().getSchemas().get("AnalysisModelProvenance");
         assertThat(modelProvenance.getRequired()).containsAll(Set.of(
                 "backendIdentity", "modelIdentity", "promptIdentity", "evidenceReferences", "metadata"));
-        assertThat(modelProvenance.getProperties().get("evidenceReferences").getItems().get$ref())
+        Schema<?> evidenceReferences = modelProvenance.getProperties().get("evidenceReferences");
+        assertThat(evidenceReferences.getMinItems())
+                .as("migrated history may legitimately contain no evidence references")
+                .isNull();
+        assertThat(evidenceReferences.getItems().get$ref())
                 .isEqualTo("#/components/schemas/AnalysisEvidenceReference");
 
         Schema<?> problem = api.getComponents().getSchemas().get("AnalysisProblem");
