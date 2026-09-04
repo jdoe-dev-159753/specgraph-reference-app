@@ -31,7 +31,17 @@ final class AnalysisResultStructuredOutputConverter implements StructuredOutputC
 
     @Override
     public AnalysisResult convert(String source) {
-        return delegate.convert(source);
+        AnalysisResult result = delegate.convert(source);
+        if (result.findingsSummary().length() > 500) {
+            throw new InvalidAnalysisResultException("live findings summary must not exceed 500 characters");
+        }
+        if (result.recommendations().size() > 3) {
+            throw new InvalidAnalysisResultException("live analysis must not contain more than 3 recommendations");
+        }
+        if (result.recommendations().stream().anyMatch(recommendation -> recommendation.length() > 140)) {
+            throw new InvalidAnalysisResultException("live recommendations must not exceed 140 characters");
+        }
+        return result;
     }
 
     @Override
