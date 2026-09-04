@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from scripts import codex_review_fan_in as fan_in
 
@@ -40,6 +41,11 @@ class WorkflowSelectionTests(unittest.TestCase):
             fan_in.expected_workflows(["scripts/ci/durable-workflows.txt"]),
         )
 
+    def test_retarget_to_main_is_a_scoped_trigger(self):
+        workflow = Path(".github/workflows/codex-review-fan-in.yml").read_text(encoding="utf-8")
+        self.assertIn("types: [opened, edited, synchronize, reopened, ready_for_review]", workflow)
+        self.assertIn("github.event.changes.base != null", workflow)
+
 
 class GateTests(unittest.TestCase):
     def test_all_expected_successes_are_ready(self):
@@ -48,10 +54,12 @@ class GateTests(unittest.TestCase):
             [
                 {
                     "id": 1, "name": "application-ci", "event": "pull_request",
+                    "path": fan_in.WORKFLOW_PATHS["application-ci"],
                     "status": "completed", "conclusion": "success",
                 },
                 {
                     "id": 2, "name": "r4-acceptance-ci", "event": "pull_request",
+                    "path": fan_in.WORKFLOW_PATHS["r4-acceptance-ci"],
                     "status": "completed", "conclusion": "success",
                 },
             ],
@@ -63,6 +71,7 @@ class GateTests(unittest.TestCase):
             {"application-ci", "r4-acceptance-ci"},
             [{
                 "id": 1, "name": "application-ci", "event": "pull_request",
+                "path": fan_in.WORKFLOW_PATHS["application-ci"],
                 "status": "in_progress",
             }],
         )
@@ -76,6 +85,7 @@ class GateTests(unittest.TestCase):
                 {"application-ci"},
                 [{
                     "id": 1, "name": "application-ci", "event": "pull_request",
+                    "path": fan_in.WORKFLOW_PATHS["application-ci"],
                     "status": "completed", "conclusion": "failure",
                 }],
             ),
@@ -89,10 +99,12 @@ class GateTests(unittest.TestCase):
                 [
                     {
                         "id": 1, "name": "application-ci", "event": "pull_request",
+                        "path": fan_in.WORKFLOW_PATHS["application-ci"],
                         "status": "completed", "conclusion": "failure",
                     },
                     {
                         "id": 2, "name": "application-ci", "event": "workflow_dispatch",
+                        "path": fan_in.WORKFLOW_PATHS["application-ci"],
                         "status": "completed", "conclusion": "success",
                         "jobs": [{"name": "fast-verify", "conclusion": "success"}],
                     },
@@ -104,10 +116,12 @@ class GateTests(unittest.TestCase):
         for name, required_job in fan_in.RECOVERY_JOBS.items():
             failed_pr = {
                 "id": 1, "name": name, "event": "pull_request",
+                "path": fan_in.WORKFLOW_PATHS[name],
                 "status": "completed", "conclusion": "failure",
             }
             recovery = {
                 "id": 2, "name": name, "event": "workflow_dispatch",
+                "path": fan_in.WORKFLOW_PATHS[name],
                 "status": "completed", "conclusion": "success",
                 "jobs": [{"name": "non-verifying-job", "conclusion": "success"}],
             }
@@ -120,6 +134,14 @@ class GateTests(unittest.TestCase):
                 self.assertEqual(
                     ("ready", []), fan_in.gate_state({name}, [failed_pr, recovery])
                 )
+
+    def test_same_name_from_noncanonical_workflow_is_ignored(self):
+        run = {
+            "id": 1, "name": "application-ci", "event": "pull_request",
+            "path": ".github/workflows/spoofed-application-ci.yml",
+            "status": "completed", "conclusion": "success",
+        }
+        self.assertEqual(("waiting", ["application-ci"]), fan_in.gate_state({"application-ci"}, [run]))
 
 
 class ReviewRequestTests(unittest.TestCase):

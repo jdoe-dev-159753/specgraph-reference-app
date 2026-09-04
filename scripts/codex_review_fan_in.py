@@ -19,6 +19,13 @@ RECOVERY_JOBS = {
     "plantuml-diagrams": "verify",
     "r4-acceptance-ci": "verify-r4-acceptance",
 }
+WORKFLOW_PATHS = {
+    "application-ci": ".github/workflows/application-ci.yml",
+    "plantuml-diagrams": ".github/workflows/plantuml-diagrams.yml",
+    "r4-acceptance-ci": ".github/workflows/r4-acceptance-ci.yml",
+    "codex-review-fan-in-tests": ".github/workflows/codex-review-fan-in-tests.yml",
+    "work-graph-guard-tests": ".github/workflows/work-graph-guard-tests.yml",
+}
 
 
 def api(path: str, method: str = "GET", payload: dict | None = None):
@@ -103,7 +110,11 @@ def gate_state(expected: set[str], runs: list[dict]) -> tuple[str, list[str]]:
     latest: dict[str, dict] = {}
     for run in runs:
         name = run.get("name")
-        if name in expected and run.get("event") in {"pull_request", "workflow_dispatch"}:
+        if (
+            name in expected
+            and run.get("path") == WORKFLOW_PATHS.get(name)
+            and run.get("event") in {"pull_request", "workflow_dispatch"}
+        ):
             if run.get("event") == "workflow_dispatch":
                 required_job = RECOVERY_JOBS.get(name)
                 if not required_job or not any(

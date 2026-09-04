@@ -2,7 +2,7 @@ name: codex-review-fan-in
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
   workflow_run:
     workflows: [application-ci, plantuml-diagrams, r4-acceptance-ci, codex-review-fan-in-tests, work-graph-guard-tests]
     types: [completed]
@@ -25,6 +25,7 @@ concurrency:
 
 jobs:
   request-review:
+    if: ${{ github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     steps:
       # This privileged workflow must never execute code from the pull-request head.
