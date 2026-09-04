@@ -18,10 +18,15 @@ concurrency:
 
 jobs:
   exact-head-tests:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
+      - name: Clean container-owned outputs before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams'
+
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.SOURCE_SHA }}
