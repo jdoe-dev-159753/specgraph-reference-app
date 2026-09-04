@@ -17,8 +17,11 @@ class DatasetCeilingTests(unittest.TestCase):
         self.assertEqual(3, result["incomplete_transactions"])
         self.assertEqual(3, result["customer_pseudo_label"]["positive"])
         self.assertEqual(1, result["customer_pseudo_label"]["negative"])
+        self.assertFalse(result["customer_pseudo_label"]["wilson_iid_assumption_satisfied"])
+        self.assertFalse(result["transaction_pseudo_label"]["wilson_iid_assumption_satisfied"])
         self.assertEqual(3, result["split_audit"]["folds_with_both_training_classes"])
         self.assertFalse(result["split_audit"]["stratified_group_holdout_possible"])
+        self.assertFalse(result["split_audit"]["per_fold_ranking_metrics_defined"])
 
     def test_report_keeps_performance_claims_bounded(self):
         report = ceiling.render_markdown(ceiling.analyze())
@@ -27,6 +30,10 @@ class DatasetCeilingTests(unittest.TestCase):
         self.assertIn("not be described as calibrated", report)
         self.assertIn("not production AML validity", report)
         self.assertIn("direct target leakage", report)
+        self.assertIn("unsupported iid assumption", report)
+        self.assertIn("not defensible prevalence estimates", report)
+        self.assertIn("ROC-AUC, PR-AUC and ranking metrics are undefined", report)
+        self.assertIn("design reading, not a mechanically verified relationship", report)
 
     def test_unknown_assessment_transaction_fails_closed(self):
         source = ceiling.DEFAULT_SQL.read_text(encoding="utf-8")

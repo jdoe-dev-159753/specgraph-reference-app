@@ -97,14 +97,16 @@ def analyze(sql_path: Path = DEFAULT_SQL) -> dict[str, object]:
             "positive": positive_customers,
             "negative": negative_customers,
             "majority_baseline": max(positive_customers, negative_customers) / len(customers),
-            "wilson_95": customer_interval,
+            "mechanical_wilson_95": customer_interval,
+            "wilson_iid_assumption_satisfied": False,
         },
         "transaction_pseudo_label": {
             "definition": "transaction referenced by at least one source risk_assessment row",
             "positive": len(assessed_transactions),
             "negative": len(transactions) - len(assessed_transactions),
             "positive_share": len(assessed_transactions) / len(transactions),
-            "wilson_95": transaction_interval,
+            "mechanical_wilson_95": transaction_interval,
+            "wilson_iid_assumption_satisfied": False,
         },
         "split_audit": {
             "independent_customer_groups": len(customers),
@@ -112,6 +114,7 @@ def analyze(sql_path: Path = DEFAULT_SQL) -> dict[str, object]:
             "folds_with_both_training_classes": valid_leave_one_out_folds,
             "stratified_group_holdout_possible": min(positive_customers, negative_customers) >= 2,
             "test_groups_per_leave_one_out_fold": 1,
+            "per_fold_ranking_metrics_defined": False,
         },
     }
 
@@ -120,8 +123,8 @@ def render_markdown(result: dict[str, object]) -> str:
     customer = result["customer_pseudo_label"]
     transaction = result["transaction_pseudo_label"]
     split = result["split_audit"]
-    customer_low, customer_high = customer["wilson_95"]
-    transaction_low, transaction_high = transaction["wilson_95"]
+    customer_low, customer_high = customer["mechanical_wilson_95"]
+    transaction_low, transaction_high = transaction["mechanical_wilson_95"]
     return f"""# Synthetic dataset ceiling and irreducible limits
 
 Generated deterministically by `scripts/analyze_dataset_ceiling.py` from
@@ -131,9 +134,11 @@ Generated deterministically by `scripts/analyze_dataset_ceiling.py` from
 
 The fixture supports deterministic adapter and workflow demonstrations. It does **not** support a
 defensible numerical estimate of out-of-sample detector performance or Bayes error. There are no
-verified outcome labels, only four independent customer scenarios, and the source risk rows were
-hand-authored from the same scenario cues exposed as candidate features. A perfect in-sample or
-oracle result would therefore measure generator leakage, not production AML validity.
+verified outcome labels and only four non-overlapping customer scenarios. A reading of the fixture
+design comments and constructed rows indicates that source risk rows were hand-authored from the
+same scenario cues exposed as candidate features; this is a design interpretation, not a
+mechanically verified causal relationship. A perfect in-sample or oracle result would therefore
+measure generator leakage, not production AML validity.
 
 ## Dataset identity and inventory
 
@@ -153,16 +158,21 @@ evaluation unit is therefore the customer/scenario, not an individual transactio
 
 | Diagnostic pseudo-target | Positive | Negative | Naive observation |
 | --- | ---: | ---: | --- |
-| Customer has at least one source risk row | {customer['positive']} | {customer['negative']} | Majority baseline {customer['majority_baseline']:.3f}; 95% Wilson range for prevalence {customer_low:.3f}–{customer_high:.3f} |
-| Transaction is referenced by a source risk row | {transaction['positive']} | {transaction['negative']} | Positive share {transaction['positive_share']:.3f}; 95% Wilson range {transaction_low:.3f}–{transaction_high:.3f} |
+| Customer has at least one source risk row | {customer['positive']} | {customer['negative']} | Majority baseline {customer['majority_baseline']:.3f}; mechanical 95% Wilson range {customer_low:.3f}–{customer_high:.3f} |
+| Transaction is referenced by a source risk row | {transaction['positive']} | {transaction['negative']} | Positive share {transaction['positive_share']:.3f}; mechanical 95% Wilson range {transaction_low:.3f}–{transaction_high:.3f} |
 
 Neither pseudo-target is a verified adverse outcome. Absence of a risk row is not a demonstrated
 negative, and multiple rule hits on one transaction are not independent labels.
+The Wilson ranges are mechanical binomial calculations under an unsupported iid assumption. They
+are not defensible prevalence estimates or population confidence intervals: the scenarios were
+designed rather than sampled, and transactions are clustered within four customer scenarios.
 
 ## Split and uncertainty limits
 
 - grouped leave-one-customer-out produces {split['leave_one_customer_out_folds']} folds with one test scenario each;
 - only {split['folds_with_both_training_classes']} of those folds retain both pseudo-label classes in training;
+- every test fold contains one scenario and therefore one observed pseudo-label class, so per-fold
+  ROC-AUC, PR-AUC and ranking metrics are undefined and must not be averaged across folds;
 - a stratified grouped holdout with both classes in train and test is **not possible**;
 - transaction-level random splitting would leak customer/scenario identity across train and test;
 - the fixture has one short synthetic time window and no later outcome labels, so temporal, drift and concept-performance validation are unavailable;
@@ -172,8 +182,9 @@ negative, and multiple rule hits on one transaction are not independent labels.
 
 - Using `risk_assessments`, rule identity, score contribution, or their aggregates as predictors of
   either pseudo-target is direct target leakage and yields a tautological 1.0 oracle ceiling.
-- Activity type, cross-border country, completion status and volume were deliberately selected to
-  distinguish the four scenarios; separation by those cues is generator recognition.
+- The fixture design comments and constructed rows appear to use activity type, cross-border
+  country, completion status and volume to distinguish the scenarios. Treating separation by those
+  cues as generator recognition is a design reading, not a mechanically verified relationship.
 - Amounts span CHF, EUR, USD, BTC and ETH without an exchange-rate observation time. Cross-currency
   magnitude comparisons are undefined rather than noisy measurements.
 - Missing customer history, account tenure, counterparty history, device/channel context, verified
