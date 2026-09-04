@@ -19,6 +19,7 @@
     <spring-modulith.version>2.1.1</spring-modulith.version>
     <swagger-parser.version>2.1.48</swagger-parser.version>
     <commons-math3.version>3.6.1</commons-math3.version>
+    <tribuo.version>4.3.2</tribuo.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -84,6 +85,11 @@
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-math3</artifactId>
       <version>${commons-math3.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.tribuo</groupId>
+      <artifactId>tribuo-classification-tree</artifactId>
+      <version>${tribuo.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.modulith</groupId>

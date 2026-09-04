@@ -149,6 +149,12 @@ jobs:
           EVIDENCE_NAME: r4-complete-flow
         run: bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
 
+      - name: VFY-FAILURE-PATHS-001 - Verify recoverable R4 degradation matrix
+        env:
+          BASE_URL: http://127.0.0.1:${{ env.R4_PORT }}
+          EVIDENCE_NAME: r4-degradation
+        run: bash scripts/ci/run-playwright.sh r4-persistence-degradation.spec.ts
+
       - name: Assert transformer resources persisted outside disposable application container
         run: |
           docker run --rm -v "${R4_EMBEDDING_CACHE_VOLUME}:/cache:ro" alpine:3.22 \
@@ -217,6 +223,9 @@ jobs:
             e2e/test-results/r4-complete-flow.xml
             e2e/test-results/r4-complete-flow-artifacts/**
             e2e/playwright-report/r4-complete-flow/**
+            e2e/test-results/r4-degradation.xml
+            e2e/test-results/r4-degradation-artifacts/**
+            e2e/playwright-report/r4-degradation/**
           if-no-files-found: ignore
           retention-days: 14
 
