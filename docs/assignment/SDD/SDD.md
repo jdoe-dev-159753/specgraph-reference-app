@@ -4,7 +4,8 @@
 **Design map:** [`design-map.yaml`](design-map.yaml)  
 **Normative requirements:** [`CAA-SRS-001`](../SRS/SRS.md)  
 **Machine-readable requirements:** [`requirements.yaml`](../SRS/requirements.yaml)  
-**Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md), [`ADR-006`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md), [`ADR-007`](../ADR/ADR-007-spring-jdbc-relational-adapters.md)  
+**Architecture decisions:** [`ADR-001`](../ADR/ADR-001-modular-monolith-hexagonal.md), [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md), [`ADR-003`](../ADR/ADR-003-postgresql-pgvector-persistence.md), [`ADR-004`](../ADR/ADR-004-baseline-web-stack.md), [`ADR-005`](../ADR/ADR-005-prebuilt-demo-container-packaging.md), [`ADR-006`](../ADR/ADR-006-compose-oci-multi-platform-distribution.md), [`ADR-007`](../ADR/ADR-007-spring-jdbc-relational-adapters.md), [`ADR-008`](../ADR/ADR-008-customer-activity-analytics-identity.md)
+
 **Verification strategy:** [`CAA-VV-001`](../VV/VV.md)
 
 This document is the canonical human-readable design authority. [`design-map.yaml`](design-map.yaml) is its machine-readable requirement-to-design companion. PlantUML and Graphviz/DOT files in [`diagrams/`](diagrams/) are the semantic sources for rendered figures; SVGs are generated views, not separate design authorities.
@@ -144,7 +145,7 @@ The detector stage and analysis-model stage are therefore intentionally differen
 
 ## 7. Relational and vector persistence
 
-R2 activates PostgreSQL 17 behind `CustomerActivityPort` and `CustomerReviewQueryPort`. ADR-007 selects Jakarta Persistence with Hibernate ORM as the final relational adapter family; #164 replaces the accepted Spring JDBC baseline. Flyway remains the sole schema/migration authority, while Hibernate is limited to validating the migrated schema and must never create or update it. Persistence entities, `EntityManager`, Hibernate types and lazy proxies remain adapter-local and are mapped into unchanged project-owned contracts before crossing a port.
+R2 activates PostgreSQL 17 behind `CustomerActivityPort` and `CustomerReviewQueryPort`. ADR-007 selects Jakarta Persistence with Hibernate ORM as the final relational adapter family, replacing the accepted Spring JDBC baseline through #164. Flyway remains the sole schema/migration authority, while Hibernate is limited to validating the migrated schema and must never create or update it. Persistence entities, `EntityManager`, Hibernate types and lazy proxies remain adapter-local and are mapped into unchanged project-owned contracts before crossing a port.
 
 `JpaCustomerActivityAdapter` and `JpaAnalysisHistoryAdapter` are separate adapters for separate ports but share the same JPA/Hibernate infrastructure. Activity `DECIMAL(18,2)` amounts and `DECIMAL(5,2)` risk contributions/rule weights map explicitly to `BigDecimal` with their controlled precision and scale; no float/double conversion or currency inference is permitted. Complete snapshots retain a consistent PostgreSQL transaction snapshot, and bounded review/history queries apply filtering, stable ordering, counts and pagination in the database. Query-count evidence must prevent ORM association mapping from introducing N+1 behavior.
 
@@ -322,7 +323,7 @@ The rings activate capability maturity while preserving the same application cor
 
 - **R0 - deployable hollow shell:** application modules, contracts and replaceable seams; no business-flow acceptance claim.
 - **R1 - mandatory synthetic customer review:** customer lookup, CARD/PAYMENT/CRYPTO and source-derived risk evidence on deterministic data.
-- **R2 - relational substitution:** Hibernate/JPA/PostgreSQL/Flyway/Testcontainers behind unchanged activity/review ports after #164 replaces the accepted JDBC baseline; no invented new operator use case.
+- **R2 - relational substitution:** Hibernate/JPA/PostgreSQL/Flyway/Testcontainers behind unchanged activity/review ports, replacing the accepted JDBC baseline; no invented new operator use case.
 - **R3 - mandatory deterministic analysis and reviewable history:** deterministic policy/model adapters, structured analysis, explicit failures, operator attribution and PostgreSQL-backed analysis history.
 - **R4 - MUST_HAVE closure:** explicit staged detector/retrieval/model/history orchestration, pgvector-backed synthetic policy retrieval with inspectable provenance, real Spring Security multi-operator authentication, protected application capabilities and related trust boundaries; optional live provider remains behind existing ports.
 - **R5 - hardening/demo:** reliability, observability, reviewer polish and NICE_TO_HAVE differentiation such as Bayesian/fuzzy/packaged Random Forest detector comparison or live-provider comparison without changing established boundaries; dataset-ceiling evidence bounds every classical-ML claim.
@@ -346,7 +347,7 @@ The R3 history activation supplies deterministic attribution without authenticat
 
 ## 13. ADR consistency
 
-The design remains governed by seven accepted ADRs:
+The design remains governed by eight accepted ADRs:
 
 1. modular monolith with hexagonal boundaries;
 2. provider-neutral analysis plus detection/explanation trust boundary;
@@ -355,6 +356,7 @@ The design remains governed by seven accepted ADRs:
 5. prebuilt single-image reviewer packaging;
 6. Compose OCI multi-platform distribution;
 7. Hibernate/JPA relational adapters with Flyway-owned schema and exact `BigDecimal` mappings.
+8. Customer Activity Analytics as the reviewer-facing product identity, without a final-freeze technical-identifier migration.
 
 The R4 refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, keeps complete source context through Stage 1 and Stage 2, and places the application-owned `AnalysisContextBuilder` immediately before Stage 3 so every `AnalysisModelPort` implementation receives one bounded project-owned evidence envelope with exact totals and selected citable details. It introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, extends persisted provenance, activates pgvector-backed policy retrieval behind `PolicyKnowledgePort`, and activates Spring Security-backed operator context behind `OperatorContextPort`. The R3/default static policy and deterministic operator-context adapters remain available as deterministic baselines. Bayesian and fuzzy Stage-1 detection are implemented R4 substitutions; R5 adds the optional packaged Random Forest inference leaf behind the same selector with bounded synthetic evidence. Deterministic, OpenAI and private-network LM Studio Stage-3 implementations remain independently process-selectable behind the model port, while graph detector families remain later substitutions rather than being falsely claimed by the required R4 path.
 

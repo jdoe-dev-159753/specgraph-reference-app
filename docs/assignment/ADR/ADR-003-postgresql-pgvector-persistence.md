@@ -14,7 +14,7 @@ For a five-day reference application, operating separate persistence products wo
 
 Use PostgreSQL as the production-like relational store and enable pgvector for the RAG adapter.
 
-Persistence remains behind project-owned ports. Flyway is the sole schema/migration authority. Project-owned relational adapters use the Spring JDBC access strategy selected by [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md); pgvector is used only by the policy-knowledge adapter.
+Persistence remains behind project-owned ports. Flyway is the sole schema/migration authority. Project-owned relational adapters use the Jakarta Persistence/Hibernate strategy selected by [`ADR-007`](ADR-007-spring-jdbc-relational-adapters.md); pgvector is used only by the separate policy-knowledge adapter.
 
 The relational model contains:
 

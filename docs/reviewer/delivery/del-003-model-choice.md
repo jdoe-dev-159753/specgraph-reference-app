@@ -2,7 +2,7 @@
 
 ## Decision in one minute
 
-SpecGraph uses a project-owned `AnalysisModelPort` rather than making one provider part of the application core. The default strategy is the deterministic adapter: it needs no credential or network call, makes the mandatory demo reproducible, and records no external transmission. OpenAI and a private LM Studio runtime are implemented as explicit opt-in strategies behind the same port. Supplying provider settings or credentials configures a strategy but does not select it.
+Customer Activity Analytics uses a project-owned `AnalysisModelPort` rather than making one provider part of the application core. The default strategy is the deterministic adapter: it needs no credential or network call, makes the mandatory demo reproducible, and records no external transmission. OpenAI and a private LM Studio runtime are implemented as explicit opt-in strategies behind the same port. Supplying provider settings or credentials configures a strategy but does not select it.
 
 | Stage-3 choice | Intended use | Transmission |
 | --- | --- | --- |

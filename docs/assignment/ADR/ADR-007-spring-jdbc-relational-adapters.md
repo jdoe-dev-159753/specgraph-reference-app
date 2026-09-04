@@ -59,10 +59,10 @@ Complete multi-query customer snapshots retain one consistent PostgreSQL transac
 
 ### Migration boundary
 
-The accepted Spring JDBC adapters remain historical/current implementation evidence until #164 lands the code substitution. The #164 implementation must replace them rather than keep selectable JDBC and JPA alternatives. After migration:
+The accepted Spring JDBC adapters remain historical implementation evidence. Issue #164 completed the substitution with Hibernate/JPA rather than retaining selectable JDBC and JPA alternatives. In the resulting implementation:
 
 - no Spring JDBC or jOOQ dependency is retained for application relational adapters without a separately demonstrated owner;
-- old JDBC adapter classes are removed after the same port contracts pass against JPA;
+- old JDBC adapter classes are removed, and the same port contracts pass against JPA;
 - repository runtime configuration exposes one relational adapter family, not a new end-user selector;
 - PostgreSQL/Flyway/Testcontainers evidence remains mandatory.
 
@@ -90,7 +90,7 @@ Rejected for this delivery. Policy retrieval has a separate port, evidence model
 
 ## Consequences
 
-- Hibernate/JPA is the only application relational persistence technology after #164;
+- Hibernate/JPA is the only application relational persistence technology;
 - Flyway remains the only DDL/migration authority;
 - schema validation fails fast when mappings drift from the migrated PostgreSQL schema;
 - exact decimal behavior is explicit in mappings, project-owned `BigDecimal` contracts and database-backed tests;
