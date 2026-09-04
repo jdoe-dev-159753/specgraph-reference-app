@@ -126,6 +126,19 @@ final class LmStudioAnalysisAdapterIntegrationTests {
         assertThat(REQUEST_COUNT.get()).isPositive();
     }
 
+    @Test
+    void rejectsResponseThatExceedsTheLiveProviderBounds() {
+        RESPONSE.set(chatCompletion("""
+                {"riskLevel":"LOW","findingsSummary":"%s","recommendations":["Review."]}
+                """.formatted("x".repeat(501)).trim()));
+
+        localContext().run(context -> assertThatThrownBy(() -> context.getBean(AnalysisModelPort.class)
+                        .analyze(SpringAiAnalysisAdapterTests.evidence()))
+                .isInstanceOf(RuntimeException.class));
+
+        assertThat(REQUEST_COUNT.get()).isPositive();
+    }
+
     private ApplicationContextRunner localContext() {
         return contextRunner.withPropertyValues(
                 "specgraph.analysis.backend=local",
