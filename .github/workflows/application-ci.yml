@@ -14,6 +14,8 @@ on:
       - 'frontend/**'
       - 'compose.yaml'
       - 'compose.oci.yaml'
+      - 'scripts/r4-*.sh'
+      - 'scripts/test-r4-gallery.sh'
       - 'scripts/validate_design_map.py'
       - '.github/workflows/application-ci.yml'
   push:
@@ -23,6 +25,8 @@ on:
       - 'frontend/**'
       - 'compose.yaml'
       - 'compose.oci.yaml'
+      - 'scripts/r4-*.sh'
+      - 'scripts/test-r4-gallery.sh'
       - 'scripts/validate_design_map.py'
       - '.github/workflows/application-ci.yml'
 
