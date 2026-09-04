@@ -110,6 +110,20 @@ final class RandomForestRiskSignalDetectorAdapterTests {
     }
 
     @Test
+    void manifestRejectsNonFiniteFeatureSubsampling() {
+        var manifest = GENERATED.manifest();
+
+        assertThatThrownBy(() -> new RandomForestModelManifest(
+                manifest.modelVersion(), manifest.artifactSha256(), manifest.featureSchemaVersion(),
+                manifest.trainingDatasetIdentity(), manifest.trainingPartitionSha256(), manifest.splitIdentity(),
+                manifest.trainingSeed(), manifest.treeSeed(), manifest.treeCount(), manifest.maxDepth(),
+                Double.NaN, manifest.libraryVersion(), manifest.outputLabels(), manifest.labelDefinitionIdentity(),
+                manifest.scoreSemantics(), manifest.limitation()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("hyperparameters");
+    }
+
+    @Test
     void emptyHistoryProducesNoInventedSignal() {
         assertThat(detector.detect(new CustomerSnapshot(UUID.randomUUID(), List.of(), List.of()))).isEmpty();
     }

@@ -33,7 +33,11 @@ public record RandomForestModelManifest(
         labelDefinitionIdentity = requireText(labelDefinitionIdentity, "labelDefinitionIdentity");
         scoreSemantics = requireText(scoreSemantics, "scoreSemantics");
         limitation = requireText(limitation, "limitation");
-        if (treeCount <= 0 || maxDepth <= 0 || featureSubsampling <= 0.0 || featureSubsampling > 1.0) {
+        if (treeCount <= 0
+                || maxDepth <= 0
+                || !Double.isFinite(featureSubsampling)
+                || featureSubsampling <= 0.0
+                || featureSubsampling > 1.0) {
             throw new IllegalArgumentException("invalid random-forest hyperparameters");
         }
     }
