@@ -130,6 +130,19 @@ final class RandomForestRiskSignalDetectorAdapterTests {
     }
 
     @Test
+    void provenanceNumberMatchingRejectsNonFiniteAndNonIntegralRepresentations() {
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesIntegralProvenance(0L, 0L)).isTrue();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesIntegralProvenance(Double.NaN, 0L)).isFalse();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesIntegralProvenance(Double.POSITIVE_INFINITY, 0L))
+                .isFalse();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesIntegralProvenance(0.5d, 0L)).isFalse();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesDecimalProvenance(0.5d, 0.5d)).isTrue();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesDecimalProvenance(Double.NaN, 0.5d)).isFalse();
+        assertThat(RandomForestRiskSignalDetectorAdapter.matchesDecimalProvenance(Double.NEGATIVE_INFINITY, 0.5d))
+                .isFalse();
+    }
+
+    @Test
     void emptyHistoryProducesNoInventedSignal() {
         assertThat(detector.detect(new CustomerSnapshot(UUID.randomUUID(), List.of(), List.of()))).isEmpty();
     }

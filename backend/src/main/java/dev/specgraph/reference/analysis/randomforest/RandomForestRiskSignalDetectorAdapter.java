@@ -177,7 +177,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         Provenance value = parameters.get(key);
         if (!(value instanceof PrimitiveProvenance<?> primitive)
                 || !(primitive.getValue() instanceof Number number)
-                || number.longValue() != expected) {
+                || !matchesIntegralProvenance(number, expected)) {
             throw new IllegalArgumentException("model trainer provenance does not match manifest: " + key);
         }
     }
@@ -188,10 +188,22 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
                 || !(primitive.getValue() instanceof Number number)) {
             throw new IllegalArgumentException("model trainer provenance does not match manifest: " + key);
         }
-        double actual = number.doubleValue();
-        if (!Double.isFinite(actual) || Math.abs(actual - expected) > 0.000001) {
+        if (!matchesDecimalProvenance(number, expected)) {
             throw new IllegalArgumentException("model trainer provenance does not match manifest: " + key);
         }
+    }
+
+    static boolean matchesIntegralProvenance(Number actual, long expected) {
+        return (actual instanceof Byte
+                        || actual instanceof Short
+                        || actual instanceof Integer
+                        || actual instanceof Long)
+                && actual.longValue() == expected;
+    }
+
+    static boolean matchesDecimalProvenance(Number actual, double expected) {
+        double value = actual.doubleValue();
+        return Double.isFinite(value) && Math.abs(value - expected) <= 0.000001;
     }
 
     private static String sha256(byte[] bytes) {
