@@ -107,7 +107,17 @@ def expected_workflows(paths: list[str]) -> set[str]:
 
 
 def requires_manual_review(paths: list[str]) -> bool:
-    return any(path.startswith(".github/workflows/") for path in paths)
+    protected_automation = {
+        "scripts/codex_review_fan_in.py",
+        "scripts/test_codex_review_fan_in.py",
+        "scripts/work_graph_guard.py",
+        "scripts/test_work_graph_guard.py",
+        "scripts/ci/durable-workflows.txt",
+    }
+    return any(
+        path.startswith(".github/workflows/") or path in protected_automation
+        for path in paths
+    )
 
 
 def gate_state(expected: set[str], runs: list[dict]) -> tuple[str, list[str]]:

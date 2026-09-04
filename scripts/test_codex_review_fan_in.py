@@ -45,7 +45,6 @@ class WorkflowSelectionTests(unittest.TestCase):
         workflows = (
             "application-ci.yml", "r4-acceptance-ci.yml", "plantuml-diagrams.yml",
             "codex-review-fan-in.yml", "codex-review-fan-in-tests.yml",
-            "work-graph-guard-tests.yml",
         )
         for name in workflows:
             source = Path(f".github/workflows/{name}").read_text(encoding="utf-8")
@@ -55,7 +54,9 @@ class WorkflowSelectionTests(unittest.TestCase):
 
     def test_workflow_source_changes_require_manual_review(self):
         self.assertTrue(fan_in.requires_manual_review([".github/workflows/application-ci.yml"]))
-        self.assertFalse(fan_in.requires_manual_review(["scripts/codex_review_fan_in.py"]))
+        self.assertTrue(fan_in.requires_manual_review(["scripts/work_graph_guard.py"]))
+        self.assertTrue(fan_in.requires_manual_review(["scripts/codex_review_fan_in.py"]))
+        self.assertFalse(fan_in.requires_manual_review(["backend/src/main/java/App.java"]))
 
 
 class GateTests(unittest.TestCase):
