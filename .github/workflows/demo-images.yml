@@ -193,15 +193,15 @@ jobs:
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8081 \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r1/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r1-customer-review.spec.ts'
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test customer-review.spec.ts'
 
           docker run --rm --network host --ipc=host \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8082 \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r2/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r2-customer-review.spec.ts'
 
@@ -209,7 +209,7 @@ jobs:
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8083 \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r3/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r3-analysis-history.spec.ts'
 
@@ -219,7 +219,7 @@ jobs:
             -e BASE_URL=http://127.0.0.1:8084 \
             -e EVIDENCE_NAME=r4-baseline \
             -e EXPECT_DETECTOR=none \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r4/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
 
@@ -229,7 +229,7 @@ jobs:
             -e BASE_URL=http://127.0.0.1:8085 \
             -e EVIDENCE_NAME=r4-bayesian \
             -e EXPECT_DETECTOR=beta-binomial-review-elevation-v1 \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r4/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
 
@@ -410,15 +410,15 @@ jobs:
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8081 \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r1/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r1-customer-review.spec.ts'
+            bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test customer-review.spec.ts'
 
           docker run --rm --network host --ipc=host \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8082 \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r2/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r2-customer-review.spec.ts'
 
@@ -426,7 +426,7 @@ jobs:
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8083 \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r3/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r3-analysis-history.spec.ts'
 
@@ -436,7 +436,7 @@ jobs:
             -e BASE_URL=http://127.0.0.1:8084 \
             -e EVIDENCE_NAME=r4-baseline-remote \
             -e EXPECT_DETECTOR=none \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r4/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
 
@@ -446,7 +446,7 @@ jobs:
             -e BASE_URL=http://127.0.0.1:8085 \
             -e EVIDENCE_NAME=r4-bayesian-remote \
             -e EXPECT_DETECTOR=beta-binomial-review-elevation-v1 \
-            -v "$PWD/e2e:/work" -w /work \
+            -v "$PWD/checkpoints/r4/e2e:/work" -w /work \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
 
