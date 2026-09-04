@@ -1,6 +1,9 @@
 package dev.specgraph.reference.analysis;
 
+import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.Locale;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -65,10 +68,7 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
             return true;
         }
         if (value.contains(":")) {
-            return value.equals("::1")
-                    || value.startsWith("fc")
-                    || value.startsWith("fd")
-                    || value.matches("fe[89ab].*");
+            return isLocalIpv6(value);
         }
         if (!value.matches("(?:\\d{1,3}\\.){3}\\d{1,3}")) {
             return false;
@@ -84,5 +84,19 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
                 || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
                 || (octets[0] == 192 && octets[1] == 168)
                 || (octets[0] == 169 && octets[1] == 254);
+    }
+
+    private static boolean isLocalIpv6(String value) {
+        try {
+            InetAddress address = InetAddress.getByName(value);
+            if (!(address instanceof Inet6Address)) {
+                return false;
+            }
+            byte first = address.getAddress()[0];
+            boolean uniqueLocal = (first & 0xfe) == 0xfc;
+            return address.isLoopbackAddress() || address.isLinkLocalAddress() || uniqueLocal;
+        } catch (UnknownHostException exception) {
+            return false;
+        }
     }
 }

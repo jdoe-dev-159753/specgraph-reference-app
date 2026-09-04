@@ -66,6 +66,13 @@ final class AnalysisBackendConfigurationTests {
                                 "http://[fd00::1]:1234/v1", "ministral-test", "", Duration.ofSeconds(60))
                         .validatedBaseUrl())
                 .isEqualTo("http://[fd00::1]:1234/v1");
+        assertThat(new LmStudioAnalysisProperties(
+                                "http://[0:0:0:0:0:0:0:1]:1234/v1",
+                                "ministral-test",
+                                "",
+                                Duration.ofSeconds(60))
+                        .validatedBaseUrl())
+                .isEqualTo("http://[0:0:0:0:0:0:0:1]:1234/v1");
     }
 
     @Test
