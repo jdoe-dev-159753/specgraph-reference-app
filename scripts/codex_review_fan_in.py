@@ -14,10 +14,12 @@ TOKEN = os.environ.get("GITHUB_TOKEN", "")
 EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
 CODEX_USER_ID = 199175422
 MARKER = "<!-- codex-review-request:{sha} -->"
-RECOVERY_JOBS = {
+VERIFICATION_JOBS = {
     "application-ci": "fast-verify",
+    "codex-review-fan-in-tests": "fan-in-tests",
     "plantuml-diagrams": "verify",
     "r4-acceptance-ci": "verify-r4-acceptance",
+    "work-graph-guard-tests": "exact-head-tests",
 }
 WORKFLOW_PATHS = {
     "application-ci": ".github/workflows/application-ci.yml",
@@ -129,8 +131,10 @@ def gate_state(expected: set[str], runs: list[dict]) -> tuple[str, list[str]]:
             and run.get("path") == WORKFLOW_PATHS.get(name)
             and run.get("event") in {"pull_request", "workflow_dispatch"}
         ):
-            if run.get("event") == "workflow_dispatch":
-                required_job = RECOVERY_JOBS.get(name)
+            if run.get("status") == "completed" and run.get("conclusion") in {
+                "success", "skipped",
+            }:
+                required_job = VERIFICATION_JOBS.get(name)
                 if not required_job or not any(
                     job.get("name") == required_job and job.get("conclusion") == "success"
                     for job in run.get("jobs", [])
@@ -235,7 +239,13 @@ def main() -> int:
     expected = expected_workflows(paths)
     runs = api(workflow_runs_path(head_sha)).get("workflow_runs", [])
     for run in runs:
-        if run.get("name") in RECOVERY_JOBS and run.get("event") == "workflow_dispatch":
+        if (
+            run.get("name") in VERIFICATION_JOBS
+            and run.get("path") == WORKFLOW_PATHS.get(run.get("name"))
+            and run.get("event") in {"pull_request", "workflow_dispatch"}
+            and run.get("status") == "completed"
+            and run.get("conclusion") in {"success", "skipped"}
+        ):
             run["jobs"] = api(f"/repos/{REPO}/actions/runs/{run['id']}/jobs").get("jobs", [])
     state, names = gate_state(expected, runs)
     if state != "ready":

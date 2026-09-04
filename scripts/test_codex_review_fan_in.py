@@ -68,11 +68,13 @@ class GateTests(unittest.TestCase):
                     "id": 1, "name": "application-ci", "event": "pull_request",
                     "path": fan_in.WORKFLOW_PATHS["application-ci"],
                     "status": "completed", "conclusion": "success",
+                    "jobs": [{"name": "fast-verify", "conclusion": "success"}],
                 },
                 {
                     "id": 2, "name": "r4-acceptance-ci", "event": "pull_request",
                     "path": fan_in.WORKFLOW_PATHS["r4-acceptance-ci"],
                     "status": "completed", "conclusion": "success",
+                    "jobs": [{"name": "verify-r4-acceptance", "conclusion": "success"}],
                 },
             ],
         )
@@ -124,28 +126,47 @@ class GateTests(unittest.TestCase):
             ),
         )
 
-    def test_recovery_requires_each_workflow_verification_job(self):
-        for name, required_job in fan_in.RECOVERY_JOBS.items():
-            failed_pr = {
+    def test_every_successful_run_requires_its_verification_job(self):
+        for name, required_job in fan_in.VERIFICATION_JOBS.items():
+            failed_run = {
                 "id": 1, "name": name, "event": "pull_request",
                 "path": fan_in.WORKFLOW_PATHS[name],
                 "status": "completed", "conclusion": "failure",
             }
-            recovery = {
-                "id": 2, "name": name, "event": "workflow_dispatch",
-                "path": fan_in.WORKFLOW_PATHS[name],
-                "status": "completed", "conclusion": "success",
-                "jobs": [{"name": "non-verifying-job", "conclusion": "success"}],
-            }
-            with self.subTest(workflow=name, recovery="non-verifying"):
-                self.assertEqual(
-                    ("blocked", [name]), fan_in.gate_state({name}, [failed_pr, recovery])
-                )
-            recovery["jobs"] = [{"name": required_job, "conclusion": "success"}]
-            with self.subTest(workflow=name, recovery="verified"):
-                self.assertEqual(
-                    ("ready", []), fan_in.gate_state({name}, [failed_pr, recovery])
-                )
+            for event in ("pull_request", "workflow_dispatch"):
+                candidate = {
+                    "id": 2, "name": name, "event": event,
+                    "path": fan_in.WORKFLOW_PATHS[name],
+                    "status": "completed", "conclusion": "success",
+                    "jobs": [{"name": "non-verifying-job", "conclusion": "success"}],
+                }
+                with self.subTest(workflow=name, event=event, verification="missing"):
+                    self.assertEqual(
+                        ("blocked", [name]),
+                        fan_in.gate_state({name}, [failed_run, candidate]),
+                    )
+                candidate["jobs"] = [{"name": required_job, "conclusion": "success"}]
+                with self.subTest(workflow=name, event=event, verification="success"):
+                    self.assertEqual(
+                        ("ready", []), fan_in.gate_state({name}, [failed_run, candidate])
+                    )
+
+    def test_skipped_metadata_edit_does_not_hide_same_head_success(self):
+        real_run = {
+            "id": 1, "name": "application-ci", "event": "pull_request",
+            "path": fan_in.WORKFLOW_PATHS["application-ci"],
+            "status": "completed", "conclusion": "success",
+            "jobs": [{"name": "fast-verify", "conclusion": "success"}],
+        }
+        skipped_edit = {
+            "id": 2, "name": "application-ci", "event": "pull_request",
+            "path": fan_in.WORKFLOW_PATHS["application-ci"],
+            "status": "completed", "conclusion": "skipped",
+            "jobs": [{"name": "fast-verify", "conclusion": "skipped"}],
+        }
+        self.assertEqual(
+            ("ready", []), fan_in.gate_state({"application-ci"}, [real_run, skipped_edit])
+        )
 
     def test_same_name_from_noncanonical_workflow_is_ignored(self):
         run = {
