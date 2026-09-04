@@ -17,7 +17,10 @@ on:
       - 'compose.r4.yaml'
       - 'scripts/r4-*.sh'
       - 'scripts/test-r4-gallery.sh'
+      - 'scripts/analyze_dataset_ceiling.py'
+      - 'scripts/test_analyze_dataset_ceiling.py'
       - 'scripts/validate_design_map.py'
+      - 'docs/analysis/dataset-ceiling.md'
       - '.github/workflows/application-ci.yml'
   push:
     branches: [main]
@@ -29,7 +32,10 @@ on:
       - 'compose.r4.yaml'
       - 'scripts/r4-*.sh'
       - 'scripts/test-r4-gallery.sh'
+      - 'scripts/analyze_dataset_ceiling.py'
+      - 'scripts/test_analyze_dataset_ceiling.py'
       - 'scripts/validate_design_map.py'
+      - 'docs/analysis/dataset-ceiling.md'
       - '.github/workflows/application-ci.yml'
 
 concurrency:
@@ -64,6 +70,11 @@ jobs:
 
       - name: Ratchet normative SRS to design-map coverage
         run: python3 scripts/validate_design_map.py
+
+      - name: Verify synthetic dataset ceiling report
+        run: |
+          python3 -B -m unittest scripts/test_analyze_dataset_ceiling.py
+          python3 -B scripts/analyze_dataset_ceiling.py --check
 
       - name: Verify backend against Testcontainers PostgreSQL
         run: >-
