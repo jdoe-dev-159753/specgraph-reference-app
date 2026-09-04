@@ -35,6 +35,6 @@ public record CustomerReviewPage(
     }
 
     public boolean hasNext() {
-        return (long) (page + 1) * pageSize < totalActivities;
+        return ((long) page + 1) * pageSize < totalActivities;
     }
 }

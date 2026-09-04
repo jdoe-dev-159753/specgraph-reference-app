@@ -28,6 +28,6 @@ public record AnalysisHistoryPage(
     }
 
     public boolean hasNext() {
-        return (long) (page + 1) * pageSize < totalEntries;
+        return ((long) page + 1) * pageSize < totalEntries;
     }
 }
