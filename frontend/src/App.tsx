@@ -269,6 +269,8 @@ export default function App() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const submission = useRef(0)
+  const customerSubmissionInFlight = useRef(false)
+  const analysisSubmissionInFlight = useRef(false)
   const queryClient = useQueryClient()
 
   const runtimeSession = useQuery({
@@ -286,7 +288,13 @@ export default function App() {
 
   const customer = useQuery({
     queryKey: ['customer', request],
-    queryFn: () => loadCustomer(request!),
+    queryFn: async () => {
+      try {
+        return await loadCustomer(request!)
+      } finally {
+        customerSubmissionInFlight.current = false
+      }
+    },
     enabled: applicationEnabled && request !== null,
     retry: false,
   })
@@ -314,6 +322,8 @@ export default function App() {
   const logout = useMutation({
     mutationFn: logoutOperator,
     onSuccess: async () => {
+      customerSubmissionInFlight.current = false
+      analysisSubmissionInFlight.current = false
       setRequest(null)
       setHistoryPage(0)
       analysis.reset()
@@ -325,6 +335,9 @@ export default function App() {
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    if (customerSubmissionInFlight.current) return
+    customerSubmissionInFlight.current = true
+    analysisSubmissionInFlight.current = false
     analysis.reset()
     setHistoryPage(0)
     submission.current += 1
@@ -341,7 +354,8 @@ export default function App() {
   }
 
   function updateActivityPage(page: number, pageSize = request?.pageSize ?? DEFAULT_ACTIVITY_PAGE_SIZE) {
-    if (!request) return
+    if (!request || customerSubmissionInFlight.current) return
+    customerSubmissionInFlight.current = true
     submission.current += 1
     setRequest({ ...request, page, pageSize, submission: submission.current })
   }
@@ -350,6 +364,19 @@ export default function App() {
     event.preventDefault()
     if (!unauthenticatedSession) return
     login.mutate({ username, password, csrf: unauthenticatedSession.csrf })
+  }
+
+  function submitAnalysis() {
+    if (!customer.data || analysisSubmissionInFlight.current) return
+    analysisSubmissionInFlight.current = true
+    analysis.mutate({
+      customerId: customer.data.customerId,
+      csrf: authenticatedSession?.csrf,
+    }, {
+      onSettled: () => {
+        analysisSubmissionInFlight.current = false
+      },
+    })
   }
 
   const runtimeLabel = runtimeSession.data?.kind === 'SECURED' ? 'R4' : 'R3'
@@ -431,7 +458,14 @@ export default function App() {
                     onChange={e => setCustomerId(e.target.value)}
                     size="small"
                   />
-                  <Button type="submit" variant="contained" sx={{ minWidth: 128 }}>Search</Button>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={customer.isFetching || analysis.isPending}
+                    sx={{ minWidth: 128 }}
+                  >
+                    Search
+                  </Button>
                 </Stack>
                 <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} useFlexGap sx={{ flexWrap: 'wrap' }}>
                   <TextField
@@ -610,10 +644,7 @@ export default function App() {
                         variant="contained"
                         color="secondary"
                         disabled={analysis.isPending}
-                        onClick={() => analysis.mutate({
-                          customerId: customer.data.customerId,
-                          csrf: authenticatedSession?.csrf,
-                        })}
+                        onClick={submitAnalysis}
                       >
                         {analysis.isPending ? 'Analyzing…' : 'Run analysis'}
                       </Button>

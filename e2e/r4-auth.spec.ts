@@ -76,3 +76,60 @@ test('VFY-AUTH-001 protects the browser workflow and retains distinct operator a
   const afterLogout = await page.request.get(`/api/customers/${seededCustomer}`)
   expect(afterLogout.status()).toBe(401)
 })
+
+test('VFY-AUTH-001 releases an in-flight analysis guard across logout and login', async ({ page }) => {
+  let analysisRequests = 0
+  let releaseFirstAnalysis!: () => void
+  const firstAnalysisGate = new Promise<void>(resolve => { releaseFirstAnalysis = () => resolve() })
+
+  await page.route(new RegExp(`/api/customers/${seededCustomer}/analyses$`), async route => {
+    if (route.request().method() !== 'POST') {
+      await route.continue()
+      return
+    }
+
+    analysisRequests += 1
+    if (analysisRequests !== 1) {
+      await route.continue()
+      return
+    }
+
+    await firstAnalysisGate
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({ detail: 'The original operator session ended' }),
+    })
+  })
+
+  await page.goto('/')
+  await signIn(page, 'operator-alpha', 'alpha-demo-2026')
+  await expect(page.getByTestId('operator-session')).toContainText('operator-alpha')
+  await loadCustomer(page)
+
+  const firstAnalysisRequest = page.waitForRequest(request =>
+    request.url().endsWith(`/api/customers/${seededCustomer}/analyses`)
+      && request.method() === 'POST')
+  await page.getByRole('button', { name: 'Run analysis' }).click()
+  await firstAnalysisRequest
+  await expect.poll(() => analysisRequests).toBe(1)
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page.getByTestId('operator-login')).toBeVisible()
+
+  await signIn(page, 'operator-beta', 'beta-demo-2026')
+  await expect(page.getByTestId('operator-session')).toContainText('operator-beta')
+  await loadCustomer(page)
+  const recoveredAnalysis = await runAnalysis(page)
+
+  expect(analysisRequests).toBe(2)
+  expect(recoveredAnalysis.operatorId).toBe('operator-beta')
+  await expect(page.getByTestId(`analysis-history-${recoveredAnalysis.analysisId}`)).toContainText('operator-beta')
+
+  const firstAnalysisResponse = page.waitForResponse(response =>
+    response.url().endsWith(`/api/customers/${seededCustomer}/analyses`)
+      && response.request().method() === 'POST'
+      && response.status() === 401)
+  releaseFirstAnalysis()
+  expect((await firstAnalysisResponse).status()).toBe(401)
+})
