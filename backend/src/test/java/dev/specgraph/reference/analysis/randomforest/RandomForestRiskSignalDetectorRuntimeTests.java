@@ -26,6 +26,9 @@ final class RandomForestRiskSignalDetectorRuntimeTests {
         assertThat(RandomForestRiskSignalDetectorRuntime.sha256(model)).isEqualTo(manifest.artifactSha256());
         assertThat(RandomForestRiskSignalDetectorRuntime.sha256(manifestBytes))
                 .isEqualTo(RandomForestRiskSignalDetectorRuntime.EXPECTED_MANIFEST_SHA256);
+        assertThat(manifest.limitation())
+                .contains("deterministic serialization sentinel")
+                .contains("not an actual training timestamp");
         assertThat(new RandomForestRiskSignalDetectorRuntime().load())
                 .isInstanceOf(RandomForestRiskSignalDetectorAdapter.class);
     }

@@ -44,6 +44,9 @@ final class SyntheticRandomForestModelTrainer {
     static final int MAX_DEPTH = 6;
     static final double FEATURE_SUBSAMPLING = 0.70;
     private static final OffsetDateTime DATASET_CREATED_AT = OffsetDateTime.parse("2026-09-04T00:00:00Z");
+    private static final String LIMITATION = "hand-assigned synthetic labels separable by construction; "
+            + "embedded Tribuo trained-at is a deterministic serialization sentinel, not an actual training timestamp; "
+            + "no production AML accuracy claim";
 
     private SyntheticRandomForestModelTrainer() {}
 
@@ -93,7 +96,7 @@ final class SyntheticRandomForestModelTrainer {
                             RandomForestRiskSignalDetectorAdapter.ELEVATED_LABEL),
                     LABEL_DEFINITION_IDENTITY,
                     "unweighted forest vote share for REVIEW_ELEVATED in [0,1]",
-                    "hand-assigned synthetic labels separable by construction; no production AML accuracy claim"));
+                    LIMITATION));
         } catch (IOException exception) {
             throw new IllegalStateException("could not serialize trained random-forest model", exception);
         }
@@ -154,7 +157,7 @@ final class SyntheticRandomForestModelTrainer {
             String value = simple.getIsReference()
                     ? canonicalNames.getOrDefault(simple.getValue(), simple.getValue())
                     : switch (simple.getKey()) {
-                case "trained-at" -> "2026-09-04T00:00Z";
+                case "trained-at" -> DATASET_CREATED_AT.toString();
                 case "java-version" -> "canonical-jdk-21";
                 case "os-name" -> "canonical-os";
                 case "os-arch" -> "canonical-arch";
