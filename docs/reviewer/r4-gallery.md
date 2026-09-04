@@ -33,7 +33,7 @@ The repository-owned launcher makes the Stage-3 choice explicit and produces a r
 OPENAI_API_KEY=... ./scripts/r4-variant-up.sh external 8087 openai
 ```
 
-`./scripts/r4-gallery-up.sh` starts the baseline and adds the external variant only when `OPENAI_API_KEY` is deliberately present. `local` is a reserved backend identifier and fails closed until #251 supplies the adapter.
+`./scripts/r4-gallery-up.sh` starts the baseline and adds the external variant only when `OPENAI_API_KEY` is deliberately present. When the key is absent, it also stops any previously launched external project before reporting the credential-free gallery. `local` is a reserved backend identifier and fails closed until #251 supplies the adapter.
 
 Bayesian variant on the adjacent port:
 

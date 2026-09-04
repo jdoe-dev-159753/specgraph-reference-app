@@ -94,6 +94,9 @@ jobs:
           docker compose config --quiet
           docker compose -f compose.oci.yaml config --quiet
 
+      - name: VFY-CONFIDENTIALITY-001 + VFY-FAILURE-PATHS-001 - Verify R4 gallery lifecycle scripts
+        run: bash scripts/test-r4-gallery.sh
+
   verify:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.compatibility == true }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]

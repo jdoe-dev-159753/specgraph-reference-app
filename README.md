@@ -173,7 +173,7 @@ OpenAI is an explicit opt-in using the same application artifact. A credential c
 OPENAI_API_KEY=... ./scripts/r4-variant-up.sh external 8087 openai
 ```
 
-`./scripts/r4-gallery-up.sh` starts the deterministic `8084` baseline and adds the `8087` OpenAI variant only when `OPENAI_API_KEY` is present. Distinct Compose project names isolate each variant's network and PostgreSQL state. Inspect the declared variants with `./scripts/r4-gallery-manifest.sh`, and stop them with `./scripts/r4-gallery-down.sh`.
+`./scripts/r4-gallery-up.sh` starts the deterministic `8084` baseline and adds the `8087` OpenAI variant only when `OPENAI_API_KEY` is present. Without that key it stops any previously launched external project, so the running gallery matches the credential-free manifest. Distinct Compose project names isolate each variant's network and PostgreSQL state. Inspect the declared variants with `./scripts/r4-gallery-manifest.sh`, and stop them with `./scripts/r4-gallery-down.sh`.
 
 `specgraph.analysis.backend` is the authoritative typed selector (`deterministic | openai | local`), projected from `SPECGRAPH_ANALYSIS_BACKEND`; `deterministic` is the no-credential default. `local` is reserved and fails closed until the local adapter owned by #251 is implemented. Unknown values also fail during configuration binding.
 Run the accepted frozen R2 source checkpoint instead of rebuilding the current R3 checkout under the R2 service name:

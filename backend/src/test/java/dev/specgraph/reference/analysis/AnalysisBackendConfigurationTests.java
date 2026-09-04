@@ -35,4 +35,32 @@ final class AnalysisBackendConfigurationTests {
                             .hasStackTraceContaining("Analysis backend LOCAL is not available");
                 });
     }
+
+    @Test
+    void externallyEnablingOpenAiCannotOverrideDeterministicBackendSelection() {
+        contextRunner
+                .withPropertyValues(
+                        "specgraph.analysis.backend=deterministic",
+                        "spring.ai.model.chat=openai")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("spring.ai.model.chat must match")
+                            .hasStackTraceContaining("expected deterministic, got openai");
+                });
+    }
+
+    @Test
+    void externallyDisablingChatCannotOverrideOpenAiBackendSelection() {
+        contextRunner
+                .withPropertyValues(
+                        "specgraph.analysis.backend=openai",
+                        "spring.ai.model.chat=none")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("spring.ai.model.chat must match")
+                            .hasStackTraceContaining("expected openai, got none");
+                });
+    }
 }

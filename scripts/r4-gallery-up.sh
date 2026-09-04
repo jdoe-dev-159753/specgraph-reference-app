@@ -9,7 +9,8 @@ bash "${script_dir}/r4-variant-up.sh" baseline 8084 deterministic
 if [[ -n "${OPENAI_API_KEY:-}" ]]; then
   bash "${script_dir}/r4-variant-up.sh" external 8087 openai
 else
-  echo "OPENAI_API_KEY is not set; skipping the optional external R4 variant." >&2
+  bash "${script_dir}/r4-variant-down.sh" external
+  echo "OPENAI_API_KEY is not set; the optional external R4 variant is stopped." >&2
 fi
 
 printf '\nR4 gallery manifest\n'
