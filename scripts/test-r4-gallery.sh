@@ -44,6 +44,22 @@ if [[ "$*" == *"inspect --format {{if .State.Health}}{{.State.Health.Status}}{{e
   printf '%s\n' "${R4_TEST_EXTERNAL_HEALTH:-healthy}"
   exit 0
 fi
+if [[ "$*" == *"inspect --format {{range .Config.Env}}{{println .}}{{end}} baseline-container"* ]]; then
+  printf 'SPECGRAPH_ANALYSIS_BACKEND=%s\n' "${R4_TEST_BASELINE_BACKEND:-deterministic}"
+  exit 0
+fi
+if [[ "$*" == *"inspect --format {{range .Config.Env}}{{println .}}{{end}} external-container"* ]]; then
+  printf 'SPECGRAPH_ANALYSIS_BACKEND=%s\n' "${R4_TEST_EXTERNAL_BACKEND:-openai}"
+  exit 0
+fi
+if [[ "$*" == *"port baseline-container 8080/tcp"* ]]; then
+  printf '0.0.0.0:%s\n' "${R4_TEST_BASELINE_PORT:-8084}"
+  exit 0
+fi
+if [[ "$*" == *"port external-container 8080/tcp"* ]]; then
+  printf '0.0.0.0:%s\n' "${R4_TEST_EXTERNAL_PORT:-8087}"
+  exit 0
+fi
 if [[ "${R4_TEST_FAIL_BASELINE:-false}" == "true" && "$*" == *"specgraph-r4-baseline"* && "$*" == *" up "* ]]; then
   exit 99
 fi
@@ -110,10 +126,13 @@ PATH="${temp_dir}/bin:${PATH}" \
 R4_TEST_DOCKER_LOG="${docker_log}" \
 R4_TEST_BASELINE_CONTAINER=baseline-container \
 R4_TEST_EXTERNAL_CONTAINER=external-container \
+R4_TEST_EXTERNAL_PORT=9097 \
 env -u OPENAI_API_KEY bash "${script_dir}/r4-gallery-manifest.sh" \
   > "${temp_dir}/running-manifest"
 grep -Fq "composeProject=specgraph-r4-baseline" "${temp_dir}/running-manifest"
 grep -Fq "composeProject=specgraph-r4-external" "${temp_dir}/running-manifest"
+grep -Fq "url=http://localhost:9097/" "${temp_dir}/running-manifest"
+grep -Fq "stage3Backend=openai" "${temp_dir}/running-manifest"
 if [[ "$(grep -Fc 'runtimeState=healthy' "${temp_dir}/running-manifest")" != "2" ]]; then
   echo "standalone manifest did not report both running variants from Compose state" >&2
   exit 1
