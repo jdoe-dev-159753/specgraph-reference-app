@@ -60,13 +60,14 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
     }
 
     private static boolean isNetworkLocal(String host) {
-        String value = host.toLowerCase(Locale.ROOT);
+        String value = host;
         if (value.startsWith("[") && value.endsWith("]")) {
             value = value.substring(1, value.length() - 1);
         }
         if (value.contains(":")) {
             return isLocalIpv6(value);
         }
+        value = value.toLowerCase(Locale.ROOT);
         if (!value.matches("(?:\\d{1,3}\\.){3}\\d{1,3}")) {
             return false;
         }
@@ -101,11 +102,24 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
 
     private static boolean isLocalIpv6(String value) {
         try {
-            InetAddress address = InetAddress.getByName(value);
+            String decoded = decodeIpv6ZoneSeparator(value);
+            int zoneSeparator = decoded.indexOf('%');
+            if (zoneSeparator == decoded.length() - 1) {
+                return false;
+            }
+            String addressLiteral = zoneSeparator < 0 ? decoded : decoded.substring(0, zoneSeparator);
+            InetAddress address = InetAddress.getByName(addressLiteral);
             return address instanceof Inet6Address && isLocalAddress(address);
         } catch (UnknownHostException exception) {
             return false;
         }
     }
 
+    private static String decodeIpv6ZoneSeparator(String value) {
+        int encodedSeparator = value.indexOf("%25");
+        if (encodedSeparator < 0) {
+            return value;
+        }
+        return value.substring(0, encodedSeparator) + '%' + value.substring(encodedSeparator + 3);
+    }
 }
