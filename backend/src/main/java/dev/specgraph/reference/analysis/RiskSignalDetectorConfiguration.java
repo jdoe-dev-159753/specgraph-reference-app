@@ -1,7 +1,9 @@
 package dev.specgraph.reference.analysis;
 
+import dev.specgraph.reference.analysis.randomforest.RandomForestRiskSignalDetectorRuntime;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.function.Supplier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,11 +20,14 @@ class RiskSignalDetectorConfiguration {
             NoOpRiskSignalDetectorAdapter noOp,
             BayesianSequentialRiskSignalDetectorAdapter bayesian,
             FuzzyRiskSignalDetectorAdapter fuzzy) {
-        EnumMap<RiskSignalDetectorId, RiskSignalDetectorPort> registry =
+        EnumMap<RiskSignalDetectorId, Supplier<? extends RiskSignalDetectorPort>> registry =
                 new EnumMap<>(RiskSignalDetectorId.class);
-        registry.put(RiskSignalDetectorId.NO_OP, noOp);
-        registry.put(RiskSignalDetectorId.BAYESIAN, bayesian);
-        registry.put(RiskSignalDetectorId.FUZZY, fuzzy);
+        registry.put(RiskSignalDetectorId.NO_OP, () -> noOp);
+        registry.put(RiskSignalDetectorId.BAYESIAN, () -> bayesian);
+        registry.put(RiskSignalDetectorId.FUZZY, () -> fuzzy);
+        RandomForestRiskSignalDetectorRuntime randomForestRuntime =
+                new RandomForestRiskSignalDetectorRuntime();
+        registry.put(RiskSignalDetectorId.RANDOM_FOREST, randomForestRuntime::load);
         return new RiskSignalDetectorFactory(registry);
     }
 
