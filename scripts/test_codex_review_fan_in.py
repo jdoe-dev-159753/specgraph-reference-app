@@ -94,33 +94,32 @@ class GateTests(unittest.TestCase):
                     {
                         "id": 2, "name": "application-ci", "event": "workflow_dispatch",
                         "status": "completed", "conclusion": "success",
+                        "jobs": [{"name": "fast-verify", "conclusion": "success"}],
                     },
                 ],
             ),
         )
 
-    def test_plantuml_recovery_requires_successful_verify_job(self):
-        failed_pr = {
-            "id": 1, "name": "plantuml-diagrams", "event": "pull_request",
-            "status": "completed", "conclusion": "failure",
-        }
-        regeneration = {
-            "id": 2, "name": "plantuml-diagrams", "event": "workflow_dispatch",
-            "status": "completed", "conclusion": "success",
-            "jobs": [{"name": "regenerate", "conclusion": "success"}],
-        }
-        verification = {
-            **regeneration,
-            "jobs": [{"name": "verify", "conclusion": "success"}],
-        }
-        self.assertEqual(
-            ("blocked", ["plantuml-diagrams"]),
-            fan_in.gate_state({"plantuml-diagrams"}, [failed_pr, regeneration]),
-        )
-        self.assertEqual(
-            ("ready", []),
-            fan_in.gate_state({"plantuml-diagrams"}, [failed_pr, verification]),
-        )
+    def test_recovery_requires_each_workflow_verification_job(self):
+        for name, required_job in fan_in.RECOVERY_JOBS.items():
+            failed_pr = {
+                "id": 1, "name": name, "event": "pull_request",
+                "status": "completed", "conclusion": "failure",
+            }
+            recovery = {
+                "id": 2, "name": name, "event": "workflow_dispatch",
+                "status": "completed", "conclusion": "success",
+                "jobs": [{"name": "non-verifying-job", "conclusion": "success"}],
+            }
+            with self.subTest(workflow=name, recovery="non-verifying"):
+                self.assertEqual(
+                    ("blocked", [name]), fan_in.gate_state({name}, [failed_pr, recovery])
+                )
+            recovery["jobs"] = [{"name": required_job, "conclusion": "success"}]
+            with self.subTest(workflow=name, recovery="verified"):
+                self.assertEqual(
+                    ("ready", []), fan_in.gate_state({name}, [failed_pr, recovery])
+                )
 
 
 class ReviewRequestTests(unittest.TestCase):
