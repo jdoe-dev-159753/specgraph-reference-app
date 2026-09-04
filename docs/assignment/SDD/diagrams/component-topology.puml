@@ -25,7 +25,7 @@ package "Spring Boot modular monolith" as Backend {
   package "customer module" as CustomerModule {
     component "Customer Review HTTP Adapter\nADP-CUST-HTTP-001\n<<GoF Adapter>>" as CustomerHttp
     component "Customer Application\nMOD-CUSTOMER-001" as Customer
-    interface "CustomerReviewQueryPort\nPRT-CUSTOMER-REVIEW-001\n<<Bounded query seam>>" as CustomerReviewPort
+    interface "CustomerReviewQueryPort\nPRT-CUSTOMER-REVIEW-QUERY-001\n<<Bounded query seam>>" as CustomerReviewPort
     interface "CustomerActivityPort\nPRT-ACTIVITY-001\n<<Strategy seam>>" as ActivityPort
   }
 
@@ -37,6 +37,7 @@ package "Spring Boot modular monolith" as Backend {
     component "Analysis HTTP Adapter\nADP-ANALYSIS-HTTP-001\nR3+\n<<GoF Adapter>>" as AnalysisHttp
     component "Analysis Application\nMOD-ANALYSIS-001\napplication-service facade" as Analysis
     component "Analysis Context Builder\napplication-owned bounded model projection\nexact totals + selected details" as ContextBuilder
+    component "Analysis Backend Factory\nAnalysisBackendId\nDETERMINISTIC | OPENAI | LOCAL\n<<GoF Factory/registry>>" as BackendFactory
     interface "RiskSignalDetectorPort\nPRT-DETECTOR-001\n<<Strategy seam>>" as DetectorPort
     component "Detector Selection\nRiskSignalDetectorFactory\nspecgraph.analysis.detectors\n<<Factory / Registry>>" as DetectorFactory
     component "Composite Risk Signal Detector\nordered bounded children\n<<GoF Composite>>" as DetectorComposite
@@ -56,8 +57,9 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   component "Fuzzy Risk Signal Detector\nADP-DETECTOR-FUZZY-001\nselection ID: FUZZY\n<<GoF Adapter>>" as DetectorFuzzy
   component "Static Policy\nADP-POL-STATIC-001\nR3/default\n<<GoF Adapter>>" as PolicyStatic
   component "pgvector Policy\nADP-POL-PGV-001\nR4\n<<GoF Adapter>>" as PolicyPg
-  component "Deterministic Model\nADP-MODEL-DET-001\nR0/R3+\n<<GoF Adapter>>" as ModelDet
-  component "Spring AI Model\nADP-MODEL-AI-001\nR4 optional\n<<GoF Adapter>>" as ModelAi
+  component "Deterministic Model\nADP-MODEL-DET-001\ndefault / no credential\n<<GoF Adapter>>" as ModelDet
+  component "Spring AI OpenAI Model\nADP-MODEL-AI-001\nbackend=openai\n<<GoF Adapter>>" as ModelAi
+  component "Local model adapter\nreserved by backend=local\nnot implemented until #251" as ModelLocal
   component "Spring JDBC Analysis History\nADP-HIST-JDBC-001\nR3+\n<<GoF Adapter>>" as HistoryJdbc
 
   OperatorDet -[hidden]right-> OperatorSecurity
@@ -70,7 +72,8 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   PolicyStatic -[hidden]right-> PolicyPg
   PolicyPg -[hidden]down-> ModelDet
   ModelDet -[hidden]right-> ModelAi
-  ModelAi -[hidden]right-> HistoryJdbc
+  ModelAi -[hidden]right-> ModelLocal
+  ModelLocal -[hidden]right-> HistoryJdbc
 }
 
 component "PostgreSQL + pgvector\nINF-DB-001\nR2+" as Db <<database>>
@@ -118,14 +121,16 @@ DetectorComposite --> DetectorBayes : ordered child
 DetectorComposite --> DetectorFuzzy : ordered child
 PolicyPort --> PolicyStatic
 PolicyPort ..> PolicyPg
-ModelPort --> ModelDet
-ModelPort ..> ModelAi
+BackendFactory --> ModelPort : publish selected @Primary strategy
+BackendFactory --> ModelDet : DETERMINISTIC
+BackendFactory ..> ModelAi : OPENAI, lazy/conditional
+BackendFactory ..> ModelLocal : LOCAL reserved / fail closed
 HistoryPort ..> HistoryJdbc
 
 ActivityJdbc --> Db : Spring JDBC
 PolicyPg --> Db : pgvector retrieval adapter
 HistoryJdbc --> Db : Spring JDBC
-ModelAi ..> Provider : HTTPS only when explicitly selected
+ModelAi ..> Provider : HTTPS only when backend=openai
 
 note bottom of Backend
   The four packages are the Spring Modulith application modules. Spring Security remains an
@@ -138,8 +143,11 @@ note bottom of Backend
   CustomerReviewQueryPort bounds the operator surface independently of the complete
   CustomerActivityPort snapshot used by analysis. AnalysisContextBuilder is an application-layer
   projection: Stage 1 and Stage 2 retain complete CustomerSnapshot semantics, then exact full-history
-  totals are separated from bounded model-facing details immediately before AnalysisModelPort. GoF
+  totals are separated from bounded model-facing details immediately before AnalysisModelPort.
+  AnalysisBackendId is the independent Stage-3 selection dimension; provider credentials configure
+  the OpenAI leaf but never select it, and LOCAL fails closed until #251 supplies its adapter. GoF
   Adapter labels identify boundary translation roles; Strategy seams identify interchangeable
-  implementations; the analysis application service acts as a Facade over orchestration.
+  implementations; the two factory/registries resolve their respective stage topology; the analysis
+  application service remains the Facade over orchestration.
 end note
 @enduml

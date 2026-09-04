@@ -3,11 +3,9 @@ package dev.specgraph.reference.analysis;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("!openai-model")
 class DeterministicAnalysisAdapter implements AnalysisModelPort {
     private static final String BACKEND_IDENTITY = "deterministic";
     private static final String MODEL_IDENTITY = "r3-offline-baseline-v1";

@@ -29,6 +29,7 @@ jobs:
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       R4_PROFILES: ${{ matrix.profiles }}
+      SPECGRAPH_ANALYSIS_BACKEND: deterministic
       COMPOSE_PROJECT_NAME: specgraph-r4-gallery-${{ matrix.variant }}-${{ github.run_id }}
       EVIDENCE_NAME: r4-${{ matrix.variant }}
       EXPECT_DETECTOR: ${{ matrix.expected_detector }}
@@ -58,8 +59,9 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           docker compose -f compose.r4.yaml config --quiet
           docker compose -f compose.r4.yaml config | grep -q "SPRING_PROFILES_ACTIVE: ${R4_PROFILES}"
-          printf 'variant=%s port=%s profiles=%s expectedDetector=%s\n' \
-            '${{ matrix.variant }}' "$R4_PORT" "$R4_PROFILES" "$EXPECT_DETECTOR"
+          docker compose -f compose.r4.yaml config | grep -q "SPECGRAPH_ANALYSIS_BACKEND: deterministic"
+          printf 'variant=%s port=%s profiles=%s backend=%s expectedDetector=%s\n' \
+            '${{ matrix.variant }}' "$R4_PORT" "$R4_PROFILES" "$SPECGRAPH_ANALYSIS_BACKEND" "$EXPECT_DETECTOR"
 
       - name: Reuse or build immutable exact-head application image
         run: |
@@ -103,7 +105,7 @@ jobs:
             "expectedDetector=$EXPECT_DETECTOR" \
             "applicationImage=$APP_R4_IMAGE" \
             "stage2=pgvector+all-MiniLM-L6-v2" \
-            "stage3=deterministic" \
+            "stage3Backend=$SPECGRAPH_ANALYSIS_BACKEND" \
             > "e2e/reviewer-evidence/${{ matrix.variant }}/provenance.txt"
 
       - name: Upload R4 gallery evidence

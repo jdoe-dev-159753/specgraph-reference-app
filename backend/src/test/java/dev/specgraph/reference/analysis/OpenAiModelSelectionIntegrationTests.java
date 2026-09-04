@@ -9,21 +9,23 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.env.Environment;
-import org.springframework.test.context.ActiveProfiles;
 
 @Tag("VFY-CONFIDENTIALITY-001")
 @Tag("VFY-ANALYSIS-CONTRACT-001")
-@ActiveProfiles("openai-model")
 @SpringBootTest(
         classes = ReferenceApplication.class,
-        properties = "spring.ai.openai.api-key=synthetic-test-key-never-used")
+        properties = {
+            "specgraph.analysis.backend=openai",
+            "spring.ai.openai.api-key=synthetic-test-key-never-used"
+        })
 final class OpenAiModelSelectionIntegrationTests extends PostgresIntegrationTestSupport {
     @Autowired AnalysisModelPort analysisModel;
     @Autowired Environment environment;
 
     @Test
-    void explicitProfileSelectsOnlyTheOpenAiAnalysisAdapterAndLeavesOtherOpenAiFamiliesOff() {
+    void typedBackendSelectionSelectsOpenAiAndProjectsOnlyTheChatModelFamily() {
         assertThat(analysisModel).isInstanceOf(SpringAiAnalysisAdapter.class);
+        assertThat(environment.getProperty("specgraph.analysis.backend")).isEqualTo("openai");
         assertThat(environment.getProperty("spring.ai.model.chat")).isEqualTo("openai");
         assertThat(environment.getProperty("spring.ai.model.embedding")).isEqualTo("none");
         assertThat(environment.getProperty("spring.ai.model.image")).isEqualTo("none");

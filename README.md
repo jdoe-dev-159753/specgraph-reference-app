@@ -16,6 +16,8 @@
 
 The application lets a Customer Care operator inspect deterministic CARD, PAYMENT and CRYPTO activity plus persisted source-shaped risk evidence. R2 replaces the synthetic activity adapter with PostgreSQL/Flyway persistence behind the same project-owned `CustomerActivityPort`. R3 adds structured analysis and persistent reviewable history behind provider-neutral ports. R4 adds multi-operator authentication, real policy retrieval through PostgreSQL/pgvector with local `all-MiniLM-L6-v2` embeddings, explicit detector evidence, grounding validation and interchangeable Stage-3 synthesis behind `AnalysisModelPort`.
 
+The same R4 application artifact selects its Stage-3 backend explicitly at process startup. Deterministic synthesis is the no-credential default; OpenAI is deliberate opt-in, and the local identifier remains reserved until #251 supplies its adapter.
+
 The runtime is a **modular monolith with hexagonal / ports-and-adapters boundaries**. Vendor and algorithm names are adapter identities, not architecture-layer names.
 
 ## Current delivery status
@@ -28,11 +30,12 @@ The runtime is a **modular monolith with hexagonal / ports-and-adapters boundari
 
 ## Reviewer at a glance
 
-The mature analysis path is intentionally split by function:
+The mature analysis path is intentionally split by function and authority:
 
-1. **Stage 1: primitive signal analysis** behind `RiskSignalDetectorPort`, currently no-op by default or Bayesian when selected;
-2. **Stage 2: evidence grounding and fusion** through `PolicyKnowledgePort`, real pgvector retrieval and local MiniLM embeddings, assembled into the application-owned `AnalysisEvidenceEnvelope`;
-3. **Stage 3: final advisory synthesis** behind `AnalysisModelPort`, deterministic by default and externally substitutable only through deliberate opt-in configuration.
+1. **Stage 1: primitive signal analysis** receives the complete `CustomerSnapshot` behind `RiskSignalDetectorPort`, implemented as no-op by default with selectable Bayesian beta-binomial and fuzzy detector adapters; the reviewer gallery below currently proves the baseline and Bayesian variants;
+2. **Stage 2: evidence grounding and retrieval** receives the same complete snapshot through `PolicyKnowledgePort`, real pgvector retrieval and local MiniLM embeddings;
+3. **Model-context boundary:** `AnalysisContextBuilder` retains exact full-history totals while selecting bounded, citable source, detector and policy details into `AnalysisEvidenceEnvelope`;
+4. **Stage 3: final advisory synthesis** consumes only that bounded envelope behind `AnalysisModelPort`, selected through the typed backend dimension with deterministic default and deliberate OpenAI opt-in.
 
 Source `risk_assessments`, detector-derived `RiskSignalEvidence`, retrieved `PolicyEvidence` and generated analysis remain separate semantic authorities throughout the pipeline.
 
@@ -115,7 +118,7 @@ R4_PORT=8085 R4_PROFILES=r4,bayesian-detector \
   docker compose -p specgraph-r4-bayesian -f compose.r4.yaml down -v
 ```
 
-`R4_PROFILES` is a deliberate transitional demo seam. [#163](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/163) owns the final typed process-level detector/backend selection factory. [#224](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/224) owns Composite detector composition and [#254](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/254) owns optional calibrated late fusion/ensemble evidence.
+`R4_PROFILES` remains the detector-side demo seam in this stack. [#163](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/163) owns the independent typed Stage-3 backend selector and factory. [#224](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/224) owns Composite detector composition and [#254](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/254) owns optional calibrated late fusion/ensemble evidence.
 
 A more detailed copy/paste gallery lives in [docs/reviewer/r4-gallery.md](docs/reviewer/r4-gallery.md).
 
@@ -190,12 +193,21 @@ Then open:
 R3: http://localhost:8083/
 ```
 
-Run R4 baseline:
+On the Linux Docker host, launch the current R4 baseline with deterministic Stage 3 and isolated PostgreSQL state:
 
 ```bash
-docker compose -p specgraph-r4-baseline -f compose.r4.yaml up -d --build --wait
+./scripts/r4-variant-up.sh baseline 8084 deterministic
 ```
 
+OpenAI is an explicit opt-in using the same application artifact. A credential configures that adapter but never selects it implicitly:
+
+```bash
+OPENAI_API_KEY=... ./scripts/r4-variant-up.sh external 8087 openai
+```
+
+`./scripts/r4-gallery-up.sh` starts the deterministic `8084` baseline and adds the `8087` OpenAI variant only when `OPENAI_API_KEY` is present. `compose.r4.yaml` intentionally ignores that conventional ambient variable and accepts the credential only through the launcher-owned `SPECGRAPH_OPENAI_API_KEY` projection; the launcher clears the ambient key and populates the projection only for `backend=openai`. A key supplied for the external variant therefore never reaches the deterministic container, including through the raw baseline/Bayesian Compose commands above. Without a key the gallery first stops any previously launched external project, so the opt-out remains effective even if baseline startup later fails. Distinct Compose project names isolate each variant's network and PostgreSQL state. Inspect the declared variants with `./scripts/r4-gallery-manifest.sh`, and stop them with `./scripts/r4-gallery-down.sh`; shutdown attempts both variants and reports failure if either teardown fails.
+
+`specgraph.analysis.backend` is the authoritative typed selector (`deterministic | openai | local`), projected from `SPECGRAPH_ANALYSIS_BACKEND`; `deterministic` is the no-credential default. `local` is reserved and fails closed until the local adapter owned by #251 is implemented. Unknown values also fail during configuration binding.
 Run the accepted frozen R2 source checkpoint instead of rebuilding the current R3 checkout under the R2 service name:
 
 ```bash

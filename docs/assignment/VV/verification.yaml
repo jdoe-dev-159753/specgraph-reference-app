@@ -56,8 +56,8 @@ obligations:
   VFY-CONFIDENTIALITY-001:
     covers: [CON-AI-002]
     acceptance: []
-    methods: [configuration_check, integration_negative]
-    design: [CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001]
+    methods: [configuration_check, integration_negative, backend_selection_integration, isolated_compose_variants]
+    design: [CTR-ANALYSIS-EVIDENCE-ENVELOPE-001, CTR-ANALYSIS-BACKEND-ID-001, CMP-ANALYSIS-BACKEND-FACTORY-001, PRT-MODEL-001, ADP-MODEL-DET-001, ADP-MODEL-AI-001, INF-COMPOSE-001]
     executable_evidence: discovered_by_markers
   VFY-DELIVERY-001:
     covers: [NFR-REP-001]

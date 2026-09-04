@@ -14,6 +14,9 @@ on:
       - 'frontend/**'
       - 'compose.yaml'
       - 'compose.oci.yaml'
+      - 'compose.r4.yaml'
+      - 'scripts/r4-*.sh'
+      - 'scripts/test-r4-gallery.sh'
       - 'scripts/validate_design_map.py'
       - '.github/workflows/application-ci.yml'
   push:
@@ -23,6 +26,9 @@ on:
       - 'frontend/**'
       - 'compose.yaml'
       - 'compose.oci.yaml'
+      - 'compose.r4.yaml'
+      - 'scripts/r4-*.sh'
+      - 'scripts/test-r4-gallery.sh'
       - 'scripts/validate_design_map.py'
       - '.github/workflows/application-ci.yml'
 
@@ -93,6 +99,15 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f compose.oci.yaml config --quiet
+          docker compose -f compose.r4.yaml config --quiet
+          if OPENAI_API_KEY=must-not-enter-deterministic-r4 \
+              docker compose -f compose.r4.yaml config | grep -Fq must-not-enter-deterministic-r4; then
+            echo 'Raw deterministic R4 Compose configuration leaked the ambient OpenAI credential.' >&2
+            exit 1
+          fi
+
+      - name: VFY-CONFIDENTIALITY-001 + VFY-FAILURE-PATHS-001 - Verify R4 gallery lifecycle scripts
+        run: bash scripts/test-r4-gallery.sh
 
   verify:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.compatibility == true }}
@@ -252,6 +267,12 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f compose.oci.yaml config --quiet
+          docker compose -f compose.r4.yaml config --quiet
+          if OPENAI_API_KEY=must-not-enter-deterministic-r4 \
+              docker compose -f compose.r4.yaml config | grep -Fq must-not-enter-deterministic-r4; then
+            echo 'Raw deterministic R4 Compose configuration leaked the ambient OpenAI credential.' >&2
+            exit 1
+          fi
 
       - name: Start archived R2 checkpoint for compatibility evidence
         run: docker compose up -d --no-build r2

@@ -10,13 +10,13 @@ Current executable source variants:
 | ---: | --- | --- | --- | --- | --- |
 | 8084 | R4 baseline | no-op | pgvector + local all-MiniLM-L6-v2 | deterministic | no |
 | 8085 | R4 Bayesian | Bayesian beta-binomial | pgvector + local all-MiniLM-L6-v2 | deterministic | no |
+| 8087 | R4 external, optional | configured detector | same RAG | OpenAI | yes, only with deliberate credential + backend selection |
 
 Reserved optional variants once their owners land:
 
 | Port | Ring | Stage 1 | Stage 2 | Stage 3 | Owner |
 | ---: | --- | --- | --- | --- | --- |
 | 8086 | R4 local | Bayesian / configured Composite+ensemble | same RAG | local LM Studio model | #251 |
-| 8087 | R4 external | Bayesian / configured Composite+ensemble | same RAG | OpenAI | #207, optional only |
 
 ## Linux commands on `watch-infra-01`
 
@@ -25,6 +25,15 @@ Baseline:
 ```bash
 docker compose -p specgraph-r4-baseline -f compose.r4.yaml up -d --build --wait
 ```
+
+The repository-owned launcher makes the Stage-3 choice explicit and produces a reviewer manifest:
+
+```bash
+./scripts/r4-variant-up.sh baseline 8084 deterministic
+OPENAI_API_KEY=... ./scripts/r4-variant-up.sh external 8087 openai
+```
+
+`./scripts/r4-gallery-up.sh` first stops any previously launched external project when `OPENAI_API_KEY` is absent, then starts the baseline and adds the external variant only when the key is deliberately present. The Compose definition ignores the conventional ambient variable and accepts only the launcher-owned `SPECGRAPH_OPENAI_API_KEY` projection. The launcher clears the ambient key for every Compose invocation and populates that projection only for OpenAI, so the raw deterministic commands above cannot inherit an exported provider credential. The opt-out therefore remains effective even if baseline startup fails. `./scripts/r4-gallery-down.sh` attempts both teardowns and returns nonzero if either fails. `local` is a reserved backend identifier and fails closed until #251 supplies the adapter.
 
 Bayesian variant on the adjacent port:
 
@@ -69,4 +78,4 @@ Each Compose project owns an isolated PostgreSQL/pgvector instance and analysis 
 
 Each successful variant uploads a separate `r4-gallery-<variant>-<sha>` artifact containing the screenshot and a small provenance manifest. Selected PNGs are then promoted unchanged into `docs/reviewer/screenshots/` for the README evidence gallery.
 
-The `R4_PROFILES` mechanism is explicitly transitional. #163 owns the final typed process-level detector/backend selection factory and will replace profile strings without changing this side-by-side operating model. #224/#254 own the later Composite detector topology and calibrated ensemble semantics.
+`R4_PROFILES` remains the detector-side selection seam in this stack. Stage 3 is independently selected through the application-owned `specgraph.analysis.backend` dimension (`SPECGRAPH_ANALYSIS_BACKEND` in Compose); provider credentials configure a leaf but never select it. #224/#254 own the later Composite detector topology and calibrated ensemble semantics, while #251 owns the reserved local Stage-3 adapter.

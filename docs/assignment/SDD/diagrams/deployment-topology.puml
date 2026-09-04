@@ -1,5 +1,5 @@
 @startuml
-title Figure 10 — UML Deployment diagram — packaged runtime and optional external nodes
+title Figure 10 — UML Deployment diagram — packaged runtime and selectable R4 Stage-3 backend
 top to bottom direction
 skinparam linetype polyline
 skinparam nodesep 45
@@ -15,8 +15,9 @@ node "Docker Compose / Linux host" as Host <<executionEnvironment>> {
       artifact "React static assets\nclasspath /static" as React
       artifact "Spring MVC /api/*" as Api
     }
-    artifact "Spring Boot executable JAR" as Jar
-    artifact "Offline adapters\nStaticPolicyAdapter +\nDeterministicAnalysisStub" as Offline
+    artifact "Spring Boot executable JAR\nsame artifact for each R4 variant" as Jar
+    artifact "Stage-3 selection\nspecgraph.analysis.backend\ndeterministic | openai | local(reserved)" as BackendSelection
+    artifact "Deterministic model adapter\ndefault / no credential" as Offline
   }
 
   node "database service / container\nR2+ when activated" as DB <<database>> {
@@ -24,20 +25,23 @@ node "Docker Compose / Linux host" as Host <<executionEnvironment>> {
   }
 }
 
-node "External AI provider\noptional later-ring adapter" as Provider <<external>>
+node "External AI provider\noptional backend=openai only" as Provider <<external>>
 
-Browser --> Tomcat : HTTP :8080\nhost-published application port
+Browser --> Tomcat : HTTP\nhost-published application port
 Tomcat --> React : static /
 Tomcat --> Api : in-process /api/*
 Jar --> Tomcat : packaged runtime
-Api --> DB : JDBC / PostgreSQL\nTCP 5432 private network when activated
-Api ..> Provider : HTTPS provider API\nonly when explicitly configured
-Api --> Offline : in-process mandatory baseline path
+Api --> DB : JDBC / PostgreSQL\nTCP 5432 private project network
+Jar --> BackendSelection : typed bootstrap configuration
+BackendSelection --> Offline : deterministic default
+BackendSelection ..> Provider : HTTPS only when backend=openai
 
 note bottom of Host
-  R0/R1 reviewer packaging exposes one application container and one browser-facing port.
-  React is compiled before runtime and served from the executable JAR by embedded Tomcat.
-  PostgreSQL and the external provider activate only in later rings when configured.
-  TLS termination, ingress, load balancing, and public DNS remain deployment-profile concerns.
+  R0-R3 retain their historical checkpoint ports. R4 uses the same application artifact with an
+  orthogonal Stage-3 backend selection. Repeating compose.r4.yaml with distinct Compose project
+  names creates isolated application/network/PostgreSQL state for side-by-side variants, e.g.
+  deterministic baseline on :8084 and optional OpenAI synthesis on :8087. These are R4 execution
+  variants, not new delivery rings. Provider credentials configure the OpenAI leaf but never
+  select it. backend=local is reserved by the typed contract and fails closed until #251 lands.
 end note
 @enduml
