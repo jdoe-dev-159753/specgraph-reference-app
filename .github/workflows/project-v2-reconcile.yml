@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   reconcile:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     steps:
       - uses: actions/checkout@v7
         with:
