@@ -68,14 +68,11 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
         if (value.startsWith("[") && value.endsWith("]")) {
             value = value.substring(1, value.length() - 1);
         }
-        if (value.equals("localhost") || value.endsWith(".local")) {
-            return resolvesOnlyToNetworkLocalAddresses(value, resolver);
-        }
         if (value.contains(":")) {
             return isLocalIpv6(value);
         }
         if (!value.matches("(?:\\d{1,3}\\.){3}\\d{1,3}")) {
-            return false;
+            return resolvesOnlyToNetworkLocalAddresses(value, resolver);
         }
         int[] octets = java.util.Arrays.stream(value.split("\\."))
                 .mapToInt(Integer::parseInt)

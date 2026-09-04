@@ -78,20 +78,20 @@ final class AnalysisBackendConfigurationTests {
     }
 
     @Test
-    void localHostnameMustResolveOnlyToPrivateAddresses() throws UnknownHostException {
+    void anyLocalHostnameMustResolveOnlyToPrivateAddresses() throws UnknownHostException {
         InetAddress privateAddress = InetAddress.getByAddress(new byte[] {(byte) 192, (byte) 168, 1, 10});
         InetAddress publicAddress = InetAddress.getByAddress(new byte[] {(byte) 203, 0, 113, 10});
 
         assertThat(LmStudioAnalysisProperties.isNetworkLocal(
-                        "lm-studio.local", ignored -> new InetAddress[] {privateAddress}))
+                        "lmstudio.internal", ignored -> new InetAddress[] {privateAddress}))
                 .isTrue();
         assertThat(LmStudioAnalysisProperties.isNetworkLocal(
-                        "lm-studio.local", ignored -> new InetAddress[] {privateAddress, publicAddress}))
+                        "lmstudio.internal", ignored -> new InetAddress[] {privateAddress, publicAddress}))
                 .isFalse();
-        assertThat(LmStudioAnalysisProperties.isNetworkLocal("lm-studio.local", ignored -> new InetAddress[0]))
+        assertThat(LmStudioAnalysisProperties.isNetworkLocal("lmstudio.internal", ignored -> new InetAddress[0]))
                 .isFalse();
         assertThat(LmStudioAnalysisProperties.isNetworkLocal(
-                        "lm-studio.local", ignored -> {
+                        "lmstudio.internal", ignored -> {
                             throw new UnknownHostException("unresolved test host");
                         }))
                 .isFalse();
