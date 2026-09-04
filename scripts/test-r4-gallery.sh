@@ -20,6 +20,30 @@ if [[ -n "${SPECGRAPH_OPENAI_API_KEY:-}" ]]; then
 fi
 printf 'ambient-credential=%s projected-credential=%s %s\n' \
   "${ambient_credential_state}" "${projected_credential_state}" "$*" >> "${R4_TEST_DOCKER_LOG}"
+if [[ "$*" == *"compose -p specgraph-r4-baseline"* && "$*" == *" ps -q --all r4"* ]]; then
+  printf '%s\n' "${R4_TEST_BASELINE_CONTAINER:-}"
+  exit 0
+fi
+if [[ "$*" == *"compose -p specgraph-r4-external"* && "$*" == *" ps -q --all r4"* ]]; then
+  printf '%s\n' "${R4_TEST_EXTERNAL_CONTAINER:-}"
+  exit 0
+fi
+if [[ "$*" == *"inspect --format {{.State.Status}} baseline-container"* ]]; then
+  printf '%s\n' "${R4_TEST_BASELINE_STATE:-running}"
+  exit 0
+fi
+if [[ "$*" == *"inspect --format {{.State.Status}} external-container"* ]]; then
+  printf '%s\n' "${R4_TEST_EXTERNAL_STATE:-running}"
+  exit 0
+fi
+if [[ "$*" == *"inspect --format {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} baseline-container"* ]]; then
+  printf '%s\n' "${R4_TEST_BASELINE_HEALTH:-healthy}"
+  exit 0
+fi
+if [[ "$*" == *"inspect --format {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} external-container"* ]]; then
+  printf '%s\n' "${R4_TEST_EXTERNAL_HEALTH:-healthy}"
+  exit 0
+fi
 if [[ "${R4_TEST_FAIL_BASELINE:-false}" == "true" && "$*" == *"specgraph-r4-baseline"* && "$*" == *" up "* ]]; then
   exit 99
 fi
@@ -80,6 +104,31 @@ if [[ "${external_up}" != "ambient-credential=absent projected-credential=presen
   echo "OpenAI variant did not receive its deliberate credential" >&2
   exit 1
 fi
+
+: > "${docker_log}"
+PATH="${temp_dir}/bin:${PATH}" \
+R4_TEST_DOCKER_LOG="${docker_log}" \
+R4_TEST_BASELINE_CONTAINER=baseline-container \
+R4_TEST_EXTERNAL_CONTAINER=external-container \
+env -u OPENAI_API_KEY bash "${script_dir}/r4-gallery-manifest.sh" \
+  > "${temp_dir}/running-manifest"
+grep -Fq "composeProject=specgraph-r4-baseline" "${temp_dir}/running-manifest"
+grep -Fq "composeProject=specgraph-r4-external" "${temp_dir}/running-manifest"
+if [[ "$(grep -Fc 'runtimeState=healthy' "${temp_dir}/running-manifest")" != "2" ]]; then
+  echo "standalone manifest did not report both running variants from Compose state" >&2
+  exit 1
+fi
+
+: > "${docker_log}"
+PATH="${temp_dir}/bin:${PATH}" \
+R4_TEST_DOCKER_LOG="${docker_log}" \
+R4_TEST_BASELINE_CONTAINER=baseline-container \
+R4_TEST_EXTERNAL_CONTAINER=external-container \
+R4_TEST_EXTERNAL_HEALTH=unhealthy \
+env -u OPENAI_API_KEY bash "${script_dir}/r4-gallery-manifest.sh" \
+  > "${temp_dir}/unhealthy-manifest"
+grep -A3 -F "composeProject=specgraph-r4-external" "${temp_dir}/unhealthy-manifest" \
+  | grep -Fq "healthState=unhealthy"
 
 : > "${docker_log}"
 if PATH="${temp_dir}/bin:${PATH}" \
