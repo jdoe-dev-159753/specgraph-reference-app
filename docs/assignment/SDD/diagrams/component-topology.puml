@@ -51,7 +51,7 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   component "Deterministic Operator Context\nADP-OPCTX-DET-001\nR3/default\n<<GoF Adapter>>" as OperatorDet
   component "Spring Security Operator Context\nADP-AUTH-SPRING-001\nR4 / r4-auth\n<<GoF Adapter>>" as OperatorSecurity
   component "Synthetic Activity\nADP-ACT-SYN-001\nR0/R1\n<<GoF Adapter>>" as ActivitySynthetic
-  component "Spring JDBC Activity\nADP-ACT-JDBC-001\nR2\n<<GoF Adapter>>" as ActivityJdbc
+  component "Hibernate/JPA Activity\nADP-ACT-JPA-001\nR2+ selected target\n<<GoF Adapter>>" as ActivityJpa
   component "No-op Risk Signal Detector\nADP-DETECTOR-NOOP-001\nselection ID: NO_OP\n<<GoF Adapter>>" as DetectorNoOp
   component "Bayesian Risk Signal Detector\nADP-DETECTOR-BAYES-001\nselection ID: BAYESIAN\n<<GoF Adapter>>" as DetectorBayes
   component "Fuzzy Risk Signal Detector\nADP-DETECTOR-FUZZY-001\nselection ID: FUZZY\n<<GoF Adapter>>" as DetectorFuzzy
@@ -60,12 +60,12 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   component "Deterministic Model\nADP-MODEL-DET-001\ndefault / no credential\n<<GoF Adapter>>" as ModelDet
   component "Spring AI OpenAI Model\nADP-MODEL-AI-001\nbackend=openai\n<<GoF Adapter>>" as ModelAi
   component "Local model adapter\nreserved by backend=local\nnot implemented until #251" as ModelLocal
-  component "Spring JDBC Analysis History\nADP-HIST-JDBC-001\nR3+\n<<GoF Adapter>>" as HistoryJdbc
+  component "Hibernate/JPA Analysis History\nADP-HIST-JPA-001\nR3+ selected target\n<<GoF Adapter>>" as HistoryJpa
 
   OperatorDet -[hidden]right-> OperatorSecurity
   OperatorSecurity -[hidden]right-> ActivitySynthetic
-  ActivitySynthetic -[hidden]right-> ActivityJdbc
-  ActivityJdbc -[hidden]down-> DetectorNoOp
+  ActivitySynthetic -[hidden]right-> ActivityJpa
+  ActivityJpa -[hidden]down-> DetectorNoOp
   DetectorNoOp -[hidden]right-> DetectorBayes
   DetectorBayes -[hidden]right-> DetectorFuzzy
   DetectorFuzzy -[hidden]right-> PolicyStatic
@@ -73,7 +73,7 @@ package "Replaceable boundary/outbound adapters" as Adapters {
   PolicyPg -[hidden]down-> ModelDet
   ModelDet -[hidden]right-> ModelAi
   ModelAi -[hidden]right-> ModelLocal
-  ModelLocal -[hidden]right-> HistoryJdbc
+  ModelLocal -[hidden]right-> HistoryJpa
 }
 
 component "PostgreSQL + pgvector\nINF-DB-001\nR2+" as Db <<database>>
@@ -106,9 +106,9 @@ ContextBuilder --> ModelPort : bounded AnalysisEvidenceEnvelope
 Analysis --> HistoryPort
 
 ActivityPort --> ActivitySynthetic
-ActivityPort ..> ActivityJdbc
+ActivityPort ..> ActivityJpa
 CustomerReviewPort --> ActivitySynthetic
-CustomerReviewPort ..> ActivityJdbc
+CustomerReviewPort ..> ActivityJpa
 DetectorNoOp ..> DetectorPort : implements
 DetectorBayes ..> DetectorPort : implements
 DetectorFuzzy ..> DetectorPort : implements
@@ -125,11 +125,11 @@ BackendFactory --> ModelPort : publish selected @Primary strategy
 BackendFactory --> ModelDet : DETERMINISTIC
 BackendFactory ..> ModelAi : OPENAI, lazy/conditional
 BackendFactory ..> ModelLocal : LOCAL reserved / fail closed
-HistoryPort ..> HistoryJdbc
+HistoryPort ..> HistoryJpa
 
-ActivityJdbc --> Db : Spring JDBC
-PolicyPg --> Db : pgvector retrieval adapter
-HistoryJdbc --> Db : Spring JDBC
+ActivityJpa --> Db : Hibernate/JPA\nFlyway-owned schema
+PolicyPg --> Db : separate pgvector retrieval adapter
+HistoryJpa --> Db : Hibernate/JPA\nFlyway-owned schema
 ModelAi ..> Provider : HTTPS only when backend=openai
 
 note bottom of Backend
@@ -148,6 +148,8 @@ note bottom of Backend
   the OpenAI leaf but never select it, and LOCAL fails closed until #251 supplies its adapter. GoF
   Adapter labels identify boundary translation roles; Strategy seams identify interchangeable
   implementations; the two factory/registries resolve their respective stage topology; the analysis
-  application service remains the Facade over orchestration.
+  application service remains the Facade over orchestration. Hibernate/JPA is confined to the two
+  relational adapters, validates but never owns the Flyway schema, and preserves exact BigDecimal
+  mappings. The pgvector policy adapter remains separate behind PolicyKnowledgePort.
 end note
 @enduml

@@ -18,7 +18,7 @@ The architecture separates four concerns:
 1. **Operator interaction:** React exposes customer review and analysis/history workflows.
 2. **Inbound application boundary:** module-owned Spring MVC adapters expose coarse-grained use cases.
 3. **Application/domain core:** project-owned contracts and ports define customer/activity, risk, detector, policy, model and history behavior independently of infrastructure.
-4. **Infrastructure adapters:** synthetic/Spring-JDBC activity, no-op/Bayesian/fuzzy detector, static/pgvector policy, deterministic/live analysis and JDBC history adapters implement those ports.
+4. **Infrastructure adapters:** synthetic/Hibernate-JPA activity, no-op/Bayesian/fuzzy detector, static/pgvector policy, deterministic/live analysis and Hibernate-JPA history adapters implement those ports.
 
 ![Figure 1 - Architectural context schematic](diagrams/system-context.svg)
 
@@ -64,7 +64,7 @@ Spring Modulith verification ratchets the physical graph: the detected module id
 
 [PlantUML source](diagrams/package-modules.puml)
 
-Hexagonal dependency direction remains strict. Spring MVC, Spring Security, Spring JDBC, PostgreSQL/pgvector, statistical-model libraries and provider SDKs stop at adapters. Application-owned contracts do not import them.
+Hexagonal dependency direction remains strict. Spring MVC, Spring Security, Jakarta Persistence/Hibernate, PostgreSQL/pgvector, statistical-model libraries and provider SDKs stop at adapters. Application-owned contracts do not import them.
 
 ![Figure 2b - Hexagonal architecture](diagrams/hexagonal-architecture.svg)
 
@@ -77,14 +77,14 @@ The central project-owned ports are:
 | Port | Responsibility | Activated behavior |
 | --- | --- | --- |
 | `OperatorContextPort` | expose current operator state and require an authenticated project-owned `OperatorId` where the use case demands it | deterministic R3/default attribution; Spring Security-backed context under `r4` / `r4-auth` |
-| `CustomerActivityPort` | load one complete project-owned `CustomerSnapshot` for analysis/detector/retrieval semantics | synthetic R1, Spring JDBC R2+ |
-| `CustomerReviewQueryPort` | load one bounded operator-facing activity/risk page without changing complete-snapshot semantics | synthetic bounded projection R1; filtered/count/`LIMIT`/`OFFSET` Spring JDBC R2+ |
+| `CustomerActivityPort` | load one complete project-owned `CustomerSnapshot` for analysis/detector/retrieval semantics | synthetic R1; Hibernate/JPA relational adapter selected by ADR-007 for final R2+ |
+| `CustomerReviewQueryPort` | load one bounded operator-facing activity/risk page without changing complete-snapshot semantics | synthetic bounded projection R1; filtered/count/paginated Hibernate/JPA projection selected for final R2+ |
 | `RiskSignalDetectorPort` | derive separately identified non-source risk signals from a `CustomerSnapshot` | typed ordered `specgraph.analysis.detectors` selection resolves `NO_OP`, Bayesian or fuzzy as one leaf or a bounded Composite; legacy detector profiles are compatibility aliases only when typed selection is absent |
 | `PolicyKnowledgePort` | return project-owned `PolicyEvidence` | static deterministic evidence R3; Spring AI pgvector retrieval under the R4 profile |
 | `AnalysisModelPort` | consume one project-owned `AnalysisEvidenceEnvelope` and return structured result plus model provenance | typed process selection: deterministic default or explicit OpenAI; local identity reserved until #251 |
-| `AnalysisHistoryPort` | persist validated history, retain complete-list compatibility, and expose bounded page queries for operator review | in-memory baseline; Spring JDBC count/`LIMIT`/`OFFSET` R3+ |
+| `AnalysisHistoryPort` | persist validated history, retain complete-list compatibility, and expose bounded page queries for operator review | in-memory baseline; Hibernate/JPA persistence and bounded database pagination selected for final R3+ |
 
-The primary adapters are `OperatorSessionHttpAdapter`, `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `DeterministicOperatorContextAdapter`, `SpringSecurityOperatorContextAdapter`, `SyntheticActivityAdapter`, `JdbcCustomerActivityAdapter`, `NoOpRiskSignalDetectorAdapter`, `BayesianSequentialRiskSignalDetectorAdapter`, `FuzzyRiskSignalDetectorAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, and `JdbcAnalysisHistoryAdapter`.
+The primary adapters are `OperatorSessionHttpAdapter`, `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `DeterministicOperatorContextAdapter`, `SpringSecurityOperatorContextAdapter`, `SyntheticActivityAdapter`, the selected `JpaCustomerActivityAdapter`, `NoOpRiskSignalDetectorAdapter`, `BayesianSequentialRiskSignalDetectorAdapter`, `FuzzyRiskSignalDetectorAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, and the selected `JpaAnalysisHistoryAdapter`. The JPA adapters replace the accepted JDBC baseline when #164 lands; they do not create selectable parallel persistence paths.
 
 The inception-selected GoF roles remain intentionally limited:
 
@@ -144,13 +144,15 @@ The detector stage and analysis-model stage are therefore intentionally differen
 
 ## 7. Relational and vector persistence
 
-R2 activates PostgreSQL 17 behind `CustomerActivityPort` using Spring Framework `JdbcClient`. Flyway is the sole schema/migration authority. Explicit SQL maps source relations into project-owned projections; no ORM lifecycle competes with Flyway.
+R2 activates PostgreSQL 17 behind `CustomerActivityPort` and `CustomerReviewQueryPort`. ADR-007 selects Jakarta Persistence with Hibernate ORM as the final relational adapter family; #164 replaces the accepted Spring JDBC baseline. Flyway remains the sole schema/migration authority, while Hibernate is limited to validating the migrated schema and must never create or update it. Persistence entities, `EntityManager`, Hibernate types and lazy proxies remain adapter-local and are mapped into unchanged project-owned contracts before crossing a port.
+
+`JpaCustomerActivityAdapter` and `JpaAnalysisHistoryAdapter` are separate adapters for separate ports but share the same JPA/Hibernate infrastructure. Activity `DECIMAL(18,2)` amounts and `DECIMAL(5,2)` risk contributions/rule weights map explicitly to `BigDecimal` with their controlled precision and scale; no float/double conversion or currency inference is permitted. Complete snapshots retain a consistent PostgreSQL transaction snapshot, and bounded review/history queries apply filtering, stable ordering, counts and pagination in the database. Query-count evidence must prevent ORM association mapping from introducing N+1 behavior.
 
 The source relation types include exact monetary `DECIMAL/NUMERIC`, bounded currency/status fields, booleans, country codes and timezone-free `TIMESTAMP`. The adapter verifies the schema contract against the migrated PostgreSQL schema and preserves monetary amounts as exact decimal values independent from currency.
 
-Multi-query customer aggregate reads execute under PostgreSQL `REPEATABLE READ`, so activities and risk evidence cannot be assembled from different committed snapshots. The operator-facing `CustomerReviewQueryPort` is deliberately separate from that complete-snapshot port: `JdbcCustomerActivityAdapter` applies type/status/date filters, obtains a filtered count, reads only one stable `created_at, transaction_id` page through `LIMIT/OFFSET`, and then loads source-risk evidence only for transactions present in that page. The synthetic adapter implements the same bounded contract for compatibility, but the PostgreSQL/Testcontainers path is the high-volume scalability authority.
+Multi-query customer aggregate reads execute under PostgreSQL `REPEATABLE READ`, so activities and risk evidence cannot be assembled from different committed snapshots. The operator-facing `CustomerReviewQueryPort` is deliberately separate from that complete-snapshot port: `JpaCustomerActivityAdapter` applies type/status/date filters, obtains a filtered count, reads only one stable `created_at, transaction_id` page through database pagination, and then loads source-risk evidence only for transactions present in that page. The synthetic adapter implements the same bounded contract for compatibility, but the PostgreSQL/Testcontainers path is the high-volume scalability authority.
 
-R3 adds project-owned `analysis_history` through Flyway and `JdbcAnalysisHistoryAdapter`. Only a validated analysis whose persistence succeeds is represented as completed retained history. Operator-facing history review is also bounded: `AnalysisHistoryQuery` defaults to 20 entries and is capped at 100, while the JDBC adapter performs a count plus descending `LIMIT/OFFSET` page query. The HTTP body remains the historical array shape for compatibility; page/total metadata is carried in response headers.
+R3 adds project-owned `analysis_history` through Flyway and the selected `JpaAnalysisHistoryAdapter`. Only a validated analysis whose persistence succeeds is represented as completed retained history. Operator-facing history review is also bounded: `AnalysisHistoryQuery` defaults to 20 entries and is capped at 100, while the JPA adapter performs a count plus descending database page query. The HTTP body remains the historical array shape for compatibility; page/total metadata is carried in response headers.
 
 The R4 analysis-chain foundation extends each history row with separately serialized detector and model provenance. Existing pre-R4 rows receive an explicit deterministic legacy model identity during migration rather than an unreadable empty object. Policy/retrieval evidence remains in its existing provenance field; detector/model metadata does not mutate source risk tables.
 
@@ -166,7 +168,7 @@ Source `TIMESTAMP` values are wall-clock values without timezone metadata. `spec
 
 ## 8. Customer review behavior
 
-`CustomerReviewUseCase` deliberately exposes two read semantics instead of pretending that one collection shape fits every consumer. Internal analysis-compatible callers retain `findCustomer(customerId) -> CustomerSnapshot`, which traverses the complete `CustomerActivityPort`. The operator HTTP path uses `findCustomer(customerId, CustomerReviewQuery) -> CustomerReviewPage`, which traverses `CustomerReviewQueryPort` and is bounded before data crosses the HTTP boundary. R1 uses the synthetic adapter for both semantics; R2+ uses `JdbcCustomerActivityAdapter` for both without leaking JDBC types into either project-owned contract.
+`CustomerReviewUseCase` deliberately exposes two read semantics instead of pretending that one collection shape fits every consumer. Internal analysis-compatible callers retain `findCustomer(customerId) -> CustomerSnapshot`, which traverses the complete `CustomerActivityPort`. The operator HTTP path uses `findCustomer(customerId, CustomerReviewQuery) -> CustomerReviewPage`, which traverses `CustomerReviewQueryPort` and is bounded before data crosses the HTTP boundary. R1 uses the synthetic adapter for both semantics; the final R2+ design uses `JpaCustomerActivityAdapter` for both without leaking JPA entities, Hibernate types or lazy proxies into either project-owned contract.
 
 The operator query defaults to 50 activities and is capped at 200. It supports project-owned activity-type, status, and creation-time filters and preserves the established deterministic `created_at, transaction_id` ordering. `CustomerReviewPage` carries total counts and previous/next semantics; source-risk evidence in the page is scoped to the transactions actually returned. The React table keeps a bounded scroll surface with a sticky header and explicit pagination/filter controls. The unfiltered first page deliberately keeps the historical `/api/customers/{id}` URL so R1/R2 compatibility evidence remains valid.
 
@@ -303,7 +305,7 @@ Communication semantics:
 - browser <-> embedded Tomcat: HTTP through the host-published checkpoint port;
 - embedded Tomcat <-> built React assets: same-process static-resource serving;
 - React <-> Spring MVC `/api/*`: same-origin HTTP;
-- R2/R3/R4 Spring Boot <-> PostgreSQL: JDBC/PostgreSQL protocol on the private runtime network;
+- R2/R3/R4 Spring Boot <-> PostgreSQL: Hibernate/JPA over the JDBC/PostgreSQL protocol on the private runtime network;
 - browser <-> Spring Security session boundary: same-origin HTTP session cookie + CSRF token for state-changing requests;
 - optional Spring Boot <-> live AI provider: HTTPS only when `specgraph.analysis.backend=openai` is explicitly selected;
 - module/port calls: in-process.
@@ -320,7 +322,7 @@ The rings activate capability maturity while preserving the same application cor
 
 - **R0 - deployable hollow shell:** application modules, contracts and replaceable seams; no business-flow acceptance claim.
 - **R1 - mandatory synthetic customer review:** customer lookup, CARD/PAYMENT/CRYPTO and source-derived risk evidence on deterministic data.
-- **R2 - relational substitution:** Spring JDBC/PostgreSQL/Flyway/Testcontainers behind `CustomerActivityPort`; no invented new operator use case.
+- **R2 - relational substitution:** Hibernate/JPA/PostgreSQL/Flyway/Testcontainers behind unchanged activity/review ports after #164 replaces the accepted JDBC baseline; no invented new operator use case.
 - **R3 - mandatory deterministic analysis and reviewable history:** deterministic policy/model adapters, structured analysis, explicit failures, operator attribution and PostgreSQL-backed analysis history.
 - **R4 - MUST_HAVE closure:** explicit staged detector/retrieval/model/history orchestration, pgvector-backed synthetic policy retrieval with inspectable provenance, real Spring Security multi-operator authentication, protected application capabilities and related trust boundaries; optional live provider remains behind existing ports.
 - **R5 - hardening/demo:** reliability, observability, reviewer polish and NICE_TO_HAVE differentiation such as Bayesian/fuzzy detector comparison, later classical-ML detector experiments or live-provider comparison without changing established boundaries.
@@ -352,7 +354,7 @@ The design remains governed by seven accepted ADRs:
 4. Java/Spring/React baseline web stack;
 5. prebuilt single-image reviewer packaging;
 6. Compose OCI multi-platform distribution;
-7. Spring JDBC relational adapters.
+7. Hibernate/JPA relational adapters with Flyway-owned schema and exact `BigDecimal` mappings.
 
 The R4 refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, keeps complete source context through Stage 1 and Stage 2, and places the application-owned `AnalysisContextBuilder` immediately before Stage 3 so every `AnalysisModelPort` implementation receives one bounded project-owned evidence envelope with exact totals and selected citable details. It introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, extends persisted provenance, activates pgvector-backed policy retrieval behind `PolicyKnowledgePort`, and activates Spring Security-backed operator context behind `OperatorContextPort`. The R3/default static policy and deterministic operator-context adapters remain available as deterministic baselines. Bayesian and fuzzy Stage-1 detection are implemented optional substitutions; deterministic and OpenAI Stage-3 implementations are process-selectable behind the same model port, while Random Forest/graph detector families and the local Stage-3 adapter remain later substitutions rather than being falsely claimed by the required R4 path.
 

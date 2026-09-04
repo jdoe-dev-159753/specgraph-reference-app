@@ -8,8 +8,8 @@ obligations:
   VFY-CUSTOMER-READ-001:
     covers: [FR-CUST-001, FR-ACT-001, FR-ACT-002, FR-RISK-001, INV-DATA-001, INV-DATA-002, INV-RISK-001]
     acceptance: [AC-CUST-001, AC-CUST-002, AC-ACT-001, AC-ACT-002, AC-RISK-001]
-    methods: [unit_property, port_contract, api_acceptance, ui_e2e]
-    design: [MOD-CUSTOMER-001, MOD-RISK-001, PRT-ACTIVITY-001, CTR-CUSTOMER-SNAPSHOT-001]
+    methods: [unit_property, port_contract, database_integration, schema_validation, query_count, api_acceptance, ui_e2e]
+    design: [MOD-CUSTOMER-001, MOD-RISK-001, PRT-ACTIVITY-001, PRT-CUSTOMER-REVIEW-QUERY-001, ADP-ACT-JPA-001, CTR-CUSTOMER-SNAPSHOT-001, INF-DB-001]
     executable_evidence: discovered_by_markers
   VFY-AUTH-001:
     covers: [FR-AUTH-001, NFR-SEC-001]
@@ -32,8 +32,8 @@ obligations:
   VFY-HISTORY-001:
     covers: [FR-HIST-001, FR-HIST-002, INV-HIST-001]
     acceptance: [AC-HIST-001, AC-HIST-002]
-    methods: [port_contract, database_integration, api_acceptance, ui_e2e]
-    design: [PRT-HISTORY-001, ADP-HIST-JDBC-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
+    methods: [port_contract, database_integration, schema_validation, query_count, api_acceptance, ui_e2e]
+    design: [PRT-HISTORY-001, ADP-HIST-JPA-001, INF-DB-001, CTR-OPERATOR-ID-001, CTR-ANALYSIS-RESULT-001]
     executable_evidence: discovered_by_markers
   VFY-REPRODUCIBILITY-001:
     covers: [NFR-REP-001, CON-DATA-001]

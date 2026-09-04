@@ -58,7 +58,9 @@ Each stable project-owned port receives contract tests that can run against the 
 
 ### Integration verification
 
-Use real infrastructure at boundaries where the design depends on infrastructure semantics: Spring Security, HTTP serialization, Spring JDBC/Flyway/PostgreSQL, pgvector retrieval and analysis-history persistence. Integration tests verify boundaries, not framework internals.
+Use real infrastructure at boundaries where the design depends on infrastructure semantics: Spring Security, HTTP serialization, Hibernate/JPA with Flyway/PostgreSQL, pgvector retrieval and analysis-history persistence. Integration tests verify boundaries, not framework internals. Relational integration starts from Flyway migrations, then runs Hibernate schema validation without allowing Hibernate to create or update the schema.
+
+The relational contract evidence must run unchanged against the selected JPA adapters. It verifies complete-snapshot consistency, bounded database filtering/count/pagination, persisted analysis-history attribution and exact `BigDecimal` round trips for `DECIMAL(18,2)` amounts and `DECIMAL(5,2)` scores. Query-count or equivalent integration evidence rejects N+1 behavior rather than accepting a functionally correct but unbounded ORM traversal. Pgvector retrieval remains a separate integration concern behind `PolicyKnowledgePort`; sharing PostgreSQL does not make vector documents JPA entities.
 
 For R4 identity, integration evidence exercises the real Spring Security filter chain, HTTP session, BCrypt-backed local demonstration users, CSRF repository and PostgreSQL-backed analysis history. The application core remains observable through `OperatorContextPort`/`OperatorId`; tests do not replace that seam with SecurityContext-specific application contracts merely because the boundary implementation is Spring Security.
 
@@ -72,7 +74,7 @@ The dashboard criteria `AC-CUST-001`, `AC-ACT-001`, `AC-ACT-002` and `AC-RISK-00
 
 ### Architecture verification
 
-Mechanically check dependency direction and forbidden coupling: project-owned domain/application contracts must not depend on Spring, JDBC or provider-specific types, and adapter substitution must remain possible behind the declared ports. Spring Modulith/architecture checks are executable evidence for the modular-monolith boundary, not a substitute for behavioral tests.
+Mechanically check dependency direction and forbidden coupling: project-owned domain/application contracts must not depend on Spring, Jakarta Persistence, Hibernate or provider-specific types, and adapter substitution must remain possible behind the declared ports. JPA entities, `EntityManager`, Hibernate types and lazy proxies remain inside persistence adapter packages. After #164, architecture/dependency checks reject parallel Spring JDBC or jOOQ application adapters. Spring Modulith/architecture checks are executable evidence for the modular-monolith boundary, not a substitute for behavioral tests.
 
 For bounded analysis context, architecture review also checks the placement of `AnalysisContextBuilder`: the complete `CustomerSnapshot` must reach `RiskSignalDetectorPort` and `PolicyKnowledgePort`, and only the application-owned projection immediately before `AnalysisModelPort` may bound Stage-3 details. Operator-review pagination values are not accepted as model-context limits, and provider tokenization/redaction remains adapter-local.
 
@@ -130,7 +132,7 @@ A human reviewer validates concerns that automation cannot prove economically: d
 
 Implementation PRs satisfy obligations by adding executable evidence carrying the stable obligation/requirement IDs. Until that happens, generated current-status views shall report the obligation as missing/pending from executable evidence. The durable strategy remains unchanged merely because a test temporarily fails or passes.
 
-The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `OperatorContextPort`, `CustomerActivityPort`, typed `RiskSignalDetectorPort` leaf/Composite selection, `AnalysisHistoryPort`, authenticated HTTP boundaries, Spring JDBC/PostgreSQL substitution and the Compose topology. `VFY-ANALYSIS-CONTRACT-001` covers the Stage-1 selection/factory/Composite contract, including deterministic ordering and fail-closed invalid configuration, without turning optional calibrated fusion into an accepted #254 behavior.
+The SDD is part of the verification input rather than background decoration: tests at port, integration, architecture and deployment levels verify specific design seams such as `OperatorContextPort`, `CustomerActivityPort`, typed `RiskSignalDetectorPort` leaf/Composite selection, `AnalysisHistoryPort`, authenticated HTTP boundaries, Hibernate/JPA relational substitution over a Flyway-owned PostgreSQL schema and the Compose topology. `VFY-ANALYSIS-CONTRACT-001` covers the Stage-1 selection/factory/Composite contract, including deterministic ordering and fail-closed invalid configuration, without turning optional calibrated fusion into an accepted #254 behavior.
 
 ![Verification evidence flow](diagrams/verification-evidence-flow.svg)
 
@@ -155,8 +157,8 @@ Evidence should be cheap to reproduce and close to the behavior it proves:
 
 - unit/property evidence: normal test runner output plus markers;
 - HTTP/security evidence: Spring Security integration plus exact-head browser acceptance where session/navigation semantics are operator-visible;
-- database evidence: migration + repository/integration tests against real PostgreSQL where semantics matter, including high-density fixtures that prove filtering/count/`LIMIT`/`OFFSET` occurs before activity/history payloads cross the operator boundary;
-- architecture evidence: deterministic dependency/import/module checks;
+- database evidence: Flyway migration + Hibernate schema validation + JPA adapter/integration tests against real PostgreSQL where semantics matter, including exact `BigDecimal` round trips and high-density fixtures that prove filtering/count/pagination occurs before activity/history payloads cross the operator boundary without N+1 loading;
+- architecture evidence: deterministic dependency/import/module checks, including confinement of ORM types and exclusion of parallel JDBC/jOOQ application adapters after migration;
 - UI evidence: focused E2E assertions for dashboard and authentication acceptance plus human review of comprehensibility;
 - provider evidence: typed factory/configuration tests, deterministic no-credential integration, bounded-envelope and confidentiality tests for the live-provider adapter, explicit OpenAI selection separately tagged, fail-closed unsupported/invalid selection, and optional live-provider smoke evidence;
 - deployment evidence: clean-checkout Compose startup/readiness and the same documented browser-ready demo path locally or on the configured Docker VM;
