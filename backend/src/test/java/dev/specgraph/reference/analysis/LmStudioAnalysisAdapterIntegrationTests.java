@@ -108,8 +108,9 @@ final class LmStudioAnalysisAdapterIntegrationTests {
                         "synthetic-policy:test",
                         "\"response_format\"",
                         "\"type\":\"json_schema\"",
-                        "\"maxLength\":500",
-                        "\"maxItems\":3")
+                        "\"additionalProperties\":false",
+                        "\"required\":[\"riskLevel\",\"findingsSummary\",\"recommendations\"]")
+                .doesNotContain("\"maxLength\"", "\"minItems\"", "\"maxItems\"")
                 .doesNotContain("4111111111111111", "AUTH-SECRET");
     }
 

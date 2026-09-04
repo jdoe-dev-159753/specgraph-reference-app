@@ -12,12 +12,10 @@ final class AnalysisResultStructuredOutputConverter implements StructuredOutputC
               "type": "object",
               "properties": {
                 "riskLevel": {"type": "string", "enum": ["LOW", "MEDIUM", "HIGH"]},
-                "findingsSummary": {"type": "string", "maxLength": 500},
+                "findingsSummary": {"type": "string"},
                 "recommendations": {
                   "type": "array",
-                  "minItems": 1,
-                  "maxItems": 3,
-                  "items": {"type": "string", "maxLength": 140}
+                  "items": {"type": "string"}
                 }
               },
               "required": ["riskLevel", "findingsSummary", "recommendations"],
