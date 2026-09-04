@@ -48,8 +48,7 @@ final class RandomForestRiskSignalDetectorAdapterTests {
                 .containsEntry("labelDefinitionIdentity", SyntheticRandomForestModelTrainer.LABEL_DEFINITION_IDENTITY)
                 .containsEntry("treeSeed", Long.toString(SyntheticRandomForestModelTrainer.TREE_SEED))
                 .containsEntry("inferenceMode", "fixed-protobuf-model; no request-time training")
-                .containsEntry("demoLimitation",
-                        "hand-assigned synthetic labels separable by construction; no production AML accuracy claim");
+                .containsEntry("demoLimitation", GENERATED.manifest().limitation());
     }
 
     @Test
