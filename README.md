@@ -1,4 +1,4 @@
-# Customer Activity Analytics - SpecGraph Reference App
+# Customer Activity Analytics
 
 [![application-ci](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
 [![demo-images](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
@@ -12,7 +12,7 @@
 ![TypeScript 7.0.2](https://img.shields.io/badge/TypeScript-7.0.2-informational)
 ![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0_build--time-informational)
 
-**A runnable reference application for specification-driven, AI-assisted software engineering.**
+**Customer Activity Analytics is a runnable product for specification-driven, AI-assisted software engineering.**
 
 The application lets a Customer Care operator inspect deterministic CARD, PAYMENT and CRYPTO activity plus persisted source-shaped risk evidence. R2 replaces the synthetic activity adapter with PostgreSQL/Flyway persistence behind the same project-owned `CustomerActivityPort`. R3 adds structured analysis and persistent reviewable history behind provider-neutral ports. R4 adds multi-operator authentication, real policy retrieval through PostgreSQL/pgvector with local `all-MiniLM-L6-v2` embeddings, explicit detector evidence, grounding validation and interchangeable Stage-3 synthesis behind `AnalysisModelPort`.
 
@@ -340,7 +340,7 @@ Review the controlled documents in this order rather than inferring the system f
 - [Inception](docs/assignment/Inception/Inception.md) - problem framing, concentric delivery model and delivery strategy.
 - [SRS](docs/assignment/SRS/SRS.md) - normative requirements and acceptance semantics.
 - [SDD](docs/assignment/SDD/SDD.md) - architecture, modules, ports/adapters and delivery projection.
-- [ADRs](docs/assignment/ADR/) - durable architecture and deployment decisions.
+- [ADRs](docs/assignment/ADR/) - durable architecture and deployment decisions, including the [public product identity and final-freeze boundary](docs/assignment/ADR/ADR-008-customer-activity-analytics-identity.md).
 - [V&V](docs/assignment/VV/VV.md) - verification strategy, catalogue and evidence model.
 - [OpenAPI](backend/src/main/resources/static/openapi.yaml) - deployed HTTP contract, also served at `/openapi.yaml`.
 
