@@ -78,34 +78,31 @@ test('VFY-FAILURE-PATHS-001 database query failure is recoverable without stale 
   await page.goto('/')
   await signIn(page)
 
-  let failedQueries = 0
-  await page.route(`**${customerPath}`, async route => {
-    failedQueries += 1
-    await route.fulfill({
-      status: 503,
-      contentType: 'application/problem+json',
-      body: JSON.stringify({
-        title: 'Customer request failed',
-        status: 503,
-        detail: 'Customer evidence is temporarily unavailable',
-      }),
-    })
+  let customerRequests = 0
+  page.on('request', request => {
+    if (request.url().endsWith(customerPath) && request.method() === 'GET') customerRequests += 1
   })
 
   const failedResponsePromise = page.waitForResponse(response =>
     response.url().endsWith(customerPath) && response.request().method() === 'GET')
   await page.getByLabel('Customer ID').fill(seededCustomer)
   await page.getByRole('button', { name: 'Search' }).click({ clickCount: 3 })
-  expect((await failedResponsePromise).status()).toBe(503)
-  expect(failedQueries).toBe(1)
+  const failedResponse = await failedResponsePromise
+  expect(failedResponse.status()).toBe(500)
+  expect(failedResponse.headers()['content-type']).toContain('json')
+  const failureBody = await failedResponse.text()
+  expect(failureBody).not.toContain('Injected customer database query failure')
+  expect(failureBody).not.toContain('java.lang')
+  expect(failureBody).not.toContain('at dev.specgraph')
+  expect(customerRequests).toBe(1)
 
-  await expect(page.getByRole('alert')).toContainText('Customer request failed (503)')
+  await expect(page.getByRole('alert')).toContainText('Customer request failed (500)')
   await expect(page.getByTestId('customer-activity')).toHaveCount(0)
   await expect(page.getByTestId('risk-evidence')).toHaveCount(0)
   await expect(page.getByTestId('analysis-result')).toHaveCount(0)
 
-  await page.unroute(`**${customerPath}`)
   await loadCustomer(page)
+  expect(customerRequests).toBe(2)
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
@@ -116,34 +113,22 @@ test('VFY-FAILURE-PATHS-001 analysis failures never appear completed, grounded o
 
   const sourceRiskEvidence = page.getByTestId('risk-evidence')
   const sourceRiskText = canonicalVisibleText(await sourceRiskEvidence.innerText())
+  let analysisRequests = 0
+  page.on('request', request => {
+    if (request.url().endsWith(analysisPath) && request.method() === 'POST') analysisRequests += 1
+  })
 
   for (const failure of analysisFailures) {
     const historyBeforeFailure = await historyIds(page)
-    let failedRequests = 0
-
-    await page.route(`**${analysisPath}`, async route => {
-      if (route.request().method() !== 'POST') {
-        await route.continue()
-        return
-      }
-      failedRequests += 1
-      await route.fulfill({
-        status: failure.status,
-        contentType: 'application/problem+json',
-        body: JSON.stringify({
-          title: 'Analysis request failed',
-          status: failure.status,
-          detail: failure.detail,
-          reason: failure.reason,
-        }),
-      })
-    })
+    const requestsBeforeFailure = analysisRequests
 
     const failedResponsePromise = page.waitForResponse(response =>
       response.url().endsWith(analysisPath) && response.request().method() === 'POST')
     await page.getByRole('button', { name: 'Run analysis' }).click({ clickCount: 3 })
-    expect((await failedResponsePromise).status()).toBe(failure.status)
-    expect(failedRequests).toBe(1)
+    const failedResponse = await failedResponsePromise
+    expect(failedResponse.status()).toBe(failure.status)
+    expect(failedResponse.headers()['content-type']).toContain('application/problem+json')
+    expect(analysisRequests).toBe(requestsBeforeFailure + 1)
 
     const visibleError = page.getByRole('alert')
     await expect(visibleError).toContainText(`${failure.detail} [${failure.reason}]`)
@@ -153,13 +138,12 @@ test('VFY-FAILURE-PATHS-001 analysis failures never appear completed, grounded o
     expect(canonicalVisibleText(await sourceRiskEvidence.innerText())).toBe(sourceRiskText)
     expect(await historyIds(page)).toEqual(historyBeforeFailure)
 
-    await page.unroute(`**${analysisPath}`)
-
     const recoveredResponsePromise = page.waitForResponse(response =>
       response.url().endsWith(analysisPath) && response.request().method() === 'POST')
     await page.getByRole('button', { name: 'Run analysis' }).click({ clickCount: 3 })
     const recoveredResponse = await recoveredResponsePromise
     expect(recoveredResponse.status()).toBe(201)
+    expect(analysisRequests).toBe(requestsBeforeFailure + 2)
     const completed = await recoveredResponse.json() as Analysis
 
     await expect(page.getByRole('alert')).toHaveCount(0)

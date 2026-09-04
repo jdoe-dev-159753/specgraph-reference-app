@@ -1,0 +1,5 @@
+services:
+  r4:
+    image: "${APP_R4_DEGRADATION_IMAGE:?APP_R4_DEGRADATION_IMAGE must name the exact-head degradation image}"
+    environment:
+      SPRING_PROFILES_ACTIVE: r4,r4-degradation-test
