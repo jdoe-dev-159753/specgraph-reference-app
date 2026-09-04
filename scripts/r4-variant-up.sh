@@ -34,8 +34,16 @@ fi
 
 project="specgraph-r4-${variant}"
 
+# A credential supplied for an external gallery variant must not leak into the
+# deterministic baseline container through the parent shell environment.
+compose_openai_api_key=""
+if [[ "${backend}" == "openai" ]]; then
+  compose_openai_api_key="${OPENAI_API_KEY}"
+fi
+
 R4_PORT="${port}" \
 SPECGRAPH_ANALYSIS_BACKEND="${backend}" \
+OPENAI_API_KEY="${compose_openai_api_key}" \
 docker compose -p "${project}" -f "${repo_root}/compose.r4.yaml" up --build -d --wait
 
 bash "${script_dir}/r4-variant-manifest.sh" "${variant}" "${port}" "${backend}"

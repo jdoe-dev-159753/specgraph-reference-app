@@ -14,6 +14,7 @@ on:
       - 'frontend/**'
       - 'compose.yaml'
       - 'compose.oci.yaml'
+      - 'compose.r4.yaml'
       - 'scripts/r4-*.sh'
       - 'scripts/test-r4-gallery.sh'
       - 'scripts/validate_design_map.py'
@@ -25,6 +26,7 @@ on:
       - 'frontend/**'
       - 'compose.yaml'
       - 'compose.oci.yaml'
+      - 'compose.r4.yaml'
       - 'scripts/r4-*.sh'
       - 'scripts/test-r4-gallery.sh'
       - 'scripts/validate_design_map.py'
@@ -97,6 +99,7 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f compose.oci.yaml config --quiet
+          docker compose -f compose.r4.yaml config --quiet
 
       - name: VFY-CONFIDENTIALITY-001 + VFY-FAILURE-PATHS-001 - Verify R4 gallery lifecycle scripts
         run: bash scripts/test-r4-gallery.sh
@@ -259,6 +262,7 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f compose.oci.yaml config --quiet
+          docker compose -f compose.r4.yaml config --quiet
 
       - name: Start archived R2 checkpoint for compatibility evidence
         run: docker compose up -d --no-build r2
