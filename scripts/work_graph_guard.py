@@ -24,13 +24,21 @@ DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
 PROTECTED_ASSET_SHA256 = {
     ".github/workflows/work-graph-guard.yml": frozenset(
-        {"f15bad4b691b95abb8b0cf7f2e3b6976dc3ca3d9ad5323097aacb53f394a5fae"}
+        {
+            "b94c3f1d2b230851122c616dac872b31d4e6b07e44c43d31f34eb70c71ee3f13",
+            "f15bad4b691b95abb8b0cf7f2e3b6976dc3ca3d9ad5323097aacb53f394a5fae",
+        }
     ),
     ".github/workflows/work-graph-guard-tests.yml": frozenset(
-        {"0e6865bb537e7b837ff47ec501a09b8e2a06d674fc391740b89a7ccd6c5b767c"}
+        {
+            "0e6865bb537e7b837ff47ec501a09b8e2a06d674fc391740b89a7ccd6c5b767c",
+            "bbae0c2e04f9a31021c9645e73d44b50497e170c9b466f4b7bbae2d0707ee1bb",
+        }
     ),
     "scripts/test_work_graph_guard.py": frozenset(
-        {"ae025c5ff30805c3dfea17d85377e940ee0cb914feae6c07e39f3e283e932c0d"}
+        {
+            "ae025c5ff30805c3dfea17d85377e940ee0cb914feae6c07e39f3e283e932c0d",
+        }
     ),
 }
 

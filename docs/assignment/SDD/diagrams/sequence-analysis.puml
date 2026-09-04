@@ -11,6 +11,7 @@ participant "Analysis\napplication" as Analysis
 participant "CustomerActivityPort" as Activity
 participant "RiskSignalDetectorPort" as Detector
 participant "PolicyKnowledgePort" as Policy
+participant "AnalysisContextBuilder" as ContextBuilder
 participant "AnalysisModelPort" as Model
 participant "AnalysisHistoryPort" as History
 
@@ -25,16 +26,16 @@ else authenticated
   OperatorContext --> Boundary : OperatorId
   Boundary -> Analysis : analyze(customerId, OperatorId)
   Analysis -> Activity : loadSnapshot(customerId)
-  Activity --> Analysis : CustomerSnapshot\n(source facts + source risk evidence)
+  Activity --> Analysis : complete CustomerSnapshot\n(source facts + source risk evidence)
 
-  Analysis -> Detector : detect(snapshot)
+  Analysis -> Detector : detect(complete snapshot)
   alt detector failure
     Detector --> Analysis : failure
     Analysis --> Boundary : explicit detector failure
     Boundary --> UI : not completed / retained
   else detector succeeds
     Detector --> Analysis : RiskSignalEvidence[]\n(default no-op => [])
-    Analysis -> Policy : retrieveRelevant(snapshot)
+    Analysis -> Policy : retrieveRelevant(complete snapshot)
 
     alt no relevant policy evidence
       Policy --> Analysis : explicit no-evidence
@@ -42,15 +43,16 @@ else authenticated
       Boundary --> UI : not presented as grounded/completed
     else relevant evidence available
       Policy --> Analysis : PolicyEvidence[]
-      Analysis -> Analysis : assemble AnalysisEvidenceEnvelope\n(source | detector | policy kept distinct)
-      Analysis -> Model : analyze(evidenceEnvelope)
+      Analysis -> ContextBuilder : build(snapshot, detector, policy)
+      ContextBuilder --> Analysis : AnalysisEvidenceEnvelope\nexact totals + bounded selected details
+      Analysis -> Model : analyze(bounded evidenceEnvelope)
       alt model/provider failure
         Model --> Analysis : failure
         Analysis --> Boundary : explicit analysis failure
         Boundary --> UI : not completed / retained
       else candidate returned
         Model --> Analysis : AnalysisModelOutput\n(result + model provenance)
-        Analysis -> Analysis : validate structured AnalysisResult
+        Analysis -> Analysis : validate structured AnalysisResult\n+ references against supplied bounded evidence
         alt invalid structured result
           Analysis --> Boundary : validation failure
           Boundary --> UI : invalid result not retained
@@ -71,6 +73,12 @@ else authenticated
     end
   end
 end
+
+note over Activity,ContextBuilder
+  Stage 1 detector and Stage 2 policy retrieval retain complete CustomerSnapshot semantics.
+  AnalysisContextBuilder is the application-owned cut immediately before the model port:
+  full-history aggregates stay exact while model-facing details are deterministically bounded.
+end note
 
 note over OperatorContext,History
   OperatorContextPort is project-owned; Spring Security types stop at its adapter.

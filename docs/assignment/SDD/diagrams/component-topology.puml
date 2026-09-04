@@ -36,6 +36,7 @@ package "Spring Boot modular monolith" as Backend {
   package "analysis module" as AnalysisModule {
     component "Analysis HTTP Adapter\nADP-ANALYSIS-HTTP-001\nR3+\n<<GoF Adapter>>" as AnalysisHttp
     component "Analysis Application\nMOD-ANALYSIS-001\napplication-service facade" as Analysis
+    component "Analysis Context Builder\napplication-owned bounded model projection\nexact totals + selected details" as ContextBuilder
     interface "RiskSignalDetectorPort\nPRT-DETECTOR-001\n<<Strategy seam>>" as DetectorPort
     component "Detector Selection\nRiskSignalDetectorFactory\nspecgraph.analysis.detectors\n<<Factory / Registry>>" as DetectorFactory
     component "Composite Risk Signal Detector\nordered bounded children\n<<GoF Composite>>" as DetectorComposite
@@ -93,11 +94,12 @@ Customer --> Risk : public RiskEvidence contract
 Customer --> CustomerReviewPort : bounded operator page
 
 AnalysisHttp --> Analysis : analyze(customerId, OperatorId)
-Analysis --> Customer : complete customer/activity context
+Analysis --> Customer : complete CustomerSnapshot
 Customer --> ActivityPort : complete snapshot for internal consumers
-Analysis --> DetectorPort
-Analysis --> PolicyPort
-Analysis --> ModelPort
+Analysis --> DetectorPort : complete snapshot
+Analysis --> PolicyPort : complete snapshot
+Analysis --> ContextBuilder : full source facts + Stage 1/2 evidence
+ContextBuilder --> ModelPort : bounded AnalysisEvidenceEnvelope
 Analysis --> HistoryPort
 
 ActivityPort --> ActivitySynthetic
@@ -134,8 +136,10 @@ note bottom of Backend
   when that property is absent. Spring owns bean lifecycle, the factory/registry resolves leaves
   or the bounded Composite, and child failure fails Stage 1 rather than disappearing silently.
   CustomerReviewQueryPort bounds the operator surface independently of the complete
-  CustomerActivityPort snapshot used by analysis.
-  GoF Adapter labels identify boundary translation roles; Strategy seams identify interchangeable
+  CustomerActivityPort snapshot used by analysis. AnalysisContextBuilder is an application-layer
+  projection: Stage 1 and Stage 2 retain complete CustomerSnapshot semantics, then exact full-history
+  totals are separated from bounded model-facing details immediately before AnalysisModelPort. GoF
+  Adapter labels identify boundary translation roles; Strategy seams identify interchangeable
   implementations; the analysis application service acts as a Facade over orchestration.
 end note
 @enduml

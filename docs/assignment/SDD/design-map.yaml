@@ -34,7 +34,7 @@ modules:
     adrs: [ADR-001]
   MOD-ANALYSIS-001:
     name: analysis
-    responsibility: staged analysis orchestration, detector evidence, policy grounding, model synthesis and analysis history
+    responsibility: staged analysis orchestration, bounded model-context construction, detector evidence, policy grounding, model synthesis and analysis history
     package: dev.specgraph.reference.analysis
     depends_on: [MOD-CUSTOMER-001]
     activation_ring: R3
@@ -91,9 +91,13 @@ contracts:
   CTR-ANALYSIS-EVIDENCE-ENVELOPE-001:
     name: AnalysisEvidenceEnvelope
     owner: MOD-ANALYSIS-001
-    contains: [customer_snapshot, detector_evidence, policy_evidence]
+    contains: [customer_identity, total_activity_count, total_source_risk_count, total_detector_evidence_count, total_policy_evidence_count, selected_activities, selected_source_risk_evidence, selected_detector_evidence, selected_policy_evidence]
+    constructed_by: AnalysisContextBuilder immediately before PRT-MODEL-001
+    default_bounds: [max_activities_25, max_source_risk_evidence_20, max_detector_evidence_8, max_policy_evidence_3]
+    selection: [source_risk_by_recency_then_stable_identity, activities_include_selected_risk_backing_then_recent, detector_by_score_then_stable_identity, policy_preserves_retrieval_rank]
+    semantics: complete Stage-1 and Stage-2 inputs become exact totals plus bounded Stage-3 details; operator page limits are independent
     type_safety: retains stage-specific typed collections rather than one generic artifact list
-    invariants: [INV-RISK-001, INV-RAG-001]
+    invariants: [INV-RISK-001, INV-RAG-001, INV-AI-001]
   CTR-ANALYSIS-MODEL-PROVENANCE-001:
     name: AnalysisModelProvenance
     owner: MOD-ANALYSIS-001
@@ -192,6 +196,7 @@ ports:
     direction: outbound
     accepts: CTR-ANALYSIS-EVIDENCE-ENVELOPE-001
     returns: CTR-ANALYSIS-MODEL-OUTPUT-001
+    semantics: receives only bounded selected details with truthful complete-input totals; supplied details alone are citable
     activation_ring: R0
     adrs: [ADR-002]
   PRT-POLICY-001:
@@ -323,6 +328,7 @@ adapters:
     implements: PRT-MODEL-001
     activation_ring: R0
     acceptance_ring: R3
+    semantics: derives aggregate findings from complete totals without treating selected window sizes as totals
     adrs: [ADR-002]
   ADP-MODEL-AI-001:
     name: SpringAiAnalysisAdapter
@@ -330,6 +336,7 @@ adapters:
     owner: MOD-ANALYSIS-001
     implements: PRT-MODEL-001
     activation_ring: R4
+    semantics: serializes only bounded selected details; provider redaction and token ceilings remain adapter-local
     adrs: [ADR-002, ADR-004]
   ADP-POL-STATIC-001:
     name: StaticPolicyAdapter

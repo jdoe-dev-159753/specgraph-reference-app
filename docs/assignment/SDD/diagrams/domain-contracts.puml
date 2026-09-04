@@ -127,10 +127,16 @@ package "Analysis orchestration and history contracts" {
     pageMetadata
     totalEntries
   }
-  class AnalysisEvidenceEnvelope <<project contract>> {
-    snapshot : CustomerSnapshot
-    detectorEvidence : RiskSignalEvidence[*]
-    policyEvidence : PolicyEvidence[*]
+  class AnalysisEvidenceEnvelope <<bounded model contract>> {
+    customerIdentity
+    totalActivityCount
+    totalSourceRiskCount
+    totalDetectorEvidenceCount
+    totalPolicyEvidenceCount
+    activities : ActivityProjection[* selected]
+    sourceRiskEvidence : RiskEvidence[* selected]
+    detectorEvidence : RiskSignalEvidence[* selected]
+    policyEvidence : PolicyEvidence[* selected]
   }
   class AnalysisResult <<project contract>> {
     riskLevel : LOW|MEDIUM|HIGH
@@ -161,9 +167,11 @@ package "Analysis orchestration and history contracts" {
     modelProvenance : AnalysisModelProvenance
   }
 
-  AnalysisEvidenceEnvelope "1" --> "1" CustomerSnapshot
-  AnalysisEvidenceEnvelope "1" o-- "0..*" RiskSignalEvidence
-  AnalysisEvidenceEnvelope "1" o-- "0..*" PolicyEvidence
+  AnalysisEvidenceEnvelope ..> CustomerSnapshot : projected from complete source context
+  AnalysisEvidenceEnvelope "1" o-- "0..*" ActivityProjection : selected detail
+  AnalysisEvidenceEnvelope "1" o-- "0..*" RiskEvidence : selected detail
+  AnalysisEvidenceEnvelope "1" o-- "0..*" RiskSignalEvidence : selected detail
+  AnalysisEvidenceEnvelope "1" o-- "0..*" PolicyEvidence : selected detail
 
   AnalysisModelOutput "1" *-- "1" AnalysisResult
   AnalysisModelOutput "1" *-- "1" AnalysisModelProvenance
@@ -183,9 +191,7 @@ package "Analysis orchestration and history contracts" {
   AnalysisHistoryPage "1" o-- "0..*" AnalysisHistoryEntry
   AnalysisHistoryQuery ..> AnalysisHistoryPage : selects bounded operator view
 
-  AnalysisResult ..> CustomerSnapshot : derived from source context
-  AnalysisResult ..> RiskSignalEvidence : may use derived detector evidence
-  AnalysisResult ..> PolicyEvidence : grounded by retrieval evidence
+  AnalysisResult ..> AnalysisEvidenceEnvelope : synthesized from bounded model context
 }
 
 note bottom
@@ -193,9 +199,11 @@ note bottom
   Authentication state is a sealed project-owned OperatorContext; Spring Security types stop at
   adapters. CustomerReviewQuery/Page and AnalysisHistoryQuery/Page bound operator-facing
   review without changing the complete CustomerSnapshot used by analysis. Source truth remains
-  CustomerSnapshot/RiskEvidence. Detector evidence, retrieval
-  evidence and model/backend provenance share a sealed typed artifact family without sharing
-  authority. Persistence relations and provider/framework response types do not become members
-  of this contract model.
+  the complete CustomerSnapshot/RiskEvidence graph for Stage 1/2. AnalysisEvidenceEnvelope is a
+  distinct model-facing projection: exact full-history counts remain truthful while only
+  deterministically selected details cross AnalysisModelPort. Detector evidence, retrieval evidence
+  and model/backend provenance share a sealed typed artifact family without sharing authority.
+  Persistence relations and provider/framework response types do not become members of this
+  contract model.
 end note
 @enduml
