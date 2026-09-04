@@ -89,8 +89,13 @@ test('VFY-FAILURE-PATHS-001 database query failure is recoverable without stale 
   await page.getByRole('button', { name: 'Search' }).click({ clickCount: 3 })
   const failedResponse = await failedResponsePromise
   expect(failedResponse.status()).toBe(500)
-  expect(failedResponse.headers()['content-type']).toContain('json')
+  expect(failedResponse.headers()['content-type']).toContain('application/problem+json')
   const failureBody = await failedResponse.text()
+  expect(JSON.parse(failureBody)).toMatchObject({
+    status: 500,
+    detail: 'Customer data could not be loaded',
+    reason: 'CUSTOMER_DATA_FAILURE',
+  })
   expect(failureBody).not.toContain('Injected customer database query failure')
   expect(failureBody).not.toContain('java.lang')
   expect(failureBody).not.toContain('at dev.specgraph')
