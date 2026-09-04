@@ -18,10 +18,10 @@ final class AnalysisGroundingValidator {
                     "analysis model provenance must not contain duplicate evidence references");
         }
 
-        Set<String> activityIds = evidence.snapshot().activities().stream()
+        Set<String> activityIds = evidence.activities().stream()
                 .map(activity -> activity.transactionId().toString())
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        Set<String> sourceRiskIds = evidence.snapshot().riskEvidence().stream()
+        Set<String> sourceRiskIds = evidence.sourceRiskEvidence().stream()
                 .map(risk -> risk.assessmentId().toString())
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         Set<String> detectorIds = evidence.detectorEvidence().stream()

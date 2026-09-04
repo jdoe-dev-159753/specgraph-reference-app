@@ -1,5 +1,6 @@
 package dev.specgraph.reference.analysis;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.context.annotation.Profile;
@@ -14,8 +15,7 @@ class DeterministicAnalysisAdapter implements AnalysisModelPort {
 
     @Override
     public AnalysisModelOutput analyze(AnalysisEvidenceEnvelope evidence) {
-        var snapshot = evidence.snapshot();
-        int sourceRiskSignals = snapshot.riskEvidence().size();
+        int sourceRiskSignals = evidence.totalSourceRiskCount();
         AnalysisResult.RiskLevel riskLevel = sourceRiskSignals == 0
                 ? AnalysisResult.RiskLevel.LOW
                 : sourceRiskSignals <= 2
@@ -23,7 +23,7 @@ class DeterministicAnalysisAdapter implements AnalysisModelPort {
                         : AnalysisResult.RiskLevel.HIGH;
 
         String findings = "Deterministic offline baseline observed " + sourceRiskSignals
-                + " persisted source risk signal(s) across " + snapshot.activities().size()
+                + " persisted source risk signal(s) across " + evidence.totalActivityCount()
                 + " activity record(s). This synthetic analysis supports review and is not institutional risk policy.";
 
         List<String> recommendations = sourceRiskSignals == 0
@@ -34,6 +34,9 @@ class DeterministicAnalysisAdapter implements AnalysisModelPort {
                         "Review the persisted source risk signals with the associated transactions.",
                         "Confirm the activity context against the retrieved synthetic policy evidence before escalation.");
 
+        Map<String, String> metadata = new LinkedHashMap<>(evidence.contextDiagnostics());
+        metadata.put("externalTransmission", "false");
+
         return new AnalysisModelOutput(
                 new AnalysisResult(riskLevel, findings, recommendations),
                 new AnalysisModelProvenance(
@@ -41,6 +44,6 @@ class DeterministicAnalysisAdapter implements AnalysisModelPort {
                         MODEL_IDENTITY,
                         PROMPT_IDENTITY,
                         AnalysisEvidenceReferences.from(evidence),
-                        Map.of("externalTransmission", "false")));
+                        Map.copyOf(metadata)));
     }
 }

@@ -25,8 +25,8 @@ else (yes)
 endif
 
 |Analysis application|
-:Load customer context through\nCustomerActivityPort;
-:Invoke RiskSignalDetectorPort\nwith CustomerSnapshot;
+:Load complete customer context through\nCustomerActivityPort;
+:Invoke RiskSignalDetectorPort\nwith complete CustomerSnapshot;
 
 |Detector adapter|
 if (Detector succeeds?) then (no)
@@ -42,7 +42,7 @@ else (yes)
 endif
 
 |Analysis application|
-:Retrieve relevant knowledge through\nPolicyKnowledgePort;
+:Retrieve relevant knowledge through\nPolicyKnowledgePort with complete CustomerSnapshot;
 
 |Policy adapter|
 if (Relevant evidence available?) then (no)
@@ -58,8 +58,9 @@ else (yes)
 endif
 
 |Analysis application|
-:Assemble AnalysisEvidenceEnvelope;\nkeep source, detector and policy evidence distinct;
-:Invoke AnalysisModelPort\nwith bounded evidence envelope;
+:Build model context through AnalysisContextBuilder;\nretain exact full-history totals;\nselect bounded source/detector/policy details;
+:Ensure selected source-risk facts retain\ntheir backing selected activities;
+:Invoke AnalysisModelPort\nwith bounded AnalysisEvidenceEnvelope;
 
 |Model adapter|
 if (Execution/provider succeeds?) then (no)
@@ -75,7 +76,7 @@ else (yes)
 endif
 
 |Analysis application|
-:Validate AnalysisResult contract;
+:Validate AnalysisResult contract and\nreferences against supplied bounded evidence;
 if (Valid structured result?) then (no)
   :Create explicit validation-failure outcome;
   |React operator UI|

@@ -36,10 +36,15 @@ permissions:
 jobs:
   fast-verify:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.compatibility != true }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
+      - name: Clean container-owned outputs before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams'
+
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -54,16 +59,15 @@ jobs:
       - name: Ratchet normative SRS to design-map coverage
         run: python3 scripts/validate_design_map.py
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-          cache-dependency-path: backend/pom.xml
-
       - name: Verify backend against Testcontainers PostgreSQL
-        working-directory: backend
-        run: mvn -B -q verify
+        run: >-
+          docker run --rm
+          --network host
+          -v /var/run/docker.sock:/var/run/docker.sock
+          -v "$PWD/backend:/workspace"
+          -w /workspace
+          maven:3.9-eclipse-temurin-21
+          mvn -B -q verify
 
       - name: Report backend test failures
         if: failure()

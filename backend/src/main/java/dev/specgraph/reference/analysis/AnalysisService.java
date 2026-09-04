@@ -14,6 +14,7 @@ final class AnalysisService implements AnalysisUseCase {
     private final CustomerActivityPort customerActivity;
     private final RiskSignalDetectorPort riskSignalDetector;
     private final PolicyKnowledgePort policyKnowledge;
+    private final AnalysisContextBuilder contextBuilder;
     private final AnalysisModelPort analysisModel;
     private final AnalysisHistoryPort analysisHistory;
 
@@ -21,11 +22,13 @@ final class AnalysisService implements AnalysisUseCase {
             CustomerActivityPort customerActivity,
             RiskSignalDetectorPort riskSignalDetector,
             PolicyKnowledgePort policyKnowledge,
+            AnalysisContextBuilder contextBuilder,
             AnalysisModelPort analysisModel,
             AnalysisHistoryPort analysisHistory) {
         this.customerActivity = customerActivity;
         this.riskSignalDetector = riskSignalDetector;
         this.policyKnowledge = policyKnowledge;
+        this.contextBuilder = contextBuilder;
         this.analysisModel = analysisModel;
         this.analysisHistory = analysisHistory;
     }
@@ -62,10 +65,7 @@ final class AnalysisService implements AnalysisUseCase {
                     "No relevant policy evidence was available for the analysis");
         }
 
-        AnalysisEvidenceEnvelope evidence = new AnalysisEvidenceEnvelope(
-                snapshot,
-                detectorEvidence,
-                policyEvidence);
+        AnalysisEvidenceEnvelope evidence = contextBuilder.build(snapshot, detectorEvidence, policyEvidence);
 
         AnalysisModelOutput output;
         try {

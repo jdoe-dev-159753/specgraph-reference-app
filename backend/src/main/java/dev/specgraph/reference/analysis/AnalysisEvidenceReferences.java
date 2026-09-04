@@ -8,10 +8,10 @@ final class AnalysisEvidenceReferences {
 
     static List<AnalysisEvidenceReference> from(AnalysisEvidenceEnvelope evidence) {
         List<AnalysisEvidenceReference> references = new ArrayList<>();
-        evidence.snapshot().activities().forEach(activity -> references.add(new AnalysisEvidenceReference(
+        evidence.activities().forEach(activity -> references.add(new AnalysisEvidenceReference(
                 AnalysisEvidenceReference.Kind.ACTIVITY,
                 activity.transactionId().toString())));
-        evidence.snapshot().riskEvidence().forEach(risk -> references.add(new AnalysisEvidenceReference(
+        evidence.sourceRiskEvidence().forEach(risk -> references.add(new AnalysisEvidenceReference(
                 AnalysisEvidenceReference.Kind.SOURCE_RISK,
                 risk.assessmentId().toString())));
         evidence.detectorEvidence().forEach(signal -> references.add(new AnalysisEvidenceReference(

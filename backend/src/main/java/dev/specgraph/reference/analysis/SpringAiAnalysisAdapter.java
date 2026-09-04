@@ -1,6 +1,7 @@
 package dev.specgraph.reference.analysis;
 
 import dev.specgraph.reference.customer.Activity;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import org.springframework.ai.chat.client.ChatClient;
@@ -18,11 +19,12 @@ final class SpringAiAnalysisAdapter implements AnalysisModelPort {
     private static final String SYSTEM_PROMPT = """
             You are an advisory customer-activity analyst operating only on synthetic demonstration data.
             Use only the evidence in the user message. Do not invent transactions, source risk assessments,
-            detector signals or policy facts. Source risk assessments are persisted source evidence;
-            detector signals are derived advisory evidence; retrieved policy is grounding context.
-            Return a concise structured analysis with riskLevel LOW, MEDIUM or HIGH, a non-empty findingsSummary,
-            and one or more concrete review recommendations. Do not allege criminal conduct and do not present
-            generated conclusions as pre-existing source facts.
+            detector signals or policy facts. Full-history aggregate counts may describe omitted detail;
+            only the explicitly supplied detail records may be cited as grounding evidence.
+            Source risk assessments are persisted source evidence; detector signals are derived advisory evidence;
+            retrieved policy is grounding context. Return a concise structured analysis with riskLevel LOW, MEDIUM
+            or HIGH, a non-empty findingsSummary, and one or more concrete review recommendations. Do not allege
+            criminal conduct and do not present generated conclusions as pre-existing source facts.
             """;
 
     private final ChatClient chatClient;
@@ -45,6 +47,11 @@ final class SpringAiAnalysisAdapter implements AnalysisModelPort {
                         .useProviderStructuredOutput()
                         .validateSchema());
 
+        Map<String, String> metadata = new LinkedHashMap<>(evidence.contextDiagnostics());
+        metadata.put("externalTransmission", "true");
+        metadata.put("dataPolicy", "synthetic-demo-only");
+        metadata.put("structuredOutput", "provider-native+schema-validation");
+
         return new AnalysisModelOutput(
                 result,
                 new AnalysisModelProvenance(
@@ -52,18 +59,23 @@ final class SpringAiAnalysisAdapter implements AnalysisModelPort {
                         modelIdentity,
                         PROMPT_IDENTITY,
                         AnalysisEvidenceReferences.from(evidence),
-                        Map.of(
-                                "externalTransmission", "true",
-                                "dataPolicy", "synthetic-demo-only",
-                                "structuredOutput", "provider-native+schema-validation")));
+                        Map.copyOf(metadata)));
     }
 
     private String renderBoundedEvidence(AnalysisEvidenceEnvelope evidence) {
         StringBuilder prompt = new StringBuilder();
-        prompt.append("customerId=").append(evidence.snapshot().customerId()).append('\n');
+        prompt.append("customerId=").append(evidence.customerId()).append('\n');
+        prompt.append("fullHistoryActivityCount=").append(evidence.totalActivityCount()).append('\n');
+        prompt.append("fullHistorySourceRiskCount=").append(evidence.totalSourceRiskCount()).append('\n');
+        prompt.append("fullHistoryDetectorEvidenceCount=").append(evidence.totalDetectorEvidenceCount()).append('\n');
+        prompt.append("fullHistoryPolicyEvidenceCount=").append(evidence.totalPolicyEvidenceCount()).append('\n');
+        prompt.append("selectedActivityCount=").append(evidence.activities().size()).append('\n');
+        prompt.append("selectedSourceRiskCount=").append(evidence.sourceRiskEvidence().size()).append('\n');
+        prompt.append("selectedDetectorEvidenceCount=").append(evidence.detectorEvidence().size()).append('\n');
+        prompt.append("selectedPolicyEvidenceCount=").append(evidence.policyEvidence().size()).append('\n');
 
         prompt.append("\nSOURCE ACTIVITIES\n");
-        evidence.snapshot().activities().forEach(activity -> prompt
+        evidence.activities().forEach(activity -> prompt
                 .append("- transactionId=").append(activity.transactionId())
                 .append(" type=").append(activity.type())
                 .append(" amount=").append(activity.amount().toPlainString())
@@ -74,7 +86,7 @@ final class SpringAiAnalysisAdapter implements AnalysisModelPort {
                 .append('\n'));
 
         prompt.append("\nSOURCE RISK ASSESSMENTS\n");
-        evidence.snapshot().riskEvidence().forEach(risk -> prompt
+        evidence.sourceRiskEvidence().forEach(risk -> prompt
                 .append("- assessmentId=").append(risk.assessmentId())
                 .append(" transactionId=").append(risk.transactionId())
                 .append(" ruleId=").append(risk.ruleId())

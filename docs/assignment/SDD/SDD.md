@@ -110,7 +110,9 @@ Stable contracts include `CustomerSnapshot`, `CustomerReviewQuery`, `CustomerRev
 
 The pivot standardizes the mechanics that really are common, namely artifact kind, stable artifact identity and provider-neutral metadata, while preserving variant-specific typed payloads. `RiskSignalEvidence` retains detector identity, signal identity and score; `PolicyEvidence` retains retrieved source identity and content; `AnalysisModelProvenance` retains backend and model identities. A common transport/persistence family therefore does not imply common semantic authority. Source `risk_assessments` remain source truth; detector evidence is derived; policy evidence is retrieved context; model/backend provenance describes advisory execution.
 
-`AnalysisEvidenceEnvelope` is the application-owned boundary passed to advisory analysis models. It keeps three semantic layers distinguishishable: persisted customer/source-risk facts in `CustomerSnapshot`, optional derived detector signals in `RiskSignalEvidence`, and retrieved policy knowledge in `PolicyEvidence`. Its members remain strongly typed collections rather than a generic `List<AnalysisPipelineArtifact>`, so the compiler also enforces which artifact variants are legal at each stage. Provider- or library-specific context classes do not cross this boundary.
+`AnalysisEvidenceEnvelope` is the application-owned bounded boundary passed to advisory analysis models. It carries exact complete-input totals (`totalActivityCount`, `totalSourceRiskCount`, `totalDetectorEvidenceCount`, `totalPolicyEvidenceCount`) separately from deterministically selected activity, source-risk, detector and policy detail collections. Its members remain strongly typed collections rather than a generic `List<AnalysisPipelineArtifact>`, so the compiler also enforces which artifact variants are legal at each stage. Provider- or library-specific context classes do not cross this boundary.
+
+`AnalysisContextBuilder` constructs that envelope immediately before `AnalysisModelPort`. Stage 1 detection and Stage 2 policy retrieval still receive the complete `CustomerSnapshot`; bounding is a Stage-3 model-context concern. Selected source-risk facts retain their backing selected activities, orphan risk detail is excluded without falsifying the complete aggregate, detector evidence is selected by descending score with stable identity tie-breaking, and policy evidence preserves retrieval rank. The configured defaults are 25 activities, 20 source-risk facts, 8 detector artifacts and 3 policy artifacts. These limits are independent from the operator-review page sizes; provider-specific redaction, tokenization and token ceilings remain inside the provider adapter.
 
 `AnalysisResult` is constrained to a structured risk level `LOW | MEDIUM | HIGH`, a non-empty findings summary and non-empty recommendations. `AnalysisModelOutput` couples that validated application result shape to project-owned backend/model provenance without exposing provider SDK types.
 
@@ -209,8 +211,10 @@ AnalysisHttpAdapter
   -> PolicyKnowledgePort
        -> PolicyEvidence[*] implements AnalysisPipelineArtifact
           [R3/default: StaticPolicyAdapter | R4: PgVectorPolicyAdapter]
+  -> AnalysisContextBuilder
+       [complete totals + deterministic bounded detail selection]
   -> AnalysisEvidenceEnvelope
-       [source facts | detector evidence | policy evidence remain distinct and statically typed]
+       [exact totals | selected source facts | selected detector evidence | selected policy evidence]
   -> AnalysisModelPort
        -> AnalysisModelOutput
           [validated AnalysisResult + AnalysisModelProvenance implements AnalysisPipelineArtifact]
@@ -218,6 +222,8 @@ AnalysisHttpAdapter
        [operator + policy/retrieval + detector + model provenance persisted separately]
   -> PostgreSQL
 ```
+
+`AnalysisService` deliberately keeps the cut after both Stage 1 and Stage 2. The detector and policy ports observe the complete snapshot, then `AnalysisContextBuilder` applies the independent `specgraph.analysis.context` limits before any `AnalysisModelPort` call. The bounded envelope preserves truthful complete-input totals even when only selected details are model-visible and citable. `AnalysisGroundingValidator` validates references only against those supplied details, so omitted activity, risk, detector or policy evidence cannot be cited as though it crossed the model boundary.
 
 `PgVectorPolicyAdapter` builds a bounded retrieval query from the newest bounded activity and source-risk windows in project-owned semantics, deliberately excluding sensitive account, PAN and wallet identifiers. Spring AI `Document` and vector-store types remain adapter-local. Retrieved chunks are translated into `PolicyEvidence` containing stable chunk identity, content and provider-neutral retrieval metadata such as corpus/revision, source document, chunk position, embedding identity and similarity score. An empty retrieval returns no evidence; the existing analysis orchestration then produces the explicit insufficient-grounding failure rather than allowing model prose to fabricate context.
 
@@ -338,7 +344,7 @@ The design remains governed by seven accepted ADRs:
 6. Compose OCI multi-platform distribution;
 7. Spring JDBC relational adapters.
 
-The R4 refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, gives `AnalysisModelPort` one bounded project-owned evidence envelope, introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, extends persisted provenance, activates pgvector-backed policy retrieval behind `PolicyKnowledgePort`, and now activates Spring Security-backed operator context behind `OperatorContextPort`. The R3/default static policy and deterministic operator-context adapters remain available as deterministic baselines. Bayesian and fuzzy Stage-1 detection are implemented optional substitutions; Random Forest/graph detector families and live/OpenAI synthesis remain later substitutions rather than being falsely claimed by the required R4 path.
+The R4 refinement does not create a parallel architecture. It activates the detector seam already anticipated by ADR-002, keeps complete source context through Stage 1 and Stage 2, and places the application-owned `AnalysisContextBuilder` immediately before Stage 3 so every `AnalysisModelPort` implementation receives one bounded project-owned evidence envelope with exact totals and selected citable details. It introduces the sealed `AnalysisPipelineArtifact` family as the typed pivot shared by detector/retrieval/model-provenance adapters, extends persisted provenance, activates pgvector-backed policy retrieval behind `PolicyKnowledgePort`, and now activates Spring Security-backed operator context behind `OperatorContextPort`. The R3/default static policy and deterministic operator-context adapters remain available as deterministic baselines. Bayesian and fuzzy Stage-1 detection are implemented optional substitutions; Random Forest/graph detector families and live/OpenAI synthesis remain later substitutions rather than being falsely claimed by the required R4 path.
 
 ## 14. Review criterion
 
@@ -354,7 +360,8 @@ A reviewer should be able to answer from this SDD without reconstructing PR hist
 - why source risk evidence, optional derived detector signals, retrieved policy evidence and generated explanation have different authority;
 - how `AnalysisPipelineArtifact` acts as a sealed tagged-union equivalent whose concrete record type is the compile-time discriminant for detector, retrieval and model/backend provenance artifacts;
 - why the pivot shares mechanics without introducing nullable payload branches or erasing stage-specific types;
-- how the executable chain composes `CustomerSnapshot -> RiskSignalDetectorPort -> PolicyKnowledgePort -> AnalysisEvidenceEnvelope -> AnalysisModelPort -> AnalysisHistoryPort`;
+- how the executable chain keeps the complete `CustomerSnapshot` through `RiskSignalDetectorPort` and `PolicyKnowledgePort`, then applies `AnalysisContextBuilder -> bounded AnalysisEvidenceEnvelope` immediately before `AnalysisModelPort`;
+- why exact complete-input totals remain separate from selected model-visible details, why selected source-risk facts require backing selected activities, and why operator pagination limits do not size model context;
 - how the R4 profile substitutes `PgVectorPolicyAdapter` for the R3 static policy adapter without changing `PolicyKnowledgePort` or exposing Spring AI `Document` values;
 - how deterministic chunk identities, Flyway-owned pgvector schema, local embeddings and Testcontainers verification make retrieval reproducible and independently testable from a live LLM;
 - why an empty vector retrieval cannot be silently replaced by fabricated model context;
