@@ -27,6 +27,11 @@ specgraph:
   source-time-zone: ${SPECGRAPH_SOURCE_TIME_ZONE:UTC}
   analysis:
     backend: ${SPECGRAPH_ANALYSIS_BACKEND:deterministic}
+    local:
+      base-url: ${SPECGRAPH_LOCAL_BASE_URL:}
+      model: ${SPECGRAPH_LOCAL_MODEL:ministral-3-8b-instruct-2512}
+      api-key: ${SPECGRAPH_LOCAL_API_KEY:}
+      timeout: ${SPECGRAPH_LOCAL_TIMEOUT:60s}
     context:
       max-activities: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_ACTIVITIES:25}
       max-source-risk-evidence: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_SOURCE_RISK_EVIDENCE:20}

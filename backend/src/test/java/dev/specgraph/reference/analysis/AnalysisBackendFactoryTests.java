@@ -15,17 +15,20 @@ final class AnalysisBackendFactoryTests {
     void resolvesConfiguredBackendWithoutProviderConditionalsInApplicationCode() {
         AnalysisModelPort deterministic = evidence -> null;
         AnalysisModelPort openAi = evidence -> null;
+        AnalysisModelPort local = evidence -> null;
         var adapters = new EnumMap<AnalysisBackendId, Supplier<? extends AnalysisModelPort>>(AnalysisBackendId.class);
         adapters.put(AnalysisBackendId.DETERMINISTIC, () -> deterministic);
         adapters.put(AnalysisBackendId.OPENAI, () -> openAi);
+        adapters.put(AnalysisBackendId.LOCAL, () -> local);
         var factory = new AnalysisBackendFactory(adapters);
 
         assertThat(factory.resolve(AnalysisBackendId.DETERMINISTIC)).isSameAs(deterministic);
         assertThat(factory.resolve(AnalysisBackendId.OPENAI)).isSameAs(openAi);
+        assertThat(factory.resolve(AnalysisBackendId.LOCAL)).isSameAs(local);
     }
 
     @Test
-    void unsupportedLocalBackendFailsClosedUntilItsAdapterExists() {
+    void unregisteredBackendFailsClosed() {
         var adapters = new EnumMap<AnalysisBackendId, Supplier<? extends AnalysisModelPort>>(AnalysisBackendId.class);
         adapters.put(AnalysisBackendId.DETERMINISTIC, () -> evidence -> null);
         var factory = new AnalysisBackendFactory(adapters);

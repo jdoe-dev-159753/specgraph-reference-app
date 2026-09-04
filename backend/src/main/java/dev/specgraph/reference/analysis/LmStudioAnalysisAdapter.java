@@ -4,21 +4,16 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
-@Component
-@ConditionalOnProperty(prefix = "specgraph.analysis", name = "backend", havingValue = "openai")
-final class SpringAiAnalysisAdapter implements AnalysisModelPort {
-    static final String BACKEND_IDENTITY = "openai";
+/** Local LM Studio Stage-3 leaf over its OpenAI-compatible Chat Completions endpoint. */
+final class LmStudioAnalysisAdapter implements AnalysisModelPort {
+    static final String BACKEND_IDENTITY = "local";
+    static final String RUNTIME_IDENTITY = "lmstudio/llama.cpp";
 
     private final ChatClient chatClient;
     private final String modelIdentity;
 
-    SpringAiAnalysisAdapter(
-            ChatModel chatModel,
-            @Value("${spring.ai.openai.chat.model:gpt-5-mini}") String modelIdentity) {
+    LmStudioAnalysisAdapter(ChatModel chatModel, String modelIdentity) {
         this.chatClient = ChatClient.create(chatModel);
         this.modelIdentity = modelIdentity;
     }
@@ -34,7 +29,8 @@ final class SpringAiAnalysisAdapter implements AnalysisModelPort {
                         .validateSchema());
 
         Map<String, String> metadata = new LinkedHashMap<>(evidence.contextDiagnostics());
-        metadata.put("externalTransmission", "true");
+        metadata.put("runtime", RUNTIME_IDENTITY);
+        metadata.put("externalTransmission", "false");
         metadata.put("dataPolicy", "synthetic-demo-only");
         metadata.put("structuredOutput", "provider-native+schema-validation");
 
@@ -47,5 +43,4 @@ final class SpringAiAnalysisAdapter implements AnalysisModelPort {
                         AnalysisEvidenceReferences.from(evidence),
                         Map.copyOf(metadata)));
     }
-
 }

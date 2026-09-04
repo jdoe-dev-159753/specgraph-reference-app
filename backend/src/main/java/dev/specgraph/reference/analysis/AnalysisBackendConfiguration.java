@@ -17,10 +17,12 @@ class AnalysisBackendConfiguration {
     @Bean
     AnalysisBackendFactory analysisBackendFactory(
             DeterministicAnalysisAdapter deterministic,
-            ObjectProvider<SpringAiAnalysisAdapter> openAi) {
+            ObjectProvider<SpringAiAnalysisAdapter> openAi,
+            ObjectProvider<LmStudioAnalysisAdapter> local) {
         var adapters = new EnumMap<AnalysisBackendId, Supplier<? extends AnalysisModelPort>>(AnalysisBackendId.class);
         adapters.put(AnalysisBackendId.DETERMINISTIC, () -> deterministic);
         adapters.put(AnalysisBackendId.OPENAI, openAi::getIfAvailable);
+        adapters.put(AnalysisBackendId.LOCAL, local::getIfAvailable);
         return new AnalysisBackendFactory(adapters);
     }
 

@@ -28,6 +28,12 @@ services:
       SPRING_DATASOURCE_PASSWORD: specgraph
       SPECGRAPH_SOURCE_TIME_ZONE: "${SPECGRAPH_SOURCE_TIME_ZONE:-UTC}"
       SPECGRAPH_ANALYSIS_BACKEND: "${SPECGRAPH_ANALYSIS_BACKEND:-deterministic}"
+      SPECGRAPH_LOCAL_BASE_URL: "${SPECGRAPH_LOCAL_BASE_URL:-}"
+      SPECGRAPH_LOCAL_MODEL: "${SPECGRAPH_LOCAL_MODEL:-ministral-3-8b-instruct-2512}"
+      # Deliberately separate from the public launcher input so an ambient local
+      # token cannot enter deterministic or OpenAI containers through raw Compose.
+      SPECGRAPH_LOCAL_API_KEY: "${SPECGRAPH_PROJECTED_LOCAL_API_KEY:-}"
+      SPECGRAPH_LOCAL_TIMEOUT: "${SPECGRAPH_LOCAL_TIMEOUT:-60s}"
       SPECGRAPH_EMBEDDING_CACHE: /tmp/specgraph-embedding-model
       # Deliberately separate from the provider's conventional variable so an
       # ambient shell credential cannot enter a raw deterministic Compose run.

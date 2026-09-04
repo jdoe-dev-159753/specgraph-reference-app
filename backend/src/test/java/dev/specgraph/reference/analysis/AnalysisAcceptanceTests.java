@@ -94,6 +94,33 @@ class AnalysisAcceptanceTests extends PostgresIntegrationTestSupport {
     }
 
     @Test
+    void legacyProviderHistoryBeyondCurrentLiveOutputBoundsRemainsReadable() throws Exception {
+        UUID analysisId = UUID.randomUUID();
+        String legacySummary = "x".repeat(501);
+        jdbc.update("""
+                        INSERT INTO analysis_history(
+                            analysis_id, customer_id, operator_id, generated_at, risk_level,
+                            findings_summary, recommendations, evidence_provenance,
+                            detector_provenance, model_provenance
+                        ) VALUES (?, ?, 'legacy-operator', CURRENT_TIMESTAMP, 'MEDIUM', ?,
+                            CAST('["Legacy recommendation."]' AS jsonb),
+                            CAST('[{"sourceIdentity":"legacy-policy","content":"Legacy evidence.","retrievalMetadata":{}}]' AS jsonb),
+                            CAST('[]' AS jsonb),
+                            CAST('{"backendIdentity":"openai","modelIdentity":"legacy-model","metadata":{}}' AS jsonb))
+                        """,
+                analysisId,
+                SEEDED_CUSTOMER_ID,
+                legacySummary);
+
+        mvc.perform(get(
+                        "/api/customers/{customerId}/analyses/{analysisId}",
+                        SEEDED_CUSTOMER_ID,
+                        analysisId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.findingsSummary").value(legacySummary));
+    }
+
+    @Test
     void deterministicBaselineSeparatesNoSignalAndDenseSignalScenarios() throws Exception {
         mvc.perform(post("/api/customers/{customerId}/analyses", STABLE_CUSTOMER_ID))
                 .andExpect(status().isCreated())

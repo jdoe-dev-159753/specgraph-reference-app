@@ -25,5 +25,6 @@ final class AnalysisBackendSelectionIntegrationTests extends PostgresIntegration
         assertThat(environment.getProperty("specgraph.analysis.backend")).isEqualTo("deterministic");
         assertThat(environment.getProperty("spring.ai.model.chat")).isEqualTo("deterministic");
         assertThat(context.getBeansOfType(SpringAiAnalysisAdapter.class)).isEmpty();
+        assertThat(context.getBeansOfType(LmStudioAnalysisAdapter.class)).isEmpty();
     }
 }

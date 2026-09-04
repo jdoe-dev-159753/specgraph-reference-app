@@ -16,7 +16,7 @@
 
 The application lets a Customer Care operator inspect deterministic CARD, PAYMENT and CRYPTO activity plus persisted source-shaped risk evidence. R2 replaces the synthetic activity adapter with PostgreSQL/Flyway persistence behind the same project-owned `CustomerActivityPort`. R3 adds structured analysis and persistent reviewable history behind provider-neutral ports. R4 adds multi-operator authentication, real policy retrieval through PostgreSQL/pgvector with local `all-MiniLM-L6-v2` embeddings, explicit detector evidence, grounding validation and interchangeable Stage-3 synthesis behind `AnalysisModelPort`.
 
-The same R4 application artifact selects its Stage-3 backend explicitly at process startup. Deterministic synthesis is the no-credential default; OpenAI is deliberate opt-in, and the local identifier remains reserved until #251 supplies its adapter.
+The same R4 application artifact selects its Stage-3 backend explicitly at process startup. Deterministic synthesis is the no-credential default; OpenAI is deliberate opt-in, and LM Studio is an optional local Stage-3 backend using the same bounded evidence and grounding path.
 
 The runtime is a **modular monolith with hexagonal / ports-and-adapters boundaries**. Vendor and algorithm names are adapter identities, not architecture-layer names.
 
@@ -35,7 +35,7 @@ The mature analysis path is intentionally split by function and authority:
 1. **Stage 1: primitive signal analysis** receives the complete `CustomerSnapshot` behind `RiskSignalDetectorPort`, implemented as no-op by default with selectable Bayesian beta-binomial and fuzzy detector adapters; the reviewer gallery below currently proves the baseline and Bayesian variants;
 2. **Stage 2: evidence grounding and retrieval** receives the same complete snapshot through `PolicyKnowledgePort`, real pgvector retrieval and local MiniLM embeddings;
 3. **Model-context boundary:** `AnalysisContextBuilder` retains exact full-history totals while selecting bounded, citable source, detector and policy details into `AnalysisEvidenceEnvelope`;
-4. **Stage 3: final advisory synthesis** consumes only that bounded envelope behind `AnalysisModelPort`, selected through the typed backend dimension with deterministic default and deliberate OpenAI opt-in.
+4. **Stage 3: final advisory synthesis** consumes only that bounded envelope behind `AnalysisModelPort`, selected through the typed backend dimension with deterministic default and deliberate OpenAI or LM Studio opt-in.
 
 Source `risk_assessments`, detector-derived `RiskSignalEvidence`, retrieved `PolicyEvidence` and generated analysis remain separate semantic authorities throughout the pipeline.
 
@@ -61,7 +61,7 @@ The ring number describes **capability maturity**. Detector/backend choice is an
 | `8083` | R3 analysis + history | baseline | static/deterministic grounding baseline | deterministic | no |
 | `8084` | **R4 baseline** | no-op | **pgvector + local MiniLM** | deterministic | no |
 | `8085` | **R4 Bayesian** | **Bayesian beta-binomial** | **same pgvector + local MiniLM** | deterministic | no |
-| `8086` | R4 local, optional | configured detector(s) | same RAG | LM Studio/local model | no, planned in #251 |
+| `8086` | R4 local, optional | configured detector(s) | same RAG | LM Studio/local model | no |
 | `8087` | R4 external, optional | configured detector(s) | same RAG | OpenAI | yes, optional only |
 
 The canonical manual J4 acceptance runtime is **`watch-infra-01`**, a Linux Docker host. Run every command in this section on that host, not on the Windows workstation. These commands build the merged source directly and do not depend on the GHCR `:demo` tag.
@@ -205,9 +205,20 @@ OpenAI is an explicit opt-in using the same application artifact. A credential c
 OPENAI_API_KEY=... ./scripts/r4-variant-up.sh external 8087 openai
 ```
 
-`./scripts/r4-gallery-up.sh` starts the deterministic `8084` baseline and adds the `8087` OpenAI variant only when `OPENAI_API_KEY` is present. `compose.r4.yaml` intentionally ignores that conventional ambient variable and accepts the credential only through the launcher-owned `SPECGRAPH_OPENAI_API_KEY` projection; the launcher clears the ambient key and populates the projection only for `backend=openai`. A key supplied for the external variant therefore never reaches the deterministic container, including through the raw baseline/Bayesian Compose commands above. Without a key the gallery first stops any previously launched external project, so the opt-out remains effective even if baseline startup later fails. Distinct Compose project names isolate each variant's network and PostgreSQL state. Inspect the declared variants with `./scripts/r4-gallery-manifest.sh`, and stop them with `./scripts/r4-gallery-down.sh`; shutdown attempts both variants and reports failure if either teardown fails.
+Run the optional local Stage-3 variant from `watch-infra-01` with LM Studio listening on the Windows host. Replace the placeholder with the Windows LAN IP address; hostnames are rejected to prevent DNS rebinding. Enable LM Studio authentication/network listening and restrict the Windows firewall rule to the VPS address. A loopback literal such as `127.0.0.1:1234` or `[::1]:1234` is valid only when the application itself runs on Windows.
 
-`specgraph.analysis.backend` is the authoritative typed selector (`deterministic | openai | local`), projected from `SPECGRAPH_ANALYSIS_BACKEND`; `deterministic` is the no-credential default. `local` is reserved and fails closed until the local adapter owned by #251 is implemented. Unknown values also fail during configuration binding.
+```bash
+SPECGRAPH_LOCAL_BASE_URL=http://WINDOWS_LAN_IP:1234/v1 \
+SPECGRAPH_LOCAL_MODEL=ministral-3-8b-instruct-2512 \
+SPECGRAPH_LOCAL_API_KEY=... \
+./scripts/r4-variant-up.sh local 8086 local
+```
+
+The token is optional when LM Studio authentication is disabled. `SPECGRAPH_LOCAL_TIMEOUT` defaults to `60s`; the observed workstation proof completed in about 10 seconds, which is demonstration evidence rather than a production guarantee. LM Studio and a GPU are never required by the deterministic default or CI, which uses a local deterministic OpenAI-compatible test server.
+
+`./scripts/r4-gallery-up.sh` starts the deterministic `8084` baseline and adds the `8087` OpenAI variant only when `OPENAI_API_KEY` is present. `compose.r4.yaml` accepts provider tokens only through launcher-owned projections: `SPECGRAPH_OPENAI_API_KEY` for OpenAI and `SPECGRAPH_PROJECTED_LOCAL_API_KEY` for LM Studio. The launcher clears both public token inputs and populates only the projection for the selected backend, so exported credentials never reach an unrelated container, including through the raw baseline/Bayesian Compose commands above. Without an OpenAI key the gallery first stops any previously launched external project, so the opt-out remains effective even if baseline startup later fails. Distinct Compose project names isolate each variant's network and PostgreSQL state. Inspect the declared variants with `./scripts/r4-gallery-manifest.sh`, and stop them with `./scripts/r4-gallery-down.sh`; shutdown attempts both variants and reports failure if either teardown fails.
+
+`specgraph.analysis.backend` is the authoritative typed selector (`deterministic | openai | local`), projected from `SPECGRAPH_ANALYSIS_BACKEND`; `deterministic` is the no-credential default. Local mode additionally requires `SPECGRAPH_LOCAL_BASE_URL` with a loopback/private/link-local IP literal; hostnames are rejected so the address validated at startup is the address used by the client. Model, optional token and timeout are configured independently through `SPECGRAPH_LOCAL_MODEL`, `SPECGRAPH_LOCAL_API_KEY` and `SPECGRAPH_LOCAL_TIMEOUT`. Missing/invalid local configuration and unknown backend values fail closed without falling back to OpenAI or deterministic synthesis. Stage 2 remains the independent local MiniLM/pgvector retrieval path.
 Run the accepted frozen R2 source checkpoint instead of rebuilding the current R3 checkout under the R2 service name:
 
 ```bash

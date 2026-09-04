@@ -10,13 +10,8 @@ Current executable source variants:
 | ---: | --- | --- | --- | --- | --- |
 | 8084 | R4 baseline | no-op | pgvector + local all-MiniLM-L6-v2 | deterministic | no |
 | 8085 | R4 Bayesian | Bayesian beta-binomial | pgvector + local all-MiniLM-L6-v2 | deterministic | no |
+| 8086 | R4 local, optional | configured detector | same RAG | LM Studio/private model | no |
 | 8087 | R4 external, optional | configured detector | same RAG | OpenAI | yes, only with deliberate credential + backend selection |
-
-Reserved optional variants once their owners land:
-
-| Port | Ring | Stage 1 | Stage 2 | Stage 3 | Owner |
-| ---: | --- | --- | --- | --- | --- |
-| 8086 | R4 local | Bayesian / configured Composite+ensemble | same RAG | local LM Studio model | #251 |
 
 ## Linux commands on `watch-infra-01`
 
@@ -31,9 +26,15 @@ The repository-owned launcher makes the Stage-3 choice explicit and produces a r
 ```bash
 ./scripts/r4-variant-up.sh baseline 8084 deterministic
 OPENAI_API_KEY=... ./scripts/r4-variant-up.sh external 8087 openai
+SPECGRAPH_LOCAL_BASE_URL=http://WINDOWS_LAN_IP:1234/v1 \
+  SPECGRAPH_LOCAL_MODEL=ministral-3-8b-instruct-2512 \
+  SPECGRAPH_LOCAL_API_KEY=... \
+  ./scripts/r4-variant-up.sh local 8086 local
 ```
 
-`./scripts/r4-gallery-up.sh` first stops any previously launched external project when `OPENAI_API_KEY` is absent, then starts the baseline and adds the external variant only when the key is deliberately present. The Compose definition ignores the conventional ambient variable and accepts only the launcher-owned `SPECGRAPH_OPENAI_API_KEY` projection. The launcher clears the ambient key for every Compose invocation and populates that projection only for OpenAI, so the raw deterministic commands above cannot inherit an exported provider credential. The opt-out therefore remains effective even if baseline startup fails. `./scripts/r4-gallery-down.sh` attempts both teardowns and returns nonzero if either fails. `local` is a reserved backend identifier and fails closed until #251 supplies the adapter.
+Run the local command on `watch-infra-01` while LM Studio listens on the Windows workstation. Replace the placeholder with its private LAN IP literal; hostnames are rejected to prevent DNS rebinding. Restrict the Windows firewall rule to the Linux host, and omit `SPECGRAPH_LOCAL_API_KEY` when LM Studio authentication is disabled. The adapter rejects public endpoints and records `externalTransmission=false`; CI uses a deterministic loopback OpenAI-compatible server and requires neither LM Studio, a GPU nor Internet access.
+
+`./scripts/r4-gallery-up.sh` first stops any previously launched external project when `OPENAI_API_KEY` is absent, then starts the baseline and adds the external variant only when the key is deliberately present. The Compose definition accepts provider tokens only through launcher-owned projections. The launcher clears both public token inputs for every Compose invocation and populates only the selected backend's projection, so raw deterministic commands cannot inherit an exported OpenAI or LM Studio credential. The opt-out therefore remains effective even if baseline startup fails. `./scripts/r4-gallery-down.sh` attempts both teardowns and returns nonzero if either fails.
 
 Bayesian variant on the adjacent port:
 
@@ -78,4 +79,4 @@ Each Compose project owns an isolated PostgreSQL/pgvector instance and analysis 
 
 Each successful variant uploads a separate `r4-gallery-<variant>-<sha>` artifact containing the screenshot and a small provenance manifest. Selected PNGs are then promoted unchanged into `docs/reviewer/screenshots/` for the README evidence gallery.
 
-`R4_PROFILES` remains the detector-side selection seam in this stack. Stage 3 is independently selected through the application-owned `specgraph.analysis.backend` dimension (`SPECGRAPH_ANALYSIS_BACKEND` in Compose); provider credentials configure a leaf but never select it. #224/#254 own the later Composite detector topology and calibrated ensemble semantics, while #251 owns the reserved local Stage-3 adapter.
+`R4_PROFILES` remains the detector-side selection seam in this stack. Stage 3 is independently selected through the application-owned `specgraph.analysis.backend` dimension (`SPECGRAPH_ANALYSIS_BACKEND` in Compose); provider credentials configure a leaf but never select it. #224/#254 own the later Composite detector topology and calibrated ensemble semantics. The local Stage-3 adapter is independently selected and does not change Stage-1 or Stage-2 topology.
