@@ -1,0 +1,34 @@
+@startuml
+title Appendix — Composite preserves Stage-1 evidence; it does not fuse scores
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam wrapWidth 220
+
+rectangle "Typed ordered selection\n[BAYESIAN, FUZZY]\nunique; max 8" as selection
+rectangle "RiskSignalDetectorFactory" as factory
+rectangle "One Composite\nRiskSignalDetectorPort" as composite
+rectangle "Bayesian leaf\nposterior-tail artifact" as bayesian
+rectangle "Fuzzy leaf\ngraded-rule artifact" as fuzzy
+rectangle "Ordered canonical evidence\n[Bayesian artifact, Fuzzy artifact]" as output
+
+selection --> factory
+factory --> composite
+composite --> bayesian : same CustomerSnapshot
+composite --> fuzzy : same CustomerSnapshot
+bayesian --> output : preserve artifact
+fuzzy --> output : preserve artifact
+
+note bottom of composite
+Structural concatenation only.
+No averaging, calibration or ensemble score.
+A child failure stops detector execution.
+end note
+
+note bottom of output
+Current selectable concrete leaves:
+Bayesian, fuzzy and Random Forest.
+Child evidence stays distinct.
+end note
+@enduml
