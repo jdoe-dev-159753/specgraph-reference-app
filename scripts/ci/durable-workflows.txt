@@ -1,4 +1,6 @@
 application-ci.yml
+codex-review-fan-in-tests.yml
+codex-review-fan-in.yml
 demo-images.yml
 plantuml-diagrams.yml
 project-v2-reconcile.yml

@@ -1,0 +1,31 @@
+name: codex-review-fan-in-tests
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/codex_review_fan_in.py'
+      - 'scripts/test_codex_review_fan_in.py'
+      - '.github/workflows/codex-review-fan-in.yml'
+      - '.github/workflows/codex-review-fan-in-tests.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-review-fan-in-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-head-tests:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Assert exact tested source revision
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Verify review fan-in semantics
+        run: python3 -m unittest scripts/test_codex_review_fan_in.py

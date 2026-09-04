@@ -1,0 +1,40 @@
+name: codex-review-fan-in
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_run:
+    workflows: [application-ci, plantuml-diagrams, r4-acceptance-ci, codex-review-fan-in-tests, work-graph-guard-tests]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Open main-targeting pull request to re-evaluate'
+        required: true
+        type: number
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: codex-review-fan-in-${{ github.event.pull_request.number || inputs.pr_number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  request-review:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      # This privileged workflow must never execute code from the pull-request head.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .automation-trusted
+          persist-credentials: false
+      - name: Request one review after exact-head deterministic success
+        working-directory: .automation-trusted
+        env:
+          GITHUB_TOKEN: ${{ secrets.PROJECTS_TOKEN }}
+        run: python3 scripts/codex_review_fan_in.py
