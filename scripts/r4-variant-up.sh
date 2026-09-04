@@ -43,7 +43,8 @@ fi
 
 R4_PORT="${port}" \
 SPECGRAPH_ANALYSIS_BACKEND="${backend}" \
-OPENAI_API_KEY="${compose_openai_api_key}" \
+OPENAI_API_KEY="" \
+SPECGRAPH_OPENAI_API_KEY="${compose_openai_api_key}" \
 docker compose -p "${project}" -f "${repo_root}/compose.r4.yaml" up --build -d --wait
 
 bash "${script_dir}/r4-variant-manifest.sh" "${variant}" "${port}" "${backend}"

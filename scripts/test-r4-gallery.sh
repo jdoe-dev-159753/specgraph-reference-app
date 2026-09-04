@@ -10,11 +10,16 @@ docker_log="${temp_dir}/docker.log"
 cat > "${temp_dir}/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-credential_state=absent
+ambient_credential_state=absent
 if [[ -n "${OPENAI_API_KEY:-}" ]]; then
-  credential_state=present
+  ambient_credential_state=present
 fi
-printf 'credential=%s %s\n' "${credential_state}" "$*" >> "${R4_TEST_DOCKER_LOG}"
+projected_credential_state=absent
+if [[ -n "${SPECGRAPH_OPENAI_API_KEY:-}" ]]; then
+  projected_credential_state=present
+fi
+printf 'ambient-credential=%s projected-credential=%s %s\n' \
+  "${ambient_credential_state}" "${projected_credential_state}" "$*" >> "${R4_TEST_DOCKER_LOG}"
 if [[ "${R4_TEST_FAIL_BASELINE:-false}" == "true" && "$*" == *"specgraph-r4-baseline"* && "$*" == *" up "* ]]; then
   exit 99
 fi
@@ -67,11 +72,11 @@ bash "${script_dir}/r4-gallery-up.sh" \
   > "${temp_dir}/keyed-stdout" 2> "${temp_dir}/keyed-stderr"
 baseline_up="$(grep -F "specgraph-r4-baseline" "${docker_log}" | grep -F " up ")"
 external_up="$(grep -F "specgraph-r4-external" "${docker_log}" | grep -F " up ")"
-if [[ "${baseline_up}" != credential=absent* ]]; then
+if [[ "${baseline_up}" != "ambient-credential=absent projected-credential=absent"* ]]; then
   echo "deterministic baseline inherited the OpenAI credential" >&2
   exit 1
 fi
-if [[ "${external_up}" != credential=present* ]]; then
+if [[ "${external_up}" != "ambient-credential=absent projected-credential=present"* ]]; then
   echo "OpenAI variant did not receive its deliberate credential" >&2
   exit 1
 fi

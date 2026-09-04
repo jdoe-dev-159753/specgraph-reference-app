@@ -33,7 +33,7 @@ The repository-owned launcher makes the Stage-3 choice explicit and produces a r
 OPENAI_API_KEY=... ./scripts/r4-variant-up.sh external 8087 openai
 ```
 
-`./scripts/r4-gallery-up.sh` first stops any previously launched external project when `OPENAI_API_KEY` is absent, then starts the baseline and adds the external variant only when the key is deliberately present. The baseline Compose invocation always clears the key, while the OpenAI invocation receives it. The opt-out therefore remains effective even if baseline startup fails. `./scripts/r4-gallery-down.sh` attempts both teardowns and returns nonzero if either fails. `local` is a reserved backend identifier and fails closed until #251 supplies the adapter.
+`./scripts/r4-gallery-up.sh` first stops any previously launched external project when `OPENAI_API_KEY` is absent, then starts the baseline and adds the external variant only when the key is deliberately present. The Compose definition ignores the conventional ambient variable and accepts only the launcher-owned `SPECGRAPH_OPENAI_API_KEY` projection. The launcher clears the ambient key for every Compose invocation and populates that projection only for OpenAI, so the raw deterministic commands above cannot inherit an exported provider credential. The opt-out therefore remains effective even if baseline startup fails. `./scripts/r4-gallery-down.sh` attempts both teardowns and returns nonzero if either fails. `local` is a reserved backend identifier and fails closed until #251 supplies the adapter.
 
 Bayesian variant on the adjacent port:
 

@@ -29,7 +29,9 @@ services:
       SPECGRAPH_SOURCE_TIME_ZONE: "${SPECGRAPH_SOURCE_TIME_ZONE:-UTC}"
       SPECGRAPH_ANALYSIS_BACKEND: "${SPECGRAPH_ANALYSIS_BACKEND:-deterministic}"
       SPECGRAPH_EMBEDDING_CACHE: /tmp/specgraph-embedding-model
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      # Deliberately separate from the provider's conventional variable so an
+      # ambient shell credential cannot enter a raw deterministic Compose run.
+      OPENAI_API_KEY: "${SPECGRAPH_OPENAI_API_KEY:-}"
       OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5-mini}"
     depends_on:
       postgres:
