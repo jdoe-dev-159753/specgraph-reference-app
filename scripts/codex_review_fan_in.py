@@ -48,7 +48,9 @@ def expected_workflows(paths: list[str]) -> set[str]:
     expected: set[str] = set()
     application_exact = {
         "compose.yaml", "compose.oci.yaml", "compose.r4.yaml",
-        "scripts/test-r4-gallery.sh", "scripts/validate_design_map.py",
+        "scripts/test-r4-gallery.sh", "scripts/analyze_dataset_ceiling.py",
+        "scripts/test_analyze_dataset_ceiling.py", "scripts/validate_design_map.py",
+        "docs/analysis/dataset-ceiling.md",
         ".github/workflows/application-ci.yml",
     }
     if prefixed("backend/", "frontend/") or any(
@@ -126,9 +128,15 @@ def stale_workflow_event(event: dict, head_sha: str) -> bool:
     return bool(event_sha and event_sha != head_sha)
 
 
-def review_already_requested(comments: list[dict], reviews: list[dict], head_sha: str) -> bool:
+def review_already_requested(
+    comments: list[dict], reviews: list[dict], head_sha: str, requester_id: int
+) -> bool:
     marker = MARKER.format(sha=head_sha)
-    if any(marker in (comment.get("body") or "") for comment in comments):
+    if any(
+        marker in (comment.get("body") or "")
+        and (comment.get("user") or {}).get("id") == requester_id
+        for comment in comments
+    ):
         return True
     if any(
         (review.get("user") or {}).get("id") == CODEX_USER_ID
@@ -142,6 +150,11 @@ def review_already_requested(comments: list[dict], reviews: list[dict], head_sha
         and prefix in (comment.get("body") or "").lower()
         for comment in comments
     )
+
+
+def workflow_runs_path(head_sha: str) -> str:
+    query = parse.urlencode({"head_sha": head_sha, "per_page": 100})
+    return f"/repos/{REPO}/actions/runs?{query}"
 
 
 def main() -> int:
@@ -180,8 +193,7 @@ def main() -> int:
         if path
     ]
     expected = expected_workflows(paths)
-    query = parse.urlencode({"head_sha": head_sha, "event": "pull_request", "per_page": 100})
-    runs = api(f"/repos/{REPO}/actions/runs?{query}").get("workflow_runs", [])
+    runs = api(workflow_runs_path(head_sha)).get("workflow_runs", [])
     state, names = gate_state(expected, runs)
     if state != "ready":
         print(f"pull request #{number}: deterministic workflows {state}: {', '.join(names)}")
@@ -189,7 +201,7 @@ def main() -> int:
 
     comments = list(pages(f"/repos/{REPO}/issues/{number}/comments"))
     reviews = list(pages(f"/repos/{REPO}/pulls/{number}/reviews"))
-    if review_already_requested(comments, reviews, head_sha):
+    if review_already_requested(comments, reviews, head_sha, api("/user")["id"]):
         print(f"pull request #{number}: Codex review already requested for {head_sha[:12]}")
         return 0
     body = f"{MARKER.format(sha=head_sha)}\n@codex review"

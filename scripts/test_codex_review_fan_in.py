@@ -10,6 +10,15 @@ class WorkflowSelectionTests(unittest.TestCase):
             fan_in.expected_workflows(["backend/src/main/java/App.java"]),
         )
 
+    def test_dataset_ceiling_paths_require_application(self):
+        for path in (
+            "scripts/analyze_dataset_ceiling.py",
+            "scripts/test_analyze_dataset_ceiling.py",
+            "docs/analysis/dataset-ceiling.md",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual({"application-ci"}, fan_in.expected_workflows([path]))
+
     def test_diagram_change_requires_plantuml(self):
         self.assertEqual(
             {"plantuml-diagrams"},
@@ -107,14 +116,23 @@ class ReviewRequestTests(unittest.TestCase):
 
     def test_sha_marker_deduplicates_request(self):
         comments = [{"body": fan_in.MARKER.format(sha=self.HEAD), "user": {"id": 1}}]
-        self.assertTrue(fan_in.review_already_requested(comments, [], self.HEAD))
+        self.assertTrue(fan_in.review_already_requested(comments, [], self.HEAD, 1))
+
+    def test_untrusted_sha_marker_does_not_suppress_request(self):
+        comments = [{"body": fan_in.MARKER.format(sha=self.HEAD), "user": {"id": 1}}]
+        self.assertFalse(fan_in.review_already_requested(comments, [], self.HEAD, 2))
 
     def test_exact_codex_review_deduplicates_request(self):
         reviews = [{"commit_id": self.HEAD, "user": {"id": fan_in.CODEX_USER_ID}}]
-        self.assertTrue(fan_in.review_already_requested([], reviews, self.HEAD))
+        self.assertTrue(fan_in.review_already_requested([], reviews, self.HEAD, 1))
 
     def test_unrelated_comment_does_not_suppress_request(self):
-        self.assertFalse(fan_in.review_already_requested([{"body": "@codex review"}], [], self.HEAD))
+        self.assertFalse(fan_in.review_already_requested([{"body": "@codex review"}], [], self.HEAD, 1))
+
+    def test_workflow_query_includes_recovery_runs(self):
+        path = fan_in.workflow_runs_path(self.HEAD)
+        self.assertIn(f"head_sha={self.HEAD}", path)
+        self.assertNotIn("event=", path)
 
 
 if __name__ == "__main__":
