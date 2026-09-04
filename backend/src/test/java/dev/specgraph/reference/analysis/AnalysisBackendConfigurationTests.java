@@ -2,6 +2,8 @@ package dev.specgraph.reference.analysis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.time.Duration;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -73,6 +75,26 @@ final class AnalysisBackendConfigurationTests {
                                 Duration.ofSeconds(60))
                         .validatedBaseUrl())
                 .isEqualTo("http://[0:0:0:0:0:0:0:1]:1234/v1");
+    }
+
+    @Test
+    void localHostnameMustResolveOnlyToPrivateAddresses() throws UnknownHostException {
+        InetAddress privateAddress = InetAddress.getByAddress(new byte[] {(byte) 192, (byte) 168, 1, 10});
+        InetAddress publicAddress = InetAddress.getByAddress(new byte[] {(byte) 203, 0, 113, 10});
+
+        assertThat(LmStudioAnalysisProperties.isNetworkLocal(
+                        "lm-studio.local", ignored -> new InetAddress[] {privateAddress}))
+                .isTrue();
+        assertThat(LmStudioAnalysisProperties.isNetworkLocal(
+                        "lm-studio.local", ignored -> new InetAddress[] {privateAddress, publicAddress}))
+                .isFalse();
+        assertThat(LmStudioAnalysisProperties.isNetworkLocal("lm-studio.local", ignored -> new InetAddress[0]))
+                .isFalse();
+        assertThat(LmStudioAnalysisProperties.isNetworkLocal(
+                        "lm-studio.local", ignored -> {
+                            throw new UnknownHostException("unresolved test host");
+                        }))
+                .isFalse();
     }
 
     @Test

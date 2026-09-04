@@ -60,12 +60,16 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
     }
 
     private static boolean isNetworkLocal(String host) {
+        return isNetworkLocal(host, InetAddress::getAllByName);
+    }
+
+    static boolean isNetworkLocal(String host, HostAddressResolver resolver) {
         String value = host.toLowerCase(Locale.ROOT);
         if (value.startsWith("[") && value.endsWith("]")) {
             value = value.substring(1, value.length() - 1);
         }
         if (value.equals("localhost") || value.endsWith(".local")) {
-            return true;
+            return resolvesOnlyToNetworkLocalAddresses(value, resolver);
         }
         if (value.contains(":")) {
             return isLocalIpv6(value);
@@ -86,17 +90,43 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
                 || (octets[0] == 169 && octets[1] == 254);
     }
 
-    private static boolean isLocalIpv6(String value) {
+    private static boolean resolvesOnlyToNetworkLocalAddresses(String value, HostAddressResolver resolver) {
         try {
-            InetAddress address = InetAddress.getByName(value);
-            if (!(address instanceof Inet6Address)) {
-                return false;
-            }
-            byte first = address.getAddress()[0];
-            boolean uniqueLocal = (first & 0xfe) == 0xfc;
-            return address.isLoopbackAddress() || address.isLinkLocalAddress() || uniqueLocal;
+            InetAddress[] addresses = resolver.resolve(value);
+            return addresses.length > 0
+                    && java.util.Arrays.stream(addresses).allMatch(LmStudioAnalysisProperties::isLocalAddress);
         } catch (UnknownHostException exception) {
             return false;
         }
+    }
+
+    private static boolean isLocalAddress(InetAddress address) {
+        if (address instanceof Inet6Address) {
+            byte first = address.getAddress()[0];
+            boolean uniqueLocal = (first & 0xfe) == 0xfc;
+            return address.isLoopbackAddress() || address.isLinkLocalAddress() || uniqueLocal;
+        }
+        byte[] octets = address.getAddress();
+        int first = Byte.toUnsignedInt(octets[0]);
+        int second = Byte.toUnsignedInt(octets[1]);
+        return first == 10
+                || first == 127
+                || (first == 172 && second >= 16 && second <= 31)
+                || (first == 192 && second == 168)
+                || (first == 169 && second == 254);
+    }
+
+    private static boolean isLocalIpv6(String value) {
+        try {
+            InetAddress address = InetAddress.getByName(value);
+            return address instanceof Inet6Address && isLocalAddress(address);
+        } catch (UnknownHostException exception) {
+            return false;
+        }
+    }
+
+    @FunctionalInterface
+    interface HostAddressResolver {
+        InetAddress[] resolve(String host) throws UnknownHostException;
     }
 }
