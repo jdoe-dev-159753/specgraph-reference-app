@@ -64,7 +64,7 @@ final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPort
         ENTITY_MANAGER_FACTORY.setDataSource(dataSource);
         ENTITY_MANAGER_FACTORY.setJpaVendorAdapter(vendorAdapter);
         ENTITY_MANAGER_FACTORY.setPackagesToScan("dev.specgraph.reference.customer.persistence");
-        ENTITY_MANAGER_FACTORY.setJpaPropertyMap(Map.of("hibernate.hbm2ddl.auto", "none"));
+        ENTITY_MANAGER_FACTORY.setJpaPropertyMap(Map.of("hibernate.hbm2ddl.auto", "validate"));
         ENTITY_MANAGER_FACTORY.afterPropertiesSet();
         ENTITY_MANAGER = ENTITY_MANAGER_FACTORY.getObject().createEntityManager();
         JPA_ADAPTER = new JpaCustomerActivityAdapter(ENTITY_MANAGER, "UTC");
