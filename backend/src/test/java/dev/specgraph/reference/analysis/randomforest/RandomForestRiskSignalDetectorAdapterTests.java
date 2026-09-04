@@ -55,8 +55,7 @@ final class RandomForestRiskSignalDetectorAdapterTests {
                 .containsEntry("labelDefinitionIdentity", SyntheticRandomForestModelTrainer.LABEL_DEFINITION_IDENTITY)
                 .containsEntry("treeSeed", Long.toString(SyntheticRandomForestModelTrainer.TREE_SEED))
                 .containsEntry("inferenceMode", "fixed-protobuf-model; no request-time training")
-                .containsEntry("demoLimitation",
-                        "hand-assigned synthetic labels separable by construction; no production AML accuracy claim");
+                .containsEntry("demoLimitation", GENERATED.manifest().limitation());
     }
 
     @Test
@@ -73,6 +72,8 @@ final class RandomForestRiskSignalDetectorAdapterTests {
                 .isEqualTo(detector.detect(scenario).getFirst().score());
         assertThat(second.manifest().trainingPartitionSha256())
                 .isEqualTo(GENERATED.manifest().trainingPartitionSha256());
+        assertThat(second.protobuf()).isEqualTo(GENERATED.protobuf());
+        assertThat(second.manifest().artifactSha256()).isEqualTo(GENERATED.manifest().artifactSha256());
     }
 
     @Test
