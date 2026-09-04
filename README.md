@@ -20,6 +20,14 @@ The same R4 application artifact selects its Stage-3 backend explicitly at proce
 
 The runtime is a **modular monolith with hexagonal / ports-and-adapters boundaries**. Vendor and algorithm names are adapter identities, not architecture-layer names.
 
+## Current delivery status
+
+- **J4 / R4 delivered foundation:** the same application can run as the R4 baseline or with the Bayesian Stage-1 detector while retaining PostgreSQL/pgvector grounding, local MiniLM embeddings, authentication and deterministic Stage-3 synthesis.
+- **R5 final candidate:** the current R5 delivery scope is directly accessible through [#398](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/398). It aggregates the already delivered rings plus the remaining detector-ceiling, optional classical-ML lifecycle/benchmark and reviewer-evidence work; it does not rebuild those capabilities in a second stack.
+- **Topology simplification:** R5 reuses the same modular monolith, application-owned ports, Compose shape and orthogonal detector/model configuration. It does not create a new runtime port or rename configured R4 variants into artificial R5/R6/R7 services.
+- **Scope control:** the controlled design classifies classical-ML differentiation as `NICE_TO_HAVE`. [#128](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/128) keeps the dataset ceiling and comparison decision explicit; Random Forest, local/external synthesis and late-fusion variants may be retained with bounded evidence or explicitly excluded/replanned instead of being rushed into the frozen candidate.
+- **Final publication:** R5 names capability maturity; J5 is the independent freeze/review/demo timebox. The final criteria in [#127](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/127) require the immutable `submission-v1` tag and its clickable GitHub Release/manifeste to resolve to the reviewed exact SHA.
+
 ## Reviewer at a glance
 
 The mature analysis path is intentionally split by function and authority:
@@ -321,7 +329,7 @@ The delivery rings describe capability maturity, not calendar days. GitHub miles
 - **R2:** PostgreSQL/Flyway relational substitution behind the stable customer activity port.
 - **R3:** MANDATORY deterministic structured analysis plus persistent reviewable analysis history.
 - **R4:** MUST_HAVE real policy retrieval/grounding, multi-operator authentication/authorization and related trust boundaries.
-- **R5:** hardening, reviewer/demo quality and NICE_TO_HAVE differentiation.
+- **R5:** final hardened product candidate: bounded detector-ceiling evidence, coherent reviewer evidence and explicit disposition of optional classical-ML and synthesis variants. See the live scope in [#398](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/398) and the final immutable-publication criteria in [#127](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/127).
 
 Authentication is deliberately not allowed to block the mandatory centre merely because its structural seam exists earlier.
 

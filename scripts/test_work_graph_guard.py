@@ -16,6 +16,23 @@ REQUIRED_PROTECTED_ASSETS = {
 
 
 class ReviewFreshnessTests(unittest.TestCase):
+    @staticmethod
+    def clean_summary(prefix="3f8fc1e"):
+        return {
+            "user": {"id": guard.CODEX_USER_ID},
+            "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+            "body": (
+                "<!-- codex-pull-request-review-summary -->\n\n"
+                "| Review | Status | Commit | Review trigger |\n"
+                "| --- | --- | --- | --- |\n"
+                f"| 📝 **Code Review** | ✅ **Completed** now | `{prefix}` | Draft marked ready |"
+            ),
+        }
+
+    @staticmethod
+    def codex_approval(user_id=guard.CODEX_USER_ID):
+        return {"content": "+1", "user": {"id": user_id}}
+
     def test_pull_request_event_resolves_pr_number(self):
         event = {"number": 42, "pull_request": {"number": 42}}
         self.assertEqual(42, guard.event_pr_number_from_payload(event))
@@ -96,8 +113,84 @@ class ReviewFreshnessTests(unittest.TestCase):
             )
         )
 
+    def test_completed_codex_summary_with_approval_is_accepted(self):
+        head = "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
+        self.assertTrue(
+            guard.has_current_head_clean_codex_summary(
+                [self.clean_summary()], [self.codex_approval()], head
+            )
+        )
+
+    def test_running_codex_summary_is_rejected(self):
+        summary = self.clean_summary()
+        summary["body"] = summary["body"].replace("**Completed**", "**Running**")
+        self.assertFalse(
+            guard.has_current_head_clean_codex_summary(
+                [summary], [self.codex_approval()], "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
+            )
+        )
+
+    def test_stale_codex_summary_is_rejected(self):
+        self.assertFalse(
+            guard.has_current_head_clean_codex_summary(
+                [self.clean_summary("aaaaaaaa")],
+                [self.codex_approval()],
+                "3f8fc1e6e80d0449e548795dc66154aa18f3815d",
+            )
+        )
+
+    def test_completed_summary_without_codex_approval_is_rejected(self):
+        self.assertFalse(
+            guard.has_current_head_clean_codex_summary(
+                [self.clean_summary()], [], "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
+            )
+        )
+
+    def test_completed_summary_with_wrong_user_approval_is_rejected(self):
+        self.assertFalse(
+            guard.has_current_head_clean_codex_summary(
+                [self.clean_summary()],
+                [self.codex_approval(user_id=123456)],
+                "3f8fc1e6e80d0449e548795dc66154aa18f3815d",
+            )
+        )
+
+    def test_completed_summary_from_wrong_app_is_rejected(self):
+        summary = self.clean_summary()
+        summary["performed_via_github_app"]["id"] = 1
+        self.assertFalse(
+            guard.has_current_head_clean_codex_summary(
+                [summary],
+                [self.codex_approval()],
+                "3f8fc1e6e80d0449e548795dc66154aa18f3815d",
+            )
+        )
+
 
 class MainIntegrationTests(unittest.TestCase):
+    def test_real_review_guard_accepts_current_clean_summary_reaction(self):
+        head = "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
+        pull_request = {
+            "state": "open",
+            "draft": False,
+            "base": {"ref": "main"},
+            "head": {"sha": head},
+        }
+        page_results = iter((
+            iter(()),
+            iter((ReviewFreshnessTests.clean_summary(),)),
+            iter((ReviewFreshnessTests.codex_approval(),)),
+        ))
+
+        with (
+            patch.object(guard, "api", return_value=pull_request),
+            patch.object(guard, "pages", side_effect=lambda _path: next(page_results)),
+        ):
+            failures = []
+            guard.require_current_head_codex_review(326, failures)
+
+        self.assertEqual([], failures)
+
     def test_main_runs_both_pr_guards_and_propagates_each_failure(self):
         injectors = (
             "require_durable_workflow_surface",
