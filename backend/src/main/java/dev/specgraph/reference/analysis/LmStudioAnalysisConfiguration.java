@@ -8,10 +8,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
+@ConditionalOnProperty(prefix = "specgraph.analysis", name = "backend", havingValue = "local")
 @EnableConfigurationProperties(LmStudioAnalysisProperties.class)
 class LmStudioAnalysisConfiguration {
     @Bean
-    @ConditionalOnProperty(prefix = "specgraph.analysis", name = "backend", havingValue = "local")
     LmStudioAnalysisAdapter lmStudioAnalysisAdapter(LmStudioAnalysisProperties properties) {
         String model = properties.validatedModel();
         var options = OpenAiChatOptions.builder()

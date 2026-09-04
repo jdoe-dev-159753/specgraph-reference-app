@@ -101,6 +101,19 @@ final class AnalysisBackendConfigurationTests {
     }
 
     @Test
+    void inactiveLocalPropertiesAreNotBound() {
+        contextRunner
+                .withPropertyValues(
+                        "specgraph.analysis.backend=deterministic",
+                        "spring.ai.model.chat=deterministic",
+                        "specgraph.analysis.local.timeout=not-a-duration")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBeansOfType(LmStudioAnalysisProperties.class)).isEmpty();
+                });
+    }
+
+    @Test
     void externallyEnablingOpenAiCannotOverrideDeterministicBackendSelection() {
         contextRunner
                 .withPropertyValues(
