@@ -25,8 +25,8 @@ class DegradationTestConfiguration {
         return beanFactory -> {
             beanFactory.getBeanDefinition("selectedRiskSignalDetector").setPrimary(false);
             beanFactory.getBeanDefinition("selectedAnalysisModel").setPrimary(false);
-            beanFactory.getBeanDefinition("jdbcAnalysisHistoryAdapter").setPrimary(false);
-            beanFactory.getBeanDefinition("jdbcCustomerActivityAdapter").setPrimary(false);
+            beanFactory.getBeanDefinition("jpaAnalysisHistoryAdapter").setPrimary(false);
+            beanFactory.getBeanDefinition("jpaCustomerActivityAdapter").setPrimary(false);
         };
     }
 
@@ -39,7 +39,7 @@ class DegradationTestConfiguration {
     @Primary
     FailureInjectingCustomerActivity degradationCustomerActivity(
             @Qualifier("jpaCustomerActivityAdapter") CustomerActivityPort activityDelegate,
-            @Qualifier("jdbcCustomerActivityAdapter") CustomerReviewQueryPort reviewDelegate,
+            @Qualifier("jpaCustomerActivityAdapter") CustomerReviewQueryPort reviewDelegate,
             ScenarioPlan plan) {
         return new FailureInjectingCustomerActivity(activityDelegate, reviewDelegate, plan);
     }
