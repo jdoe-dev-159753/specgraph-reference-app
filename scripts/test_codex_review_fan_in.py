@@ -83,7 +83,7 @@ class GateTests(unittest.TestCase):
                         "status": "completed", "conclusion": "failure",
                     },
                     {
-                        "id": 2, "name": "application-ci", "event": "pull_request",
+                        "id": 2, "name": "application-ci", "event": "workflow_dispatch",
                         "status": "completed", "conclusion": "success",
                     },
                 ],

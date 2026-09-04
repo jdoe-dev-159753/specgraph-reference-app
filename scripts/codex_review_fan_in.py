@@ -96,7 +96,7 @@ def gate_state(expected: set[str], runs: list[dict]) -> tuple[str, list[str]]:
     latest: dict[str, dict] = {}
     for run in runs:
         name = run.get("name")
-        if name in expected and run.get("event") == "pull_request":
+        if name in expected and run.get("event") in {"pull_request", "workflow_dispatch"}:
             if name not in latest or run.get("id", 0) > latest[name].get("id", 0):
                 latest[name] = run
     missing = sorted(expected - latest.keys())
