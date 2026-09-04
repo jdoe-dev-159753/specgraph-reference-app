@@ -66,6 +66,8 @@ final class RandomForestRiskSignalDetectorAdapterTests {
                 .isEqualTo(detector.detect(scenario).getFirst().score());
         assertThat(second.manifest().trainingPartitionSha256())
                 .isEqualTo(GENERATED.manifest().trainingPartitionSha256());
+        assertThat(second.protobuf()).isEqualTo(GENERATED.protobuf());
+        assertThat(second.manifest().artifactSha256()).isEqualTo(GENERATED.manifest().artifactSha256());
     }
 
     @Test

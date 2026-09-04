@@ -1,12 +1,19 @@
 package dev.specgraph.reference.analysis.randomforest;
 
+import com.google.protobuf.Any;
+import com.oracle.labs.mlrg.olcut.config.protobuf.protos.ObjectProvenanceProto;
+import com.oracle.labs.mlrg.olcut.config.protobuf.protos.RootProvenanceProto;
+import com.oracle.labs.mlrg.olcut.config.protobuf.protos.SimpleProvenanceProto;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import org.tribuo.Example;
@@ -17,8 +24,12 @@ import org.tribuo.classification.LabelFactory;
 import org.tribuo.classification.dtree.CARTClassificationTrainer;
 import org.tribuo.classification.ensemble.VotingCombiner;
 import org.tribuo.common.tree.RandomForestTrainer;
+import org.tribuo.common.tree.protos.TreeModelProto;
 import org.tribuo.datasource.ListDataSource;
 import org.tribuo.impl.ArrayExample;
+import org.tribuo.protos.core.ModelDataProto;
+import org.tribuo.protos.core.ModelProto;
+import org.tribuo.protos.core.WeightedEnsembleModelProto;
 import org.tribuo.provenance.SimpleDataSourceProvenance;
 
 /** Test/tool boundary for reproducible offline model generation; never shipped in the runtime jar. */
@@ -31,7 +42,7 @@ final class SyntheticRandomForestModelTrainer {
     static final long TREE_SEED = 20260905L;
     static final int TREE_COUNT = 31;
     static final int MAX_DEPTH = 6;
-    static final float FEATURE_SUBSAMPLING = 0.70f;
+    static final double FEATURE_SUBSAMPLING = 0.70;
     private static final OffsetDateTime DATASET_CREATED_AT = OffsetDateTime.parse("2026-09-04T00:00:00Z");
 
     private SyntheticRandomForestModelTrainer() {}
@@ -57,12 +68,12 @@ final class SyntheticRandomForestModelTrainer {
                 factory,
                 new SimpleDataSourceProvenance(DATASET_IDENTITY, DATASET_CREATED_AT, factory));
         var dataset = new MutableDataset<>(source);
-        var tree = new CARTClassificationTrainer(MAX_DEPTH, FEATURE_SUBSAMPLING, false, TREE_SEED);
+        var tree = new CARTClassificationTrainer(MAX_DEPTH, (float) FEATURE_SUBSAMPLING, false, TREE_SEED);
         var forest = new RandomForestTrainer<Label>(
                 tree, new VotingCombiner(), TREE_COUNT, TRAINING_SEED);
         Model<Label> model = forest.train(dataset);
         try (var output = new ByteArrayOutputStream()) {
-            model.serializeToStream(output);
+            canonicalize(model.serialize()).writeTo(output);
             byte[] protobuf = output.toByteArray();
             return new GeneratedModel(protobuf, new RandomForestModelManifest(
                     MODEL_VERSION,
@@ -86,6 +97,72 @@ final class SyntheticRandomForestModelTrainer {
         } catch (IOException exception) {
             throw new IllegalStateException("could not serialize trained random-forest model", exception);
         }
+    }
+
+    static void writePackagedResources(Path resourceRoot) {
+        GeneratedModel generated = train(trainingPartition());
+        Path packageDirectory = resourceRoot.resolve("dev/specgraph/reference/analysis/randomforest");
+        try {
+            Files.createDirectories(packageDirectory);
+            Files.write(packageDirectory.resolve("synthetic-review-random-forest-v1.pb"), generated.protobuf());
+            Files.write(
+                    packageDirectory.resolve("synthetic-review-random-forest-v1.properties"),
+                    generated.manifest().toCanonicalProperties());
+        } catch (IOException exception) {
+            throw new IllegalStateException("could not write packaged random-forest resources", exception);
+        }
+    }
+
+    private static ModelProto canonicalize(ModelProto model) throws IOException {
+        WeightedEnsembleModelProto ensemble = model.getSerializedData().unpack(WeightedEnsembleModelProto.class);
+        var ensembleBuilder = ensemble.toBuilder()
+                .setMetadata(canonicalize(ensemble.getMetadata(), "synthetic-review-random-forest-v1"))
+                .clearModels();
+        for (int index = 0; index < ensemble.getModelsCount(); index++) {
+            ModelProto member = ensemble.getModels(index);
+            TreeModelProto tree = member.getSerializedData().unpack(TreeModelProto.class);
+            TreeModelProto canonicalTree = tree.toBuilder()
+                    .setMetadata(canonicalize(tree.getMetadata(), "synthetic-review-tree-" + index))
+                    .build();
+            ensembleBuilder.addModels(member.toBuilder()
+                    .setSerializedData(Any.pack(canonicalTree))
+                    .build());
+        }
+        return model.toBuilder()
+                .setSerializedData(Any.pack(ensembleBuilder.build()))
+                .build();
+    }
+
+    private static ModelDataProto canonicalize(ModelDataProto metadata, String name) {
+        return metadata.toBuilder()
+                .setName(name)
+                .setProvenance(canonicalize(metadata.getProvenance()))
+                .build();
+    }
+
+    private static RootProvenanceProto canonicalize(RootProvenanceProto provenance) {
+        var builder = provenance.toBuilder().clearOmp().clearSmp();
+        var canonicalNames = new HashMap<String, String>();
+        for (ObjectProvenanceProto object : provenance.getOmpList()) {
+            String canonicalName = object.getObjectClassName() + "#" + object.getIndex();
+            canonicalNames.put(object.getObjectName(), canonicalName);
+            builder.addOmp(object.toBuilder()
+                    .setObjectName(canonicalName)
+                    .build());
+        }
+        for (SimpleProvenanceProto simple : provenance.getSmpList()) {
+            String value = simple.getIsReference()
+                    ? canonicalNames.getOrDefault(simple.getValue(), simple.getValue())
+                    : switch (simple.getKey()) {
+                case "trained-at" -> "2026-09-04T00:00Z";
+                case "java-version" -> "canonical-jdk-21";
+                case "os-name" -> "canonical-os";
+                case "os-arch" -> "canonical-arch";
+                default -> simple.getValue();
+            };
+            builder.addSmp(simple.toBuilder().setValue(value).build());
+        }
+        return builder.build();
     }
 
     static List<TrainingRow> trainingPartition() {
