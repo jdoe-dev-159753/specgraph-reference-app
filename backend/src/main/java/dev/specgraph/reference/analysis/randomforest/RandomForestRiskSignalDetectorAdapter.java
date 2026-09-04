@@ -3,7 +3,6 @@ package dev.specgraph.reference.analysis.randomforest;
 import dev.specgraph.reference.analysis.RiskSignalDetectorPort;
 import dev.specgraph.reference.analysis.RiskSignalEvidence;
 import dev.specgraph.reference.customer.CustomerSnapshot;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -17,11 +16,18 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+import com.oracle.labs.mlrg.olcut.provenance.ConfiguredObjectProvenance;
+import com.oracle.labs.mlrg.olcut.provenance.PrimitiveProvenance;
+import com.oracle.labs.mlrg.olcut.provenance.Provenance;
 import org.tribuo.Model;
 import org.tribuo.Prediction;
 import org.tribuo.VariableInfo;
 import org.tribuo.classification.Label;
+import org.tribuo.common.tree.TreeModel;
+import org.tribuo.ensemble.WeightedEnsembleModel;
 import org.tribuo.impl.ArrayExample;
+import org.tribuo.protos.core.ModelProto;
+import org.tribuo.provenance.TrainerProvenance;
 
 /** Inference-only adapter for a previously trained, manifest-pinned Tribuo protobuf model. */
 public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
@@ -48,9 +54,13 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
             throw new IllegalArgumentException("manifest output labels do not match detector contract");
         }
         try {
-            Model<?> loaded = Model.deserializeFromStream(new ByteArrayInputStream(immutableBytes));
+            ModelProto serialized = ModelProto.parseFrom(immutableBytes);
+            if (!WeightedEnsembleModel.class.getName().equals(serialized.getClassName())) {
+                throw new IllegalArgumentException("protobuf does not declare the expected ensemble model class");
+            }
+            Model<?> loaded = Model.deserialize(serialized);
             this.model = loaded.castModel(Label.class);
-        } catch (IOException | ClassCastException exception) {
+        } catch (IOException | RuntimeException exception) {
             throw new IllegalArgumentException("invalid random-forest protobuf model", exception);
         }
         validateDomains();
@@ -97,6 +107,25 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
     }
 
     private void validateDomains() {
+        if (!(model instanceof WeightedEnsembleModel<?> ensemble)) {
+            throw new IllegalArgumentException("model is not a weighted random-forest ensemble");
+        }
+        if (ensemble.getNumModels() != manifest.treeCount()) {
+            throw new IllegalArgumentException("model tree count does not match manifest");
+        }
+        if (ensemble.getModels().stream().anyMatch(member -> !(member instanceof TreeModel<?>))) {
+            throw new IllegalArgumentException("random-forest ensemble contains a non-tree model");
+        }
+        if (ensemble.getModels().stream()
+                .map(member -> (TreeModel<?>) member)
+                .anyMatch(tree -> tree.getDepth() > manifest.maxDepth())) {
+            throw new IllegalArgumentException("model tree depth exceeds manifest maximum");
+        }
+        String serializedTribuoVersion = model.getProvenance().getTribuoVersion();
+        if (!manifest.libraryVersion().equals("tribuo-" + serializedTribuoVersion)) {
+            throw new IllegalArgumentException("model Tribuo version does not match manifest");
+        }
+        validateTrainerProvenance(ensemble);
         Set<String> modelFeatures = StreamSupport.stream(model.getFeatureIDMap().spliterator(), false)
                 .map(VariableInfo::getName)
                 .collect(Collectors.toSet());
@@ -108,6 +137,57 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
                 .collect(Collectors.toSet());
         if (!modelLabels.equals(EXPECTED_LABELS)) {
             throw new IllegalArgumentException("model output domain does not match detector contract");
+        }
+    }
+
+    private void validateTrainerProvenance(WeightedEnsembleModel<?> ensemble) {
+        TrainerProvenance forest = model.getProvenance().getTrainerProvenance();
+        if (!"org.tribuo.common.tree.RandomForestTrainer".equals(forest.getClassName())) {
+            throw new IllegalArgumentException("model trainer provenance is not RandomForestTrainer");
+        }
+        Map<String, Provenance> forestParameters = forest.getConfiguredParameters();
+        requireIntegral(forestParameters, "seed", manifest.trainingSeed());
+        requireIntegral(forestParameters, "numMembers", manifest.treeCount());
+        Provenance inner = forestParameters.get("innerTrainer");
+        if (!(inner instanceof TrainerProvenance treeTrainer)) {
+            throw new IllegalArgumentException("model trainer provenance has no tree trainer");
+        }
+        validateTreeTrainer(treeTrainer);
+        Provenance combiner = forestParameters.get("combiner");
+        if (!(combiner instanceof ConfiguredObjectProvenance configuredCombiner)
+                || !"org.tribuo.classification.ensemble.VotingCombiner".equals(configuredCombiner.getClassName())) {
+            throw new IllegalArgumentException("model trainer provenance has an unexpected ensemble combiner");
+        }
+        for (Model<?> member : ensemble.getModels()) {
+            validateTreeTrainer(member.getProvenance().getTrainerProvenance());
+        }
+    }
+
+    private void validateTreeTrainer(TrainerProvenance trainer) {
+        if (!"org.tribuo.classification.dtree.CARTClassificationTrainer".equals(trainer.getClassName())) {
+            throw new IllegalArgumentException("model member provenance is not CARTClassificationTrainer");
+        }
+        Map<String, Provenance> parameters = trainer.getConfiguredParameters();
+        requireIntegral(parameters, "maxDepth", manifest.maxDepth());
+        requireIntegral(parameters, "seed", manifest.treeSeed());
+        requireDecimal(parameters, "fractionFeaturesInSplit", manifest.featureSubsampling());
+    }
+
+    private static void requireIntegral(Map<String, Provenance> parameters, String key, long expected) {
+        Provenance value = parameters.get(key);
+        if (!(value instanceof PrimitiveProvenance<?> primitive)
+                || !(primitive.getValue() instanceof Number number)
+                || number.longValue() != expected) {
+            throw new IllegalArgumentException("model trainer provenance does not match manifest: " + key);
+        }
+    }
+
+    private static void requireDecimal(Map<String, Provenance> parameters, String key, double expected) {
+        Provenance value = parameters.get(key);
+        if (!(value instanceof PrimitiveProvenance<?> primitive)
+                || !(primitive.getValue() instanceof Number number)
+                || Math.abs(number.doubleValue() - expected) > 0.000001) {
+            throw new IllegalArgumentException("model trainer provenance does not match manifest: " + key);
         }
     }
 

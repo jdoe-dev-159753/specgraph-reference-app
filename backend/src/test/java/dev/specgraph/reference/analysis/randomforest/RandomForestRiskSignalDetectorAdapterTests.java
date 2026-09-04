@@ -107,6 +107,12 @@ final class RandomForestRiskSignalDetectorAdapterTests {
         assertThatThrownBy(() -> new RandomForestRiskSignalDetectorAdapter(GENERATED.protobuf(), wrongSchema))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("feature schema");
+
+        RandomForestModelManifest wrongTreeSeed = copyWithTreeSeed(GENERATED.manifest().treeSeed() + 1);
+        assertThatThrownBy(() -> new RandomForestRiskSignalDetectorAdapter(GENERATED.protobuf(), wrongTreeSeed))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("provenance")
+                .hasMessageContaining("seed");
     }
 
     @Test
@@ -137,6 +143,16 @@ final class RandomForestRiskSignalDetectorAdapterTests {
                 manifest.featureSubsampling(), manifest.libraryVersion(), manifest.outputLabels(),
                 manifest.labelDefinitionIdentity(),
                 manifest.scoreSemantics(), manifest.limitation());
+    }
+
+    private RandomForestModelManifest copyWithTreeSeed(long treeSeed) {
+        var manifest = GENERATED.manifest();
+        return new RandomForestModelManifest(
+                manifest.modelVersion(), manifest.artifactSha256(), manifest.featureSchemaVersion(),
+                manifest.trainingDatasetIdentity(), manifest.trainingPartitionSha256(), manifest.splitIdentity(),
+                manifest.trainingSeed(), treeSeed, manifest.treeCount(), manifest.maxDepth(),
+                manifest.featureSubsampling(), manifest.libraryVersion(), manifest.outputLabels(),
+                manifest.labelDefinitionIdentity(), manifest.scoreSemantics(), manifest.limitation());
     }
 
     private RiskSignalEvidence onlySignal(CustomerSnapshot snapshot) {
