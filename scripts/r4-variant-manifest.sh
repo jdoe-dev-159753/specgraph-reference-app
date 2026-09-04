@@ -6,13 +6,9 @@ port="${2:-8084}"
 backend="${3:-deterministic}"
 
 case "${backend}" in
-  deterministic|openai) ;;
-  local)
-    echo "backend 'local' is reserved by the typed contract but is not implemented yet (#251)" >&2
-    exit 2
-    ;;
+  deterministic|openai|local) ;;
   *)
-    echo "unsupported backend '${backend}'; expected deterministic or openai" >&2
+    echo "unsupported backend '${backend}'; expected deterministic, openai or local" >&2
     exit 2
     ;;
 esac
@@ -43,3 +39,7 @@ stage3Backend=${backend}
 externalTransmission=${external_transmission}
 persistence=isolated-compose-project
 EOF
+
+if [[ "${backend}" == "local" ]]; then
+  printf 'stage3Runtime=lmstudio/llama.cpp\n'
+fi

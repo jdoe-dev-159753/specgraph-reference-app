@@ -10,7 +10,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 @Tag("VFY-FAILURE-PATHS-001")
 final class AnalysisBackendConfigurationTests {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withUserConfiguration(AnalysisBackendConfiguration.class)
+            .withUserConfiguration(AnalysisBackendConfiguration.class, LmStudioAnalysisConfiguration.class)
             .withBean(DeterministicAnalysisAdapter.class);
 
     @Test
@@ -26,13 +26,32 @@ final class AnalysisBackendConfigurationTests {
     }
 
     @Test
-    void reservedLocalBackendFailsClosedUntilItsOwnedAdapterExists() {
+    void localBackendWithoutEndpointFailsClosed() {
         contextRunner
-                .withPropertyValues("specgraph.analysis.backend=local")
+                .withPropertyValues(
+                        "specgraph.analysis.backend=local",
+                        "spring.ai.model.chat=local",
+                        "specgraph.analysis.local.model=ministral-test",
+                        "specgraph.analysis.local.timeout=60s")
                 .run(context -> {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure())
-                            .hasStackTraceContaining("Analysis backend LOCAL is not available");
+                            .hasStackTraceContaining("SPECGRAPH_LOCAL_BASE_URL is required");
+                });
+    }
+
+    @Test
+    void localBackendWithInvalidEndpointFailsClosed() {
+        contextRunner
+                .withPropertyValues(
+                        "specgraph.analysis.backend=local",
+                        "spring.ai.model.chat=local",
+                        "specgraph.analysis.local.base-url=https://api.openai.com/v1",
+                        "specgraph.analysis.local.model=ministral-test")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("must target a loopback or private-network LM Studio host");
                 });
     }
 

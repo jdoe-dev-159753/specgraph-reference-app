@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
 
 @Tag("VFY-CONFIDENTIALITY-001")
@@ -20,6 +21,7 @@ import org.springframework.core.env.Environment;
         })
 final class OpenAiModelSelectionIntegrationTests extends PostgresIntegrationTestSupport {
     @Autowired AnalysisModelPort analysisModel;
+    @Autowired ApplicationContext context;
     @Autowired Environment environment;
 
     @Test
@@ -32,5 +34,6 @@ final class OpenAiModelSelectionIntegrationTests extends PostgresIntegrationTest
         assertThat(environment.getProperty("spring.ai.model.moderation")).isEqualTo("none");
         assertThat(environment.getProperty("spring.ai.model.audio.speech")).isEqualTo("none");
         assertThat(environment.getProperty("spring.ai.model.audio.transcription")).isEqualTo("none");
+        assertThat(context.getBeansOfType(LmStudioAnalysisAdapter.class)).isEmpty();
     }
 }

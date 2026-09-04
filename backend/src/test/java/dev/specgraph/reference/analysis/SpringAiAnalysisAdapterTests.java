@@ -40,7 +40,7 @@ final class SpringAiAnalysisAdapterTests {
         assertThat(output.result().recommendations()).containsExactly("Review the retained evidence.");
         assertThat(output.provenance().backendIdentity()).isEqualTo("openai");
         assertThat(output.provenance().modelIdentity()).isEqualTo("synthetic-openai-model");
-        assertThat(output.provenance().promptIdentity()).isEqualTo("openai-grounded-analysis-v1");
+        assertThat(output.provenance().promptIdentity()).isEqualTo(GroundedAnalysisPrompt.IDENTITY);
         assertThat(output.provenance().metadata())
                 .containsEntry("externalTransmission", "true")
                 .containsEntry("dataPolicy", "synthetic-demo-only")
@@ -73,9 +73,11 @@ final class SpringAiAnalysisAdapterTests {
                         "0xSECRET_FROM",
                         "0xSECRET_TO",
                         "SECRET_TX_HASH");
+        assertThat(capturedPrompt.get().getSystemMessage().getText())
+                .contains("Always respond in English", "Missing evidence is not evidence");
     }
 
-    private AnalysisEvidenceEnvelope evidence() {
+    static AnalysisEvidenceEnvelope evidence() {
         UUID customerId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID cardId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
         UUID paymentId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2");
