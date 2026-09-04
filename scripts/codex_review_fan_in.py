@@ -99,6 +99,11 @@ def gate_state(expected: set[str], runs: list[dict]) -> tuple[str, list[str]]:
     for run in runs:
         name = run.get("name")
         if name in expected and run.get("event") in {"pull_request", "workflow_dispatch"}:
+            if name == "plantuml-diagrams" and run.get("event") == "workflow_dispatch" and not any(
+                job.get("name") == "verify" and job.get("conclusion") == "success"
+                for job in run.get("jobs", [])
+            ):
+                continue
             if name not in latest or run.get("id", 0) > latest[name].get("id", 0):
                 latest[name] = run
     missing = sorted(expected - latest.keys())
@@ -194,6 +199,9 @@ def main() -> int:
     ]
     expected = expected_workflows(paths)
     runs = api(workflow_runs_path(head_sha)).get("workflow_runs", [])
+    for run in runs:
+        if run.get("name") == "plantuml-diagrams" and run.get("event") == "workflow_dispatch":
+            run["jobs"] = api(f"/repos/{REPO}/actions/runs/{run['id']}/jobs").get("jobs", [])
     state, names = gate_state(expected, runs)
     if state != "ready":
         print(f"pull request #{number}: deterministic workflows {state}: {', '.join(names)}")

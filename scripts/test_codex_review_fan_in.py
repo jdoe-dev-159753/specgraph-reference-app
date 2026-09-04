@@ -99,6 +99,29 @@ class GateTests(unittest.TestCase):
             ),
         )
 
+    def test_plantuml_recovery_requires_successful_verify_job(self):
+        failed_pr = {
+            "id": 1, "name": "plantuml-diagrams", "event": "pull_request",
+            "status": "completed", "conclusion": "failure",
+        }
+        regeneration = {
+            "id": 2, "name": "plantuml-diagrams", "event": "workflow_dispatch",
+            "status": "completed", "conclusion": "success",
+            "jobs": [{"name": "regenerate", "conclusion": "success"}],
+        }
+        verification = {
+            **regeneration,
+            "jobs": [{"name": "verify", "conclusion": "success"}],
+        }
+        self.assertEqual(
+            ("blocked", ["plantuml-diagrams"]),
+            fan_in.gate_state({"plantuml-diagrams"}, [failed_pr, regeneration]),
+        )
+        self.assertEqual(
+            ("ready", []),
+            fan_in.gate_state({"plantuml-diagrams"}, [failed_pr, verification]),
+        )
+
 
 class ReviewRequestTests(unittest.TestCase):
     HEAD = "0123456789abcdef0123456789abcdef01234567"
