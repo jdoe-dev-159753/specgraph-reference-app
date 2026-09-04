@@ -2,11 +2,11 @@
 
 > Generated file. Do not edit the figures by hand. Run `bash scripts/repository-metrics.sh generate` from a clean checkout.
 
-The table reports physical blank, comment and code lines using `cloc` 2.08. It combines production code, tests, authored documentation, workflow/configuration and database/diagram sources; it does not present those categories as separate totals.
+The table reports physical blank, comment and code lines using the bundled binary that declares itself as `cloc` v2.04. It combines production code, tests, authored documentation, workflow/configuration and database/diagram sources; it does not present those categories as separate totals.
 
 Only Git-tracked files are candidates. The generator excludes its own report, dependency lock files, binary/rendered assets, and any path component named `target`, `node_modules`, `dist`, `playwright-report`, `test-results`, `.checkpoints`, `.worktrees`, `graphify-out`, `generated-diagrams`, `vendor` or `coverage`.
 
-The counting runtime is the pinned `aldanial/cloc:2.08` container at digest `sha256:f4159515ece7b8d7c3729db25ef613b2f9c3e8c368f772ae5348bd6452bd57b3` with networking disabled and the checkout mounted read-only.
+The counting image is referenced by tag and digest as `aldanial/cloc:2.08@sha256:f4159515ece7b8d7c3729db25ef613b2f9c3e8c368f772ae5348bd6452bd57b3`; its bundled binary declares itself as `github.com/AlDanial/cloc v 2.04` in the generated table. It runs with networking disabled and the checkout mounted read-only.
 
 cloc|github.com/AlDanial/cloc v 2.04
 --- | ---
