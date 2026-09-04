@@ -9,6 +9,7 @@ on:
         default: false
         type: boolean
   pull_request:
+    types: [opened, edited, synchronize, reopened]
     paths:
       - 'backend/**'
       - 'frontend/**'
@@ -47,7 +48,7 @@ permissions:
 
 jobs:
   fast-verify:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.compatibility != true }}
+    if: ${{ (github.event_name != 'workflow_dispatch' || inputs.compatibility != true) && (github.event.action != 'edited' || github.event.changes.base != null) }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

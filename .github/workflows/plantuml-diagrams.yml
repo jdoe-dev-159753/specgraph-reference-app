@@ -2,6 +2,7 @@ name: plantuml-diagrams
 
 on:
   pull_request:
+    types: [opened, edited, synchronize, reopened]
     paths:
       - 'docs/assignment/**/*.puml'
       - 'docs/assignment/**/*.dot'
@@ -30,7 +31,7 @@ concurrency:
 
 jobs:
   verify:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.regenerate_artifact != true }}
+    if: ${{ (github.event_name != 'workflow_dispatch' || inputs.regenerate_artifact != true) && (github.event.action != 'edited' || github.event.changes.base != null) }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     permissions:
       contents: read

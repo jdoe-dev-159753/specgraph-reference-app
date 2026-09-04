@@ -42,9 +42,20 @@ class WorkflowSelectionTests(unittest.TestCase):
         )
 
     def test_retarget_to_main_is_a_scoped_trigger(self):
-        workflow = Path(".github/workflows/codex-review-fan-in.yml").read_text(encoding="utf-8")
-        self.assertIn("types: [opened, edited, synchronize, reopened, ready_for_review]", workflow)
-        self.assertIn("github.event.changes.base != null", workflow)
+        workflows = (
+            "application-ci.yml", "r4-acceptance-ci.yml", "plantuml-diagrams.yml",
+            "codex-review-fan-in.yml", "codex-review-fan-in-tests.yml",
+            "work-graph-guard-tests.yml",
+        )
+        for name in workflows:
+            source = Path(f".github/workflows/{name}").read_text(encoding="utf-8")
+            with self.subTest(workflow=name):
+                self.assertIn("edited", source)
+                self.assertIn("github.event.changes.base != null", source)
+
+    def test_workflow_source_changes_require_manual_review(self):
+        self.assertTrue(fan_in.requires_manual_review([".github/workflows/application-ci.yml"]))
+        self.assertFalse(fan_in.requires_manual_review(["scripts/codex_review_fan_in.py"]))
 
 
 class GateTests(unittest.TestCase):

@@ -2,6 +2,7 @@ name: r4-acceptance-ci
 
 on:
   pull_request:
+    types: [opened, edited, synchronize, reopened]
     paths:
       - 'backend/**'
       - 'frontend/**'
@@ -23,6 +24,7 @@ permissions:
 
 jobs:
   verify-r4-acceptance:
+    if: ${{ github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

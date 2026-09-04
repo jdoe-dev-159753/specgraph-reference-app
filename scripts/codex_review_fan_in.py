@@ -106,6 +106,10 @@ def expected_workflows(paths: list[str]) -> set[str]:
     return expected
 
 
+def requires_manual_review(paths: list[str]) -> bool:
+    return any(path.startswith(".github/workflows/") for path in paths)
+
+
 def gate_state(expected: set[str], runs: list[dict]) -> tuple[str, list[str]]:
     latest: dict[str, dict] = {}
     for run in runs:
@@ -215,6 +219,9 @@ def main() -> int:
         path for item in changed for path in (item.get("filename"), item.get("previous_filename"))
         if path
     ]
+    if requires_manual_review(paths):
+        print(f"pull request #{number}: workflow source changed; manual exact-head review required")
+        return 0
     expected = expected_workflows(paths)
     runs = api(workflow_runs_path(head_sha)).get("workflow_runs", [])
     for run in runs:

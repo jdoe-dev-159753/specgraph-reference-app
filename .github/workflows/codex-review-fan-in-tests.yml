@@ -2,6 +2,7 @@ name: codex-review-fan-in-tests
 
 on:
   pull_request:
+    types: [opened, edited, synchronize, reopened]
     paths:
       - 'scripts/codex_review_fan_in.py'
       - 'scripts/test_codex_review_fan_in.py'
@@ -17,6 +18,7 @@ concurrency:
 
 jobs:
   fan-in-tests:
+    if: ${{ github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
