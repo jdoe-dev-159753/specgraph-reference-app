@@ -185,8 +185,11 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
     private static void requireDecimal(Map<String, Provenance> parameters, String key, double expected) {
         Provenance value = parameters.get(key);
         if (!(value instanceof PrimitiveProvenance<?> primitive)
-                || !(primitive.getValue() instanceof Number number)
-                || Math.abs(number.doubleValue() - expected) > 0.000001) {
+                || !(primitive.getValue() instanceof Number number)) {
+            throw new IllegalArgumentException("model trainer provenance does not match manifest: " + key);
+        }
+        double actual = number.doubleValue();
+        if (!Double.isFinite(actual) || Math.abs(actual - expected) > 0.000001) {
             throw new IllegalArgumentException("model trainer provenance does not match manifest: " + key);
         }
     }
