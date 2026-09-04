@@ -86,7 +86,7 @@ Replace the synthetic prior, reference rate or binary feature mapping when repre
 - architecture mapping: [`SDD.md`](../../SDD/SDD.md) and [`ADR-002`](../../ADR/ADR-002-provider-neutral-analysis.md)
 - verification obligation: [`VFY-ANALYSIS-CONTRACT-001`](../../VV/VV.md)
 
-[Diagram source](bayesian-beta-binomial.puml)
+[Diagram source](diagrams/bayesian-beta-binomial.puml)
 
 ---
 
@@ -176,7 +176,7 @@ Replace the thresholds or rule surface when representative labelled evidence sup
 - architecture mapping: [`SDD.md`](../../SDD/SDD.md) and [`ADR-002`](../../ADR/ADR-002-provider-neutral-analysis.md)
 - verification obligation: [`VFY-ANALYSIS-CONTRACT-001`](../../VV/VV.md)
 
-[Diagram source](fuzzy-graded-inference.puml)
+[Diagram source](diagrams/fuzzy-graded-inference.puml)
 
 ---
 
@@ -231,7 +231,7 @@ Keep the Composite for orchestration. Add a distinct, evidence-producing fusion 
 - executable verification: [`CompositeRiskSignalDetectorTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/CompositeRiskSignalDetectorTests.java)
 - architecture mapping: [`SDD.md`](../../SDD/SDD.md)
 
-[Diagram source](composite-detector-orchestration.puml)
+[Diagram source](diagrams/composite-detector-orchestration.puml)
 
 ---
 
@@ -301,7 +301,7 @@ Replace the model only after a representative, versioned dataset and held-out ob
 - executable verification: [`RandomForestRiskSignalDetectorRuntimeTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/randomforest/RandomForestRiskSignalDetectorRuntimeTests.java), [`RandomForestRiskSignalDetectorAdapterTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/randomforest/RandomForestRiskSignalDetectorAdapterTests.java) and [`RandomForestFeatureDriftDiagnosticTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/randomforest/RandomForestFeatureDriftDiagnosticTests.java)
 - no-go benchmark evidence for #130: [`dataset-ceiling.md`](../../../analysis/dataset-ceiling.md)
 
-[Diagram source](random-forest-inference.puml)
+[Diagram source](diagrams/random-forest-inference.puml)
 
 ---
 
@@ -357,7 +357,7 @@ Change the embedding model, index or retrieval parameters only after retrieval e
 - executable verification: [`PgVectorPolicyAdapterTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/PgVectorPolicyAdapterTests.java) and [`PgVectorPolicyIntegrationTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/PgVectorPolicyIntegrationTests.java)
 - architecture decision: [`ADR-003`](../../ADR/ADR-003-postgresql-pgvector-persistence.md)
 
-[Diagram source](stage2-minilm-pgvector-retrieval.puml)
+[Diagram source](diagrams/stage2-minilm-pgvector-retrieval.puml)
 
 ---
 
@@ -414,4 +414,4 @@ Replace a backend when versioned evaluation shows another implementation better 
 - executable verification: [`AnalysisBackendSelectionIntegrationTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/AnalysisBackendSelectionIntegrationTests.java), [`OpenAiModelSelectionIntegrationTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/OpenAiModelSelectionIntegrationTests.java) and [`LmStudioAnalysisAdapterIntegrationTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/LmStudioAnalysisAdapterIntegrationTests.java)
 - architecture mapping: [`ADR-002`](../../ADR/ADR-002-provider-neutral-analysis.md) and [`SDD.md`](../../SDD/SDD.md)
 
-[Diagram source](stage3-analysis-backends.puml)
+[Diagram source](diagrams/stage3-analysis-backends.puml)
