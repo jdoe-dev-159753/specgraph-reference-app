@@ -382,9 +382,9 @@ jobs:
           assert_image_identity r3 "$APP_PACKAGE" "$R3_DIGEST"
           assert_image_identity r4 "$APP_PACKAGE" "$R4_DIGEST"
           assert_image_identity r4-bayesian "$APP_PACKAGE" "$R4_DIGEST"
-          assert_image_identity postgres postgres "$POSTGRES_DIGEST"
-          assert_image_identity r4-postgres-baseline pgvector/pgvector "$PGVECTOR_DIGEST"
-          assert_image_identity r4-postgres-bayesian pgvector/pgvector "$PGVECTOR_DIGEST"
+          assert_image_identity postgres docker.io/library/postgres "$POSTGRES_DIGEST"
+          assert_image_identity r4-postgres-baseline docker.io/pgvector/pgvector "$PGVECTOR_DIGEST"
+          assert_image_identity r4-postgres-bayesian docker.io/pgvector/pgvector "$PGVECTOR_DIGEST"
 
       - name: Prove immutable remote Compose deployment pulls from registry
         working-directory: packaging
@@ -516,9 +516,9 @@ jobs:
           assert_image_identity r3 "$APP_PACKAGE" "$R3_DIGEST"
           assert_image_identity r4 "$APP_PACKAGE" "$R4_DIGEST"
           assert_image_identity r4-bayesian "$APP_PACKAGE" "$R4_DIGEST"
-          assert_image_identity postgres postgres "$POSTGRES_DIGEST"
-          assert_image_identity r4-postgres-baseline pgvector/pgvector "$PGVECTOR_DIGEST"
-          assert_image_identity r4-postgres-bayesian pgvector/pgvector "$PGVECTOR_DIGEST"
+          assert_image_identity postgres docker.io/library/postgres "$POSTGRES_DIGEST"
+          assert_image_identity r4-postgres-baseline docker.io/pgvector/pgvector "$PGVECTOR_DIGEST"
+          assert_image_identity r4-postgres-bayesian docker.io/pgvector/pgvector "$PGVECTOR_DIGEST"
 
       - name: Summarize published reviewer deployment
         working-directory: packaging
