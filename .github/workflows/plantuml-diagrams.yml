@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       regenerate_artifact:
-        description: 'Regenerate controlled SVGs and upload an apply-ready artifact without modifying the repository'
+        description: 'Regenerate controlled SVGs and repository metrics without modifying the repository'
         required: true
         default: true
         type: boolean
@@ -72,18 +72,24 @@ jobs:
           persist-credentials: false
       - name: Assert immutable dispatch revision
         run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Generate repository metrics
+        run: bash scripts/repository-metrics.sh generate
       - name: Render controlled diagram sources
         run: bash scripts/render_plantuml.sh
-      - name: Package regenerated SVGs and apply-ready patch
+      - name: Package regenerated evidence and apply-ready patch
         run: |
           mkdir -p generated-diagrams
           find docs/assignment -type f -path '*/diagrams/*.svg' -print0 \
             | xargs -0 -r git add -N --
-          git diff --check -- docs/assignment
-          git diff --binary -- docs/assignment > generated-diagrams/regenerated-diagrams.patch
-          git status --short -- docs/assignment > generated-diagrams/status.txt
+          git diff --check -- docs/assignment docs/reviewer/repository-metrics.md
+          git diff --binary -- docs/assignment docs/reviewer/repository-metrics.md \
+            > generated-diagrams/regenerated-diagrams.patch
+          git status --short -- docs/assignment docs/reviewer/repository-metrics.md \
+            > generated-diagrams/status.txt
           printf 'sourceRef=%s\nsourceSha=%s\n' "$GITHUB_REF_NAME" "$GITHUB_SHA" \
             > generated-diagrams/source.txt
+          mkdir -p generated-diagrams/docs/reviewer
+          cp docs/reviewer/repository-metrics.md generated-diagrams/docs/reviewer/repository-metrics.md
           while IFS= read -r -d '' svg; do
             mkdir -p "generated-diagrams/$(dirname "$svg")"
             cp "$svg" "generated-diagrams/$svg"
