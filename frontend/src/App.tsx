@@ -322,6 +322,8 @@ export default function App() {
   const logout = useMutation({
     mutationFn: logoutOperator,
     onSuccess: async () => {
+      customerSubmissionInFlight.current = false
+      analysisSubmissionInFlight.current = false
       setRequest(null)
       setHistoryPage(0)
       analysis.reset()
@@ -335,6 +337,7 @@ export default function App() {
     event.preventDefault()
     if (customerSubmissionInFlight.current) return
     customerSubmissionInFlight.current = true
+    analysisSubmissionInFlight.current = false
     analysis.reset()
     setHistoryPage(0)
     submission.current += 1
