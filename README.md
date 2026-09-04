@@ -95,7 +95,9 @@ curl -fsS http://127.0.0.1:8084/ >/dev/null
 curl -fsS http://127.0.0.1:8085/ >/dev/null
 ```
 
-In the browser, the baseline instance must report the no-op detector and the Bayesian instance the beta-binomial detector. The two instances must retain independent sessions and analysis histories.
+Open the baseline and Bayesian instances in **separate browser profiles** (or one normal and one private window) so their cookies cannot collide while [#379](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/379) aligns the source-built Compose path with the distinct cookie names already used by the published OCI topology. Sign in with a different demo operator in each window, run customer `44444444-4444-4444-4444-444444444444`, then reload both pages: each window must retain its own operator and analysis history.
+
+The current UI does not render detector provenance. In each window, use the browser developer tools **Network** panel, open the successful `POST .../analyses` response and inspect its JSON: the baseline response must contain `"detectorProvenance": []`; the Bayesian response must contain an entry with `"detectorIdentity": "beta-binomial-review-elevation-v1"`. This API response is the detector-selection proof; the visible page remains the operator/history proof.
 
 Stop either experiment independently:
 
