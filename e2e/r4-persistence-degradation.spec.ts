@@ -70,6 +70,10 @@ async function historyIds(page: Page) {
   return (await response.json() as Analysis[]).map(entry => entry.analysisId)
 }
 
+function canonicalVisibleText(value: string) {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
 test('VFY-FAILURE-PATHS-001 database query failure is recoverable without stale customer evidence', async ({ page }) => {
   await page.goto('/')
   await signIn(page)
@@ -111,7 +115,7 @@ test('VFY-FAILURE-PATHS-001 analysis failures never appear completed, grounded o
   await loadCustomer(page)
 
   const sourceRiskEvidence = page.getByTestId('risk-evidence')
-  const sourceRiskText = await sourceRiskEvidence.innerText()
+  const sourceRiskText = canonicalVisibleText(await sourceRiskEvidence.innerText())
 
   for (const failure of analysisFailures) {
     const historyBeforeFailure = await historyIds(page)
@@ -146,7 +150,7 @@ test('VFY-FAILURE-PATHS-001 analysis failures never appear completed, grounded o
     await expect(visibleError).not.toContainText('Exception')
     await expect(visibleError).not.toContainText('at dev.')
     await expect(page.getByTestId('analysis-result')).toHaveCount(0)
-    await expect(sourceRiskEvidence).toHaveText(sourceRiskText)
+    expect(canonicalVisibleText(await sourceRiskEvidence.innerText())).toBe(sourceRiskText)
     expect(await historyIds(page)).toEqual(historyBeforeFailure)
 
     await page.unroute(`**${analysisPath}`)
