@@ -120,7 +120,7 @@ contracts:
     environment_projection: SPECGRAPH_ANALYSIS_BACKEND
     default: DETERMINISTIC
     unsupported_behavior: fail_closed_at_startup
-    local_endpoint_policy: loopback, private, unique-local or link-local HTTP(S) only
+    local_endpoint_policy: loopback, private, unique-local or link-local IP literals over HTTP(S) only; hostnames rejected
   CTR-OPERATOR-ID-001:
     name: OperatorId
     owner: MOD-IDENTITY-001
@@ -374,7 +374,7 @@ adapters:
     selected_by: [CMP-ANALYSIS-BACKEND-FACTORY-001, LOCAL]
     conditional_materialization: only when specgraph.analysis.backend is local
     provider_configuration: [SPECGRAPH_LOCAL_BASE_URL, SPECGRAPH_LOCAL_MODEL, SPECGRAPH_LOCAL_API_KEY, SPECGRAPH_LOCAL_TIMEOUT]
-    network_policy: loopback or private-network endpoint only
+    network_policy: loopback or private-network IP literal only; hostnames rejected to prevent DNS rebinding
     semantics: reuses bounded evidence, explicit JSON Schema and grounding validation; records externalTransmission false
     adrs: [ADR-002, ADR-004]
   ADP-POL-STATIC-001:

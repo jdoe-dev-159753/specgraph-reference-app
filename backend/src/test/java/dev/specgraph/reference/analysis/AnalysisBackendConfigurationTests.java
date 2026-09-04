@@ -1,9 +1,8 @@
 package dev.specgraph.reference.analysis;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.time.Duration;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -78,23 +77,20 @@ final class AnalysisBackendConfigurationTests {
     }
 
     @Test
-    void anyLocalHostnameMustResolveOnlyToPrivateAddresses() throws UnknownHostException {
-        InetAddress privateAddress = InetAddress.getByAddress(new byte[] {(byte) 192, (byte) 168, 1, 10});
-        InetAddress publicAddress = InetAddress.getByAddress(new byte[] {(byte) 203, 0, 113, 10});
-
-        assertThat(LmStudioAnalysisProperties.isNetworkLocal(
-                        "lmstudio.internal", ignored -> new InetAddress[] {privateAddress}))
-                .isTrue();
-        assertThat(LmStudioAnalysisProperties.isNetworkLocal(
-                        "lmstudio.internal", ignored -> new InetAddress[] {privateAddress, publicAddress}))
-                .isFalse();
-        assertThat(LmStudioAnalysisProperties.isNetworkLocal("lmstudio.internal", ignored -> new InetAddress[0]))
-                .isFalse();
-        assertThat(LmStudioAnalysisProperties.isNetworkLocal(
-                        "lmstudio.internal", ignored -> {
-                            throw new UnknownHostException("unresolved test host");
-                        }))
-                .isFalse();
+    void localBackendRejectsHostnamesToPreventDnsRebinding() {
+        assertThatThrownBy(() -> new LmStudioAnalysisProperties(
+                                "http://localhost:1234/v1", "ministral-test", "", Duration.ofSeconds(60))
+                        .validatedBaseUrl())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must target a loopback or private-network LM Studio host");
+        assertThatThrownBy(() -> new LmStudioAnalysisProperties(
+                                "http://lmstudio.internal:1234/v1",
+                                "ministral-test",
+                                "",
+                                Duration.ofSeconds(60))
+                        .validatedBaseUrl())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must target a loopback or private-network LM Studio host");
     }
 
     @Test

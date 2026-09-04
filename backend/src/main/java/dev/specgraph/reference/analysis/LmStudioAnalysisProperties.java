@@ -60,10 +60,6 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
     }
 
     private static boolean isNetworkLocal(String host) {
-        return isNetworkLocal(host, InetAddress::getAllByName);
-    }
-
-    static boolean isNetworkLocal(String host, HostAddressResolver resolver) {
         String value = host.toLowerCase(Locale.ROOT);
         if (value.startsWith("[") && value.endsWith("]")) {
             value = value.substring(1, value.length() - 1);
@@ -72,7 +68,7 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
             return isLocalIpv6(value);
         }
         if (!value.matches("(?:\\d{1,3}\\.){3}\\d{1,3}")) {
-            return resolvesOnlyToNetworkLocalAddresses(value, resolver);
+            return false;
         }
         int[] octets = java.util.Arrays.stream(value.split("\\."))
                 .mapToInt(Integer::parseInt)
@@ -85,16 +81,6 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
                 || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
                 || (octets[0] == 192 && octets[1] == 168)
                 || (octets[0] == 169 && octets[1] == 254);
-    }
-
-    private static boolean resolvesOnlyToNetworkLocalAddresses(String value, HostAddressResolver resolver) {
-        try {
-            InetAddress[] addresses = resolver.resolve(value);
-            return addresses.length > 0
-                    && java.util.Arrays.stream(addresses).allMatch(LmStudioAnalysisProperties::isLocalAddress);
-        } catch (UnknownHostException exception) {
-            return false;
-        }
     }
 
     private static boolean isLocalAddress(InetAddress address) {
@@ -122,8 +108,4 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
         }
     }
 
-    @FunctionalInterface
-    interface HostAddressResolver {
-        InetAddress[] resolve(String host) throws UnknownHostException;
-    }
 }

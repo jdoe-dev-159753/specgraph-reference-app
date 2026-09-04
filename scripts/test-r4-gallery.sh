@@ -132,7 +132,7 @@ fi
 : > "${docker_log}"
 PATH="${temp_dir}/bin:${PATH}" \
 R4_TEST_DOCKER_LOG="${docker_log}" \
-SPECGRAPH_LOCAL_BASE_URL=http://lm-studio.local:1234/v1 \
+SPECGRAPH_LOCAL_BASE_URL=http://192.168.1.20:1234/v1 \
 SPECGRAPH_LOCAL_MODEL=ministral-test \
 SPECGRAPH_LOCAL_API_KEY=test-only-local-key \
 bash "${script_dir}/r4-variant-up.sh" local 8086 local \
