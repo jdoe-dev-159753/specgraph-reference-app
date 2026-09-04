@@ -22,9 +22,12 @@ local_endpoint_state=absent
 [[ -n "${SPECGRAPH_LOCAL_BASE_URL:-}" ]] && local_endpoint_state=present
 local_credential_state=absent
 [[ -n "${SPECGRAPH_LOCAL_API_KEY:-}" ]] && local_credential_state=present
-printf 'ambient-credential=%s projected-credential=%s local-endpoint=%s local-credential=%s %s\n' \
+projected_local_credential_state=absent
+[[ -n "${SPECGRAPH_PROJECTED_LOCAL_API_KEY:-}" ]] && projected_local_credential_state=present
+printf 'ambient-credential=%s projected-credential=%s local-endpoint=%s local-credential=%s projected-local-credential=%s %s\n' \
   "${ambient_credential_state}" "${projected_credential_state}" \
-  "${local_endpoint_state}" "${local_credential_state}" "$*" >> "${R4_TEST_DOCKER_LOG}"
+  "${local_endpoint_state}" "${local_credential_state}" \
+  "${projected_local_credential_state}" "$*" >> "${R4_TEST_DOCKER_LOG}"
 if [[ "$*" == *"compose -p specgraph-r4-baseline"* && "$*" == *" ps -q --all r4"* ]]; then
   printf '%s\n' "${R4_TEST_BASELINE_CONTAINER:-}"
   exit 0
@@ -135,8 +138,20 @@ SPECGRAPH_LOCAL_API_KEY=test-only-local-key \
 bash "${script_dir}/r4-variant-up.sh" local 8086 local \
   > "${temp_dir}/local-stdout" 2> "${temp_dir}/local-stderr"
 local_up="$(grep -F "specgraph-r4-local" "${docker_log}" | grep -F " up ")"
-if [[ "${local_up}" != *"projected-credential=absent local-endpoint=present local-credential=present"* ]]; then
+if [[ "${local_up}" != *"projected-credential=absent local-endpoint=present local-credential=absent projected-local-credential=present"* ]]; then
   echo "local variant did not isolate its endpoint/token from the OpenAI credential path" >&2
+  exit 1
+fi
+
+: > "${docker_log}"
+PATH="${temp_dir}/bin:${PATH}" \
+R4_TEST_DOCKER_LOG="${docker_log}" \
+SPECGRAPH_LOCAL_API_KEY=ambient-local-key \
+bash "${script_dir}/r4-variant-up.sh" baseline 8084 deterministic \
+  > "${temp_dir}/ambient-local-stdout" 2> "${temp_dir}/ambient-local-stderr"
+baseline_with_ambient_local="$(grep -F "specgraph-r4-baseline" "${docker_log}" | grep -F " up ")"
+if [[ "${baseline_with_ambient_local}" != *"local-credential=absent projected-local-credential=absent"* ]]; then
+  echo "deterministic baseline inherited the ambient local credential" >&2
   exit 1
 fi
 grep -Fq "stage3Backend=local" "${temp_dir}/local-stdout"

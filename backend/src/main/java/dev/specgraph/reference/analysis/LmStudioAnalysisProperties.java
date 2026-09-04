@@ -58,6 +58,9 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
 
     private static boolean isNetworkLocal(String host) {
         String value = host.toLowerCase(Locale.ROOT);
+        if (value.startsWith("[") && value.endsWith("]")) {
+            value = value.substring(1, value.length() - 1);
+        }
         if (value.equals("localhost") || value.endsWith(".local")) {
             return true;
         }

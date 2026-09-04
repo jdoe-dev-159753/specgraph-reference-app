@@ -2,6 +2,7 @@ package dev.specgraph.reference.analysis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -53,6 +54,18 @@ final class AnalysisBackendConfigurationTests {
                     assertThat(context.getStartupFailure())
                             .hasStackTraceContaining("must target a loopback or private-network LM Studio host");
                 });
+    }
+
+    @Test
+    void localBackendAcceptsPrivateIpv6Literals() {
+        assertThat(new LmStudioAnalysisProperties(
+                                "http://[::1]:1234/v1", "ministral-test", "", Duration.ofSeconds(60))
+                        .validatedBaseUrl())
+                .isEqualTo("http://[::1]:1234/v1");
+        assertThat(new LmStudioAnalysisProperties(
+                                "http://[fd00::1]:1234/v1", "ministral-test", "", Duration.ofSeconds(60))
+                        .validatedBaseUrl())
+                .isEqualTo("http://[fd00::1]:1234/v1");
     }
 
     @Test

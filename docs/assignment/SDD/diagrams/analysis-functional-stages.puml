@@ -48,12 +48,14 @@ package "APPLICATION MODEL-CONTEXT BOUNDARY" as contextBoundary {
 
 package "STAGE 3 — FINAL ADVISORY SYNTHESIS" as stage3 {
   interface "AnalysisModelPort" as modelPort
-  rectangle "Deterministic/local synthesizer\ndefault offline path" as deterministicModel
+  rectangle "Deterministic synthesizer\ndefault offline path" as deterministicModel
   rectangle "Live LLM synthesizer\nOpenAI via Spring AI adapter\nexplicit opt-in" as openai
+  rectangle "Private LLM synthesizer\nLM Studio / llama.cpp\nexplicit local opt-in" as lmstudio
   rectangle "Structured AnalysisResult\nLOW | MEDIUM | HIGH\nfindings + recommendations" as result
 
   deterministicModel --> modelPort
   openai --> modelPort
+  lmstudio --> modelPort
   modelPort --> result
 }
 

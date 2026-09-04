@@ -16,7 +16,7 @@ node "Docker Compose / Linux host" as Host <<executionEnvironment>> {
       artifact "Spring MVC /api/*" as Api
     }
     artifact "Spring Boot executable JAR\nsame artifact for each R4 variant" as Jar
-    artifact "Stage-3 selection\nspecgraph.analysis.backend\ndeterministic | openai | local(reserved)" as BackendSelection
+    artifact "Stage-3 selection\nspecgraph.analysis.backend\ndeterministic | openai | local" as BackendSelection
     artifact "Deterministic model adapter\ndefault / no credential" as Offline
   }
 
@@ -26,6 +26,9 @@ node "Docker Compose / Linux host" as Host <<executionEnvironment>> {
 }
 
 node "External AI provider\noptional backend=openai only" as Provider <<external>>
+node "Windows workstation / private LAN" as Workstation <<device>> {
+  artifact "LM Studio / llama.cpp\noptional backend=local only" as LmStudio
+}
 
 Browser --> Tomcat : HTTP\nhost-published application port
 Tomcat --> React : static /
@@ -35,13 +38,15 @@ Api --> DB : JDBC / PostgreSQL\nTCP 5432 private project network
 Jar --> BackendSelection : typed bootstrap configuration
 BackendSelection --> Offline : deterministic default
 BackendSelection ..> Provider : HTTPS only when backend=openai
+BackendSelection ..> LmStudio : OpenAI-compatible HTTP\nonly when backend=local
 
 note bottom of Host
   R0-R3 retain their historical checkpoint ports. R4 uses the same application artifact with an
   orthogonal Stage-3 backend selection. Repeating compose.r4.yaml with distinct Compose project
   names creates isolated application/network/PostgreSQL state for side-by-side variants, e.g.
   deterministic baseline on :8084 and optional OpenAI synthesis on :8087. These are R4 execution
-  variants, not new delivery rings. Provider credentials configure the OpenAI leaf but never
-  select it. backend=local is reserved by the typed contract and fails closed until #251 lands.
+  variants, not new delivery rings. Provider credentials configure a leaf but never select it.
+  backend=local accepts only loopback/private addresses, uses an optional backend-gated token,
+  and records externalTransmission=false; firewall policy limits the workstation listener to this host.
 end note
 @enduml

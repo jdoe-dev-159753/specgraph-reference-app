@@ -56,7 +56,8 @@ OPENAI_API_KEY="" \
 SPECGRAPH_OPENAI_API_KEY="${compose_openai_api_key}" \
 SPECGRAPH_LOCAL_BASE_URL="${compose_local_base_url}" \
 SPECGRAPH_LOCAL_MODEL="${compose_local_model}" \
-SPECGRAPH_LOCAL_API_KEY="${compose_local_api_key}" \
+SPECGRAPH_LOCAL_API_KEY="" \
+SPECGRAPH_PROJECTED_LOCAL_API_KEY="${compose_local_api_key}" \
 SPECGRAPH_LOCAL_TIMEOUT="${SPECGRAPH_LOCAL_TIMEOUT:-60s}" \
 docker compose -p "${project}" -f "${repo_root}/compose.r4.yaml" up --build -d --wait
 
