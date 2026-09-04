@@ -53,7 +53,18 @@ The ring number describes **capability maturity**. Detector/backend choice is an
 | `8086` | R4 local, optional | configured detector(s) | same RAG | LM Studio/local model | no, planned in #251 |
 | `8087` | R4 external, optional | configured detector(s) | same RAG | OpenAI | yes, optional only |
 
-The canonical demo runtime is **`watch-infra-01`**, a Linux Docker host. Run the following from a repository checkout on that host. Each R4 Compose project gets its own network, PostgreSQL/pgvector state and analysis history, so experiments do not contaminate each other.
+The canonical manual J4 acceptance runtime is **`watch-infra-01`**, a Linux Docker host. Run every command in this section on that host, not on the Windows workstation. These commands build the merged source directly and do not depend on the GHCR `:demo` tag.
+
+First synchronize the checkout with the accepted `main` head:
+
+```bash
+git fetch origin
+git switch main
+git pull --ff-only origin main
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+```
+
+Each R4 Compose project gets its own network, PostgreSQL/pgvector state and analysis history, so the baseline and Bayesian checks do not contaminate each other.
 
 Baseline on port 8084:
 
@@ -76,6 +87,15 @@ R4 Bayesian: http://watch-infra-01:8085/
 ```
 
 Use the host IP instead if local DNS does not resolve `watch-infra-01`.
+
+Before browser review, confirm both endpoints answer from `watch-infra-01`:
+
+```bash
+curl -fsS http://127.0.0.1:8084/ >/dev/null
+curl -fsS http://127.0.0.1:8085/ >/dev/null
+```
+
+In the browser, the baseline instance must report the no-op detector and the Bayesian instance the beta-binomial detector. The two instances must retain independent sessions and analysis histories.
 
 Stop either experiment independently:
 
