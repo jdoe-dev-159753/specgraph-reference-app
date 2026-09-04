@@ -41,6 +41,19 @@ class DatasetCeilingTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unknown transactions"):
                 ceiling.analyze(fixture)
 
+    def test_dataset_identity_is_independent_of_checkout_line_endings(self):
+        source = ceiling.DEFAULT_SQL.read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            lf_fixture = Path(directory) / "fixture-lf.sql"
+            crlf_fixture = Path(directory) / "fixture-crlf.sql"
+            lf_fixture.write_bytes(source.replace("\r\n", "\n").encode("utf-8"))
+            crlf_fixture.write_bytes(source.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8"))
+
+            self.assertEqual(
+                ceiling.analyze(lf_fixture)["dataset_sha256"],
+                ceiling.analyze(crlf_fixture)["dataset_sha256"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

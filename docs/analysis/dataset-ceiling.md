@@ -13,7 +13,7 @@ oracle result would therefore measure generator leakage, not production AML vali
 
 ## Dataset identity and inventory
 
-- SHA-256: `e9bf396741b6cacdfbd2832ae68b7396c7dfd942802ed4332d33fbb415789e86`
+- SHA-256: `017090d6e97de1f54bc8276246ccf35e825d44b61bd16cab46386918d8d861d9`
 - independent customer/scenario groups: 4
 - transactions: 15; activity types: `{"CARD": 5, "CRYPTO": 3, "PAYMENT": 7}`
 - currencies: `{"BTC": 1, "CHF": 6, "ETH": 2, "EUR": 4, "USD": 2}`; values are not converted to a common monetary unit

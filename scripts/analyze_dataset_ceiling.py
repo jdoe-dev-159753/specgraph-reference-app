@@ -47,8 +47,8 @@ def wilson_interval(positive: int, total: int, z: float = 1.959963984540054) -> 
 
 
 def analyze(sql_path: Path = DEFAULT_SQL) -> dict[str, object]:
-    content = sql_path.read_bytes()
-    sql = content.decode("utf-8")
+    sql = sql_path.read_bytes().decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    canonical_content = sql.encode("utf-8")
     transactions = table_rows(sql, "transactions")
     assessments = table_rows(sql, "risk_assessments")
     if any(len(row) != 7 for row in transactions):
@@ -80,7 +80,7 @@ def analyze(sql_path: Path = DEFAULT_SQL) -> dict[str, object]:
     transaction_interval = wilson_interval(len(assessed_transactions), len(transactions))
 
     return {
-        "dataset_sha256": hashlib.sha256(content).hexdigest(),
+        "dataset_sha256": hashlib.sha256(canonical_content).hexdigest(),
         "customers": len(customers),
         "transactions": len(transactions),
         "risk_assessments": len(assessments),
