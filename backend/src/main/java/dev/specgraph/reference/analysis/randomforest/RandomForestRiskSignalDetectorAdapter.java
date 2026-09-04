@@ -27,6 +27,7 @@ import org.tribuo.common.tree.TreeModel;
 import org.tribuo.ensemble.WeightedEnsembleModel;
 import org.tribuo.impl.ArrayExample;
 import org.tribuo.protos.core.ModelProto;
+import org.tribuo.protos.core.WeightedEnsembleModelProto;
 import org.tribuo.provenance.TrainerProvenance;
 
 /** Inference-only adapter for a previously trained, manifest-pinned Tribuo protobuf model. */
@@ -35,6 +36,8 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
     public static final String SIGNAL_IDENTITY = "random-forest-review-elevation-vote";
     public static final String BASELINE_LABEL = "BASELINE";
     public static final String ELEVATED_LABEL = "REVIEW_ELEVATED";
+    private static final String VOTING_COMBINER_CLASS =
+            "org.tribuo.classification.ensemble.VotingCombiner";
     private static final Set<String> EXPECTED_LABELS = Set.of(BASELINE_LABEL, ELEVATED_LABEL);
 
     private final Model<Label> model;
@@ -53,17 +56,49 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
                 || !new LinkedHashSet<>(manifest.outputLabels()).equals(EXPECTED_LABELS)) {
             throw new IllegalArgumentException("manifest output labels do not match detector contract");
         }
+        ModelProto serialized;
         try {
-            ModelProto serialized = ModelProto.parseFrom(immutableBytes);
-            if (!WeightedEnsembleModel.class.getName().equals(serialized.getClassName())) {
-                throw new IllegalArgumentException("protobuf does not declare the expected ensemble model class");
-            }
+            serialized = ModelProto.parseFrom(immutableBytes);
+        } catch (IOException | RuntimeException exception) {
+            throw new IllegalArgumentException("invalid random-forest protobuf model", exception);
+        }
+        if (!WeightedEnsembleModel.class.getName().equals(serialized.getClassName())) {
+            throw new IllegalArgumentException("protobuf does not declare the expected ensemble model class");
+        }
+        WeightedEnsembleModelProto ensemble;
+        try {
+            ensemble = serialized.getSerializedData().unpack(WeightedEnsembleModelProto.class);
+        } catch (IOException | RuntimeException exception) {
+            throw new IllegalArgumentException("invalid random-forest ensemble payload", exception);
+        }
+        validateExecutableEnsemble(ensemble);
+        try {
             Model<?> loaded = Model.deserialize(serialized);
             this.model = loaded.castModel(Label.class);
         } catch (IOException | RuntimeException exception) {
             throw new IllegalArgumentException("invalid random-forest protobuf model", exception);
         }
         validateDomains();
+    }
+
+    private static void validateExecutableEnsemble(WeightedEnsembleModelProto ensemble) {
+        if (!VOTING_COMBINER_CLASS.equals(ensemble.getCombiner().getClassName())) {
+            throw new IllegalArgumentException("protobuf ensemble combiner is not VotingCombiner");
+        }
+        if (ensemble.getWeightsCount() == 0
+                || ensemble.getWeightsCount() != ensemble.getModelsCount()) {
+            throw new IllegalArgumentException("protobuf ensemble weights do not cover every model");
+        }
+        float expected = ensemble.getWeights(0);
+        if (!Float.isFinite(expected) || expected <= 0.0f) {
+            throw new IllegalArgumentException("protobuf ensemble weights must be finite and strictly positive");
+        }
+        for (float weight : ensemble.getWeightsList()) {
+            if (!Float.isFinite(weight) || weight <= 0.0f || Float.compare(weight, expected) != 0) {
+                throw new IllegalArgumentException(
+                        "protobuf ensemble weights must be uniform, finite and strictly positive");
+            }
+        }
     }
 
     @Override
@@ -155,7 +190,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         validateTreeTrainer(treeTrainer);
         Provenance combiner = forestParameters.get("combiner");
         if (!(combiner instanceof ConfiguredObjectProvenance configuredCombiner)
-                || !"org.tribuo.classification.ensemble.VotingCombiner".equals(configuredCombiner.getClassName())) {
+                || !VOTING_COMBINER_CLASS.equals(configuredCombiner.getClassName())) {
             throw new IllegalArgumentException("model trainer provenance has an unexpected ensemble combiner");
         }
         for (Model<?> member : ensemble.getModels()) {

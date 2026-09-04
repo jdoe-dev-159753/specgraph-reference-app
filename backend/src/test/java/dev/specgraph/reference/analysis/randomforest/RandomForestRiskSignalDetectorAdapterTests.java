@@ -3,14 +3,21 @@ package dev.specgraph.reference.analysis.randomforest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.google.protobuf.Any;
 import dev.specgraph.reference.analysis.RiskSignalEvidence;
 import dev.specgraph.reference.customer.Activity;
 import dev.specgraph.reference.customer.CustomerSnapshot;
 import dev.specgraph.reference.risk.RiskEvidence;
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
+import org.tribuo.protos.core.ModelProto;
+import org.tribuo.protos.core.WeightedEnsembleModelProto;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -116,6 +123,47 @@ final class RandomForestRiskSignalDetectorAdapterTests {
     }
 
     @Test
+    void serializedEnsembleRejectsUnexpectedCombinerWithMatchingArtifactSha() throws IOException {
+        WeightedEnsembleModelProto ensemble = serializedEnsemble();
+        byte[] tampered = replaceSerializedEnsemble(ensemble.toBuilder()
+                .setCombiner(ensemble.getCombiner().toBuilder()
+                        .setClassName("org.tribuo.classification.ensemble.FullyWeightedVotingCombiner")
+                        .build())
+                .build());
+
+        assertThatThrownBy(() -> new RandomForestRiskSignalDetectorAdapter(
+                        tampered, copyWithArtifactSha(tampered)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("combiner")
+                .hasMessageContaining("VotingCombiner");
+    }
+
+    @Test
+    void serializedEnsembleRejectsNonUniformNonFiniteAndNonPositiveWeightsWithMatchingArtifactSha()
+            throws IOException {
+        WeightedEnsembleModelProto ensemble = serializedEnsemble();
+        float validWeight = ensemble.getWeights(0);
+        float[] invalidWeights = {
+            validWeight * 2.0f,
+            Float.NaN,
+            Float.POSITIVE_INFINITY,
+            0.0f,
+            -validWeight
+        };
+
+        for (float invalidWeight : invalidWeights) {
+            byte[] tampered = replaceSerializedEnsemble(
+                    ensemble.toBuilder().setWeights(0, invalidWeight).build());
+
+            assertThatThrownBy(() -> new RandomForestRiskSignalDetectorAdapter(
+                            tampered, copyWithArtifactSha(tampered)))
+                    .as("first serialized ensemble weight %s", invalidWeight)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("weights");
+        }
+    }
+
+    @Test
     void manifestRejectsNonFiniteFeatureSubsampling() {
         var manifest = GENERATED.manifest();
 
@@ -166,6 +214,37 @@ final class RandomForestRiskSignalDetectorAdapterTests {
                 manifest.trainingSeed(), treeSeed, manifest.treeCount(), manifest.maxDepth(),
                 manifest.featureSubsampling(), manifest.libraryVersion(), manifest.outputLabels(),
                 manifest.labelDefinitionIdentity(), manifest.scoreSemantics(), manifest.limitation());
+    }
+
+    private RandomForestModelManifest copyWithArtifactSha(byte[] artifact) {
+        var manifest = GENERATED.manifest();
+        return new RandomForestModelManifest(
+                manifest.modelVersion(), sha256(artifact), manifest.featureSchemaVersion(),
+                manifest.trainingDatasetIdentity(), manifest.trainingPartitionSha256(), manifest.splitIdentity(),
+                manifest.trainingSeed(), manifest.treeSeed(), manifest.treeCount(), manifest.maxDepth(),
+                manifest.featureSubsampling(), manifest.libraryVersion(), manifest.outputLabels(),
+                manifest.labelDefinitionIdentity(), manifest.scoreSemantics(), manifest.limitation());
+    }
+
+    private WeightedEnsembleModelProto serializedEnsemble() throws IOException {
+        ModelProto serialized = ModelProto.parseFrom(GENERATED.protobuf());
+        return serialized.getSerializedData().unpack(WeightedEnsembleModelProto.class);
+    }
+
+    private byte[] replaceSerializedEnsemble(WeightedEnsembleModelProto ensemble) throws IOException {
+        ModelProto serialized = ModelProto.parseFrom(GENERATED.protobuf());
+        return serialized.toBuilder()
+                .setSerializedData(Any.pack(ensemble))
+                .build()
+                .toByteArray();
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
     }
 
     private RiskSignalEvidence onlySignal(CustomerSnapshot snapshot) {
