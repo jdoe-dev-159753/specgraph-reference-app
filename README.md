@@ -90,7 +90,7 @@ The runtime is one modular monolith with hexagonal boundaries. HTTP/UI, relation
 
 - [SRS — requirements and acceptance semantics](docs/assignment/SRS/SRS.md)
 - [SDD — architecture, modules and trust boundaries](docs/assignment/SDD/SDD.md)
-- [Architecture decisions](docs/assignment/ADR/)
+- [Architecture decisions](docs/assignment/ADR/), including the [public product identity and final-freeze boundary](docs/assignment/ADR/ADR-008-customer-activity-analytics-identity.md)
 - [V&V — verification strategy and evidence model](docs/assignment/VV/VV.md)
 - [OpenAPI — deployed HTTP contract](backend/src/main/resources/static/openapi.yaml)
 - [Proprietary evaluation license](LICENSE)
