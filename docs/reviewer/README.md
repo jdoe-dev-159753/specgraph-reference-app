@@ -2,6 +2,11 @@
 
 This directory is the stable repository home for reviewer-facing visual evidence that is safe to show outside CI logs.
 
+## Required delivery summaries
+
+- [`DEL-003` — model and provider choice](delivery/del-003-model-choice.md)
+- [`DEL-004` — AI development-agent instructions](delivery/del-004-agent-instructions.md)
+
 ## Controlled architecture figures
 
 The canonical sources remain under `docs/assignment/SDD/diagrams/`. The root README embeds selected rendered SVGs directly from that controlled directory rather than copying them here.
