@@ -75,7 +75,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         try {
             Model<?> loaded = Model.deserialize(serialized);
             this.model = loaded.castModel(Label.class);
-        } catch (IOException | RuntimeException exception) {
+        } catch (RuntimeException exception) {
             throw new IllegalArgumentException("invalid random-forest protobuf model", exception);
         }
         validateDomains();
