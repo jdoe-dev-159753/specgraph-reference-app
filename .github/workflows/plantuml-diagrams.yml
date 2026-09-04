@@ -3,19 +3,11 @@ name: plantuml-diagrams
 on:
   pull_request:
     paths:
-      - 'docs/assignment/**/*.puml'
-      - 'docs/assignment/**/*.dot'
-      - 'docs/assignment/**/*.svg'
-      - 'scripts/render_plantuml.sh'
-      - '.github/workflows/plantuml-diagrams.yml'
+      - '**'
   push:
     branches: [main]
     paths:
-      - 'docs/assignment/**/*.puml'
-      - 'docs/assignment/**/*.dot'
-      - 'docs/assignment/**/*.svg'
-      - 'scripts/render_plantuml.sh'
-      - '.github/workflows/plantuml-diagrams.yml'
+      - '**'
   workflow_dispatch:
     inputs:
       regenerate_artifact:
@@ -49,6 +41,8 @@ jobs:
           persist-credentials: false
       - name: Assert exact source revision
         run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - name: Reject stale repository metrics
+        run: bash scripts/repository-metrics.sh check
       - name: Render controlled diagram sources
         run: bash scripts/render_plantuml.sh
       - name: Reject stale or missing generated SVGs
