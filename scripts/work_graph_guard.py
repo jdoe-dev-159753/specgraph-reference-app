@@ -19,6 +19,7 @@ EVENT_NAME = os.environ.get("GITHUB_EVENT_NAME", "")
 CODEX_USER_ID = 199175422
 CODEX_APP_ID = 1144995
 MIN_REVIEWED_SHA_PREFIX = 10
+MIN_SUMMARY_SHA_PREFIX = 7
 WORKFLOW_DIR = ".github/workflows"
 DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
@@ -26,18 +27,19 @@ PROTECTED_ASSET_SHA256 = {
     ".github/workflows/work-graph-guard.yml": frozenset(
         {
             "b94c3f1d2b230851122c616dac872b31d4e6b07e44c43d31f34eb70c71ee3f13",
-            "f15bad4b691b95abb8b0cf7f2e3b6976dc3ca3d9ad5323097aacb53f394a5fae",
+            "e3cf5195153dfcc30b207bab34f88c649b0b8b21987adf5d0178fac96558fcb0",
         }
     ),
     ".github/workflows/work-graph-guard-tests.yml": frozenset(
         {
-            "0e6865bb537e7b837ff47ec501a09b8e2a06d674fc391740b89a7ccd6c5b767c",
+            "a7b76378be9f809f69185785b29e9d4ab134ddd0f8a2f446b74804133dca9f80",
             "bbae0c2e04f9a31021c9645e73d44b50497e170c9b466f4b7bbae2d0707ee1bb",
         }
     ),
     "scripts/test_work_graph_guard.py": frozenset(
         {
             "ae025c5ff30805c3dfea17d85377e940ee0cb914feae6c07e39f3e283e932c0d",
+            "8c124185297b34b067f27e9168e910f16143ca003f0ffa191b68f6b00344b7fb",
         }
     ),
 }
@@ -50,6 +52,13 @@ PREFIX = re.compile(
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
 CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
 REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
+COMPLETED_CODEX_SUMMARY = re.compile(
+    r"<!--\s*codex-pull-request-review-summary\s*-->.*?"
+    r"\|\s*[^|\n]*\*\*Code Review\*\*\s*\|"
+    r"\s*[^|\n]*\*\*Completed\*\*[^|\n]*\|"
+    r"\s*`([0-9a-fA-F]{7,40})`\s*\|",
+    re.DOTALL,
+)
 CANONICAL_WORKFLOW_NAME = re.compile(r"^name: ([a-z0-9]+(?:-[a-z0-9]+)*)$")
 CANONICAL_ROOT_KEY = re.compile(
     r"^(run-name|on|permissions|env|defaults|concurrency|jobs):(?:\s|$)"
@@ -167,6 +176,35 @@ def has_current_head_clean_codex_result(comments, head_sha: str) -> bool:
     )
 
 
+def clean_codex_summary_prefix(comment: dict) -> str | None:
+    if (comment.get("user") or {}).get("id") != CODEX_USER_ID:
+        return None
+    if (comment.get("performed_via_github_app") or {}).get("id") != CODEX_APP_ID:
+        return None
+    match = COMPLETED_CODEX_SUMMARY.search(comment.get("body") or "")
+    if not match:
+        return None
+    prefix = match.group(1).lower()
+    return prefix if len(prefix) >= MIN_SUMMARY_SHA_PREFIX else None
+
+
+def is_codex_approval_reaction(reaction: dict) -> bool:
+    return (
+        reaction.get("content") == "+1"
+        and (reaction.get("user") or {}).get("id") == CODEX_USER_ID
+    )
+
+
+def has_current_head_clean_codex_summary(comments, reactions, head_sha: str) -> bool:
+    normalized = head_sha.lower()
+    has_current_summary = any(
+        (prefix := clean_codex_summary_prefix(comment)) is not None
+        and normalized.startswith(prefix)
+        for comment in comments
+    )
+    return has_current_summary and any(is_codex_approval_reaction(reaction) for reaction in reactions)
+
+
 def require_current_head_codex_review(pr_number: int, failures: list[str]) -> None:
     pr = api(f"/repos/{REPO}/pulls/{pr_number}")
     if pr.get("state") != "open" or pr.get("draft"):
@@ -180,9 +218,14 @@ def require_current_head_codex_review(pr_number: int, failures: list[str]) -> No
         print(f"pull request #{pr_number}: Codex review object covers current head {head_sha[:12]}")
         return
 
-    comments = pages(f"/repos/{REPO}/issues/{pr_number}/comments")
+    comments = list(pages(f"/repos/{REPO}/issues/{pr_number}/comments"))
     if has_current_head_clean_codex_result(comments, head_sha):
         print(f"pull request #{pr_number}: clean Codex result covers current head {head_sha[:12]}")
+        return
+
+    reactions = pages(f"/repos/{REPO}/issues/{pr_number}/reactions")
+    if has_current_head_clean_codex_summary(comments, reactions, head_sha):
+        print(f"pull request #{pr_number}: clean Codex summary covers current head {head_sha[:12]}")
         return
 
     failures.append(
