@@ -3,6 +3,7 @@ import { expect, Page } from '@playwright/test'
 const denseCustomer = '55555555-5555-5555-5555-555555555555'
 const unknownCustomer = '99999999-9999-9999-9999-999999999999'
 const invalidCustomer = 'invalid-customer'
+const interactionSeed = 0x125
 const denseCustomerReviewUrl = new RegExp(`/api/customers/${denseCustomer}(?:\\?.*)?$`)
 const denseAnalysisUrl = new RegExp(`/api/customers/${denseCustomer}/analyses(?:\\?.*)?$`)
 const invalidCustomerReviewUrl = new RegExp(
@@ -39,6 +40,14 @@ function activity(index: number, status = index % 2 === 0 ? 'Completed' : 'Decli
       declineReason: status === 'Completed' ? null : 'Synthetic decline',
     },
   }
+}
+
+function seededStatuses(seed: number, count: number) {
+  let state = seed >>> 0
+  return Array.from({ length: count }, () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    return (state & 1) === 0 ? '' : 'Completed'
+  })
 }
 
 export async function runHighVolumeReviewScenario(page: Page) {
@@ -274,6 +283,23 @@ export async function runHighVolumeReviewScenario(page: Page) {
   await expect(page.getByTestId('analysis-result')).toHaveCount(1)
   await expect(page.getByTestId('analysis-history').locator('[data-testid^="analysis-history-"]')).toHaveCount(2)
   await expect(page.getByTestId('analysis-history-77777777-7777-7777-7777-000000000002')).toBeVisible()
+
+  const boundedStatuses = seededStatuses(interactionSeed, 6)
+  for (const seededStatus of boundedStatuses) {
+    await page.getByLabel('Status').fill(seededStatus)
+    const seededResponse = page.waitForResponse(response => {
+      const url = new URL(response.url())
+      return url.pathname === `/api/customers/${denseCustomer}`
+        && (url.searchParams.get('status') ?? '') === seededStatus
+        && response.request().method() === 'GET'
+    })
+    await search.click()
+    expect((await seededResponse).status()).toBe(200)
+    await expect(page.getByTestId('customer-activity')).toContainText(
+      seededStatus === 'Completed' ? '125 matching activities' : '250 matching activities',
+    )
+  }
+  expect(customerRequests).toBe(4 + boundedStatuses.length)
 
   await page.evaluate(() => window.scrollTo(0, 0))
   await expect(customerId).toBeVisible()
