@@ -10,6 +10,8 @@ This appendix is presentation-support material owned by #268. It explains analyt
 
 The detector does **not** decide whether the customer is risky, does not overwrite source `risk_assessments`, and does not produce the final advisory analysis. It emits one derived Stage-1 `RiskSignalEvidence` artifact.
 
+Its input is the complete activity list from the application-owned `CustomerSnapshot`. Source-risk evidence is deliberately not part of this detector's feature mapping. Its output is one bounded probability score plus enough provenance to reconstruct the prior, posterior and observation counts; Stage 3 may consume that artifact later, but the detector does not synthesize a recommendation.
+
 ### What counts as a review-elevated observation?
 
 The landed adapter maps each activity to one binary observation. An activity is elevated when at least one of these implementation rules applies:
@@ -62,6 +64,10 @@ The raw ratio shouts “100%” after a single observation. The Bayesian model i
 - Beta is conjugate to binary/Binomial observations, so the update is simple and deterministic;
 - provenance reproduces exactly how the score was obtained.
 
+### What would make us replace it?
+
+Replace the synthetic prior, reference rate or binary feature mapping when representative labelled data and a defined decision objective justify a better calibrated model. A replacement must still sit behind `RiskSignalDetectorPort`, emit canonical evidence with reproducible provenance and outperform this transparent baseline on held-out evidence without weakening reviewability.
+
 ### Limitations to admit immediately
 
 - binary feature mapping is synthetic and heuristic;
@@ -71,11 +77,12 @@ The raw ratio shouts “100%” after a single observation. The Bayesian model i
 
 ### Repository evidence
 
-- implementation: `BayesianSequentialRiskSignalDetectorAdapter`
+- implementation: [`BayesianSequentialRiskSignalDetectorAdapter`](../../../../backend/src/main/java/dev/specgraph/reference/analysis/BayesianSequentialRiskSignalDetectorAdapter.java)
 - detector identity: `beta-binomial-review-elevation-v1`
 - signal identity: `posterior-review-elevation-rate`
-- executable verification: `BayesianSequentialRiskSignalDetectorAdapterTests`
-- verification obligation: `VFY-ANALYSIS-CONTRACT-001`
+- executable verification: [`BayesianSequentialRiskSignalDetectorAdapterTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/BayesianSequentialRiskSignalDetectorAdapterTests.java)
+- architecture mapping: [`SDD.md`](../../SDD/SDD.md) and [`ADR-002`](../../ADR/ADR-002-provider-neutral-analysis.md)
+- verification obligation: [`VFY-ANALYSIS-CONTRACT-001`](../../VV/VV.md)
 
 [Diagram source](bayesian-beta-binomial.puml)
 
@@ -88,6 +95,8 @@ The raw ratio shouts “100%” after a single observation. The Bayesian model i
 > How strongly do several transparent activity/source-risk patterns support **review elevation**, when those patterns are graded rather than binary?
 
 The detector emits a bounded derived score in `[0,1]`. It does not modify source risk facts and it does not perform final Stage-3 synthesis.
+
+It consumes the complete activity and source-risk collections from the application-owned `CustomerSnapshot`. It emits one canonical `RiskSignalEvidence` artifact containing the bounded graded score, normalized features, every rule activation and versioned implementation provenance. The score measures support from this synthetic rule system; it is not a calibrated probability.
 
 ### Inputs
 
@@ -144,6 +153,10 @@ The useful part is not the specific demo number. The useful part is that every i
 - the implementation surface is small enough that a project-owned inference primitive avoids a disproportionate fuzzy-runtime dependency;
 - demonstrates another inference family behind the same `RiskSignalDetectorPort` without changing downstream analysis.
 
+### What would make us replace it?
+
+Replace the thresholds or rule surface when representative labelled evidence supports empirically validated alternatives. Replace the minimal project-owned inference primitive with a mature runtime if the rule system grows beyond this small auditable surface. Either change must preserve the port, canonical evidence, explicit versioning and regression-tested monotonic semantics.
+
 ### Limitations to admit immediately
 
 - membership thresholds and rules are synthetic demonstration choices;
@@ -153,11 +166,12 @@ The useful part is not the specific demo number. The useful part is that every i
 
 ### Repository evidence
 
-- implementation: `FuzzyRiskSignalDetectorAdapter`
+- implementation: [`FuzzyRiskSignalDetectorAdapter`](../../../../backend/src/main/java/dev/specgraph/reference/analysis/FuzzyRiskSignalDetectorAdapter.java)
 - detector identity: `graded-review-fuzzy-v1`
 - rule-set version: `review-fuzzy-rules-v2`
 - feature schema: `review-fuzzy-features-v1`
-- executable verification: `FuzzyRiskSignalDetectorAdapterTests`
-- verification obligation: `VFY-ANALYSIS-CONTRACT-001`
+- executable verification: [`FuzzyRiskSignalDetectorAdapterTests`](../../../../backend/src/test/java/dev/specgraph/reference/analysis/FuzzyRiskSignalDetectorAdapterTests.java)
+- architecture mapping: [`SDD.md`](../../SDD/SDD.md) and [`ADR-002`](../../ADR/ADR-002-provider-neutral-analysis.md)
+- verification obligation: [`VFY-ANALYSIS-CONTRACT-001`](../../VV/VV.md)
 
 [Diagram source](fuzzy-graded-inference.puml)
