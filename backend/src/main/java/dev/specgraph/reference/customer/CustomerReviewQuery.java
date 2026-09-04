@@ -26,6 +26,9 @@ public record CustomerReviewQuery(
         if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
             throw new IllegalArgumentException("pageSize must be between 1 and " + MAX_PAGE_SIZE);
         }
+        if ((long) page * pageSize > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("page and pageSize exceed the supported pagination offset");
+        }
         status = status == null || status.isBlank() ? null : status.trim();
         if (createdFrom != null && createdTo != null && !createdFrom.isBefore(createdTo)) {
             throw new IllegalArgumentException("createdFrom must be before createdTo");

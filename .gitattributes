@@ -1,0 +1,2 @@
+*.pb binary
+backend/src/main/resources/dev/specgraph/reference/analysis/randomforest/*.properties text eol=lf

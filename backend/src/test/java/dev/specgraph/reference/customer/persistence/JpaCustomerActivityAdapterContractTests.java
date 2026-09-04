@@ -7,21 +7,26 @@ import dev.specgraph.reference.customer.CustomerActivityPort;
 import dev.specgraph.reference.customer.CustomerActivityPortContract;
 import dev.specgraph.reference.customer.CustomerReviewQuery;
 import dev.specgraph.reference.risk.RiskEvidence;
+import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.AfterAll;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
+import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("VFY-CUSTOMER-READ-001")
 @Tag("port_contract")
-final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPortContract {
+final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPortContract {
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine")
             .withDatabaseName("specgraph")
             .withUsername("specgraph")
@@ -39,7 +44,9 @@ final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPor
             UUID.fromString("55555555-5555-5555-5555-555555555555");
 
     private static final JdbcClient JDBC;
-    private static final JdbcCustomerActivityAdapter JDBC_ADAPTER;
+    private static final LocalContainerEntityManagerFactoryBean ENTITY_MANAGER_FACTORY;
+    private static final EntityManager ENTITY_MANAGER;
+    private static final JpaCustomerActivityAdapter JPA_ADAPTER;
     private static final CustomerActivityPort ADAPTER;
 
     static {
@@ -49,8 +56,26 @@ final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPor
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         Flyway.configure().dataSource(dataSource).load().migrate();
         JDBC = JdbcClient.create(dataSource);
-        JDBC_ADAPTER = new JdbcCustomerActivityAdapter(JDBC, "UTC");
-        ADAPTER = JDBC_ADAPTER;
+
+        var vendorAdapter = new HibernateJpaVendorAdapter();
+        vendorAdapter.setGenerateDdl(false);
+        vendorAdapter.setDatabasePlatform("org.hibernate.dialect.PostgreSQLDialect");
+        ENTITY_MANAGER_FACTORY = new LocalContainerEntityManagerFactoryBean();
+        ENTITY_MANAGER_FACTORY.setDataSource(dataSource);
+        ENTITY_MANAGER_FACTORY.setJpaVendorAdapter(vendorAdapter);
+        ENTITY_MANAGER_FACTORY.setPackagesToScan("dev.specgraph.reference.customer.persistence");
+        ENTITY_MANAGER_FACTORY.setJpaPropertyMap(Map.of("hibernate.hbm2ddl.auto", "validate"));
+        ENTITY_MANAGER_FACTORY.afterPropertiesSet();
+        ENTITY_MANAGER = ENTITY_MANAGER_FACTORY.getObject().createEntityManager();
+        JPA_ADAPTER = new JpaCustomerActivityAdapter(ENTITY_MANAGER, "UTC");
+        ADAPTER = JPA_ADAPTER;
+    }
+
+    @AfterAll
+    static void closePersistenceContext() {
+        ENTITY_MANAGER.close();
+        ENTITY_MANAGER_FACTORY.destroy();
+        POSTGRES.stop();
     }
 
     @Override
@@ -60,7 +85,7 @@ final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPor
 
     @Test
     void convertsTimezoneFreeSourceTimestampsUsingConfiguredSourceZone() {
-        var zurichAdapter = new JdbcCustomerActivityAdapter(JDBC, "Europe/Zurich");
+        var zurichAdapter = new JpaCustomerActivityAdapter(ENTITY_MANAGER, "Europe/Zurich");
         var snapshot = zurichAdapter
                 .loadSnapshot(UUID.fromString("11111111-1111-1111-1111-111111111111"))
                 .orElseThrow();
@@ -86,6 +111,7 @@ final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPor
                 .update();
 
         try {
+            ENTITY_MANAGER.clear();
             var snapshot = ADAPTER.loadSnapshot(SEEDED_CUSTOMER_ID).orElseThrow();
             var repeatedRuleEvidence = snapshot.riskEvidence().stream()
                     .filter(evidence -> evidence.transactionId().equals(CARD_TRANSACTION_ID))
@@ -100,6 +126,7 @@ final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPor
             JDBC.sql("DELETE FROM risk_assessments WHERE assessment_id = :assessmentId")
                     .param("assessmentId", REPEATED_CARD_ASSESSMENT_ID)
                     .update();
+            ENTITY_MANAGER.clear();
         }
     }
 
@@ -107,7 +134,8 @@ final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPor
     void pagesAndFiltersDenseCustomerInPostgresqlWithoutLoadingTheCompleteHistory() {
         seedDenseCustomer();
         try {
-            var firstPage = JDBC_ADAPTER
+            ENTITY_MANAGER.clear();
+            var firstPage = JPA_ADAPTER
                     .loadReviewPage(DENSE_CUSTOMER_ID, new CustomerReviewQuery(0, 50, null, null, null, null))
                     .orElseThrow();
 
@@ -119,7 +147,7 @@ final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPor
             assertThat(firstPage.hasNext()).isTrue();
             assertRiskEvidenceBelongsToCurrentPage(firstPage.activities(), firstPage.riskEvidence());
 
-            var completedSecondPage = JDBC_ADAPTER
+            var completedSecondPage = JPA_ADAPTER
                     .loadReviewPage(DENSE_CUSTOMER_ID, new CustomerReviewQuery(1, 50, null, "Completed", null, null))
                     .orElseThrow();
 
@@ -133,7 +161,7 @@ final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPor
             assertRiskEvidenceBelongsToCurrentPage(
                     completedSecondPage.activities(), completedSecondPage.riskEvidence());
 
-            var cardFilter = JDBC_ADAPTER
+            var cardFilter = JPA_ADAPTER
                     .loadReviewPage(
                             SEEDED_CUSTOMER_ID,
                             new CustomerReviewQuery(0, 50, Activity.ActivityType.CARD, null, null, null))
@@ -143,6 +171,7 @@ final class JdbcCustomerActivityAdapterContractTests extends CustomerActivityPor
             assertThat(cardFilter.riskEvidence()).hasSize(1);
         } finally {
             deleteDenseCustomer();
+            ENTITY_MANAGER.clear();
         }
     }
 

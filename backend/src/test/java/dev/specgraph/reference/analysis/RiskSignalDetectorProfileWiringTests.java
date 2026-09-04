@@ -3,6 +3,7 @@ package dev.specgraph.reference.analysis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.specgraph.reference.analysis.randomforest.RandomForestRiskSignalDetectorAdapter;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Tag;
@@ -38,6 +39,14 @@ final class RiskSignalDetectorProfileWiringTests {
         assertSelected(
                 FuzzyRiskSignalDetectorAdapter.class,
                 Map.of("specgraph.analysis.detectors[0]", "FUZZY"),
+                "bayesian-detector");
+    }
+
+    @Test
+    void typedRandomForestSelectionLoadsThePackagedDetector() {
+        assertSelected(
+                RandomForestRiskSignalDetectorAdapter.class,
+                Map.of("specgraph.analysis.detectors[0]", "RANDOM_FOREST"),
                 "bayesian-detector");
     }
 

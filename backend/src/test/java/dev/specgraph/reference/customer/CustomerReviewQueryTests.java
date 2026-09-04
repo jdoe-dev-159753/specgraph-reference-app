@@ -27,6 +27,8 @@ final class CustomerReviewQueryTests {
                 .isEqualTo("Completed");
         assertThat(new CustomerReviewQuery(0, 50, null, "  ", null, null).status()).isNull();
         assertThat(new CustomerReviewQuery(2, 50, null, null, null, null).offset()).isEqualTo(100);
+        assertThat(new CustomerReviewQuery(10_737_418, 200, null, null, null, null).offset())
+                .isEqualTo(2_147_483_600L);
 
         assertThatThrownBy(() -> new CustomerReviewQuery(-1, 50, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -34,6 +36,9 @@ final class CustomerReviewQueryTests {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new CustomerReviewQuery(0, 201, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CustomerReviewQuery(10_737_419, 200, null, null, null, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("pagination offset");
     }
 
     @Test

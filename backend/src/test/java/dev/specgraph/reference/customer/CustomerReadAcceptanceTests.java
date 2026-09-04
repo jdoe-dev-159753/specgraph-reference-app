@@ -76,7 +76,7 @@ class CustomerReadAcceptanceTests extends PostgresIntegrationTestSupport {
     }
 
     @Test
-    void flywaySchemaMatchesTheExplicitJdbcAdapterContract() {
+    void flywaySchemaMatchesTheJpaAdapterContract() {
         Map<String, Object> amount = jdbc.queryForMap("""
                 SELECT data_type, numeric_precision, numeric_scale, is_nullable
                 FROM information_schema.columns

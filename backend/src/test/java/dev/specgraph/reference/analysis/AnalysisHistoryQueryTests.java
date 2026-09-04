@@ -20,11 +20,15 @@ final class AnalysisHistoryQueryTests {
     @Test
     void rejectsInvalidBoundsAndComputesStableOffset() {
         assertThat(new AnalysisHistoryQuery(3, 20).offset()).isEqualTo(60);
+        assertThat(new AnalysisHistoryQuery(21_474_836, 100).offset()).isEqualTo(2_147_483_600L);
         assertThatThrownBy(() -> new AnalysisHistoryQuery(-1, 20))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AnalysisHistoryQuery(0, 0))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AnalysisHistoryQuery(0, 101))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AnalysisHistoryQuery(21_474_837, 100))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("pagination offset");
     }
 }

@@ -133,7 +133,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         provenance.put("treeSeed", Long.toString(manifest.treeSeed()));
         provenance.put("treeCount", Integer.toString(manifest.treeCount()));
         provenance.put("maxDepth", Integer.toString(manifest.maxDepth()));
-        provenance.put("featureSubsampling", String.format(Locale.ROOT, "%.2f", manifest.featureSubsampling()));
+        provenance.put("featureSubsampling", Double.toString(manifest.featureSubsampling()));
         provenance.put("library", manifest.libraryVersion());
         provenance.put("inferenceMode", "fixed-protobuf-model; no request-time training");
         provenance.put("features", format(features.values()));

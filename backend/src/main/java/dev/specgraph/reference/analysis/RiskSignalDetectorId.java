@@ -4,5 +4,6 @@ package dev.specgraph.reference.analysis;
 enum RiskSignalDetectorId {
     NO_OP,
     BAYESIAN,
-    FUZZY
+    FUZZY,
+    RANDOM_FOREST
 }
