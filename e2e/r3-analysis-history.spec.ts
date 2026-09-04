@@ -89,6 +89,6 @@ test('VFY-ANALYSIS-001 R3 deterministic analysis is retained and reviewable afte
     .toContainText('Escalation remains a human decision')
 })
 
-test('VFY-CUSTOMER-READ-001 R3 candidate browser keeps dense review bounded', async ({ page }) => {
+test('VFY-CUSTOMER-READ-001 J4 dense browser interaction stays bounded and recoverable', async ({ page }) => {
   await runHighVolumeReviewScenario(page)
 })
