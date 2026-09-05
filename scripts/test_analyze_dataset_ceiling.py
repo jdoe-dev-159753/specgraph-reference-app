@@ -17,11 +17,53 @@ class DatasetCeilingTests(unittest.TestCase):
         self.assertEqual(3, result["incomplete_transactions"])
         self.assertEqual(3, result["customer_pseudo_label"]["positive"])
         self.assertEqual(1, result["customer_pseudo_label"]["negative"])
+        self.assertEqual(0.75, result["customer_pseudo_label"]["positive_share"])
         self.assertFalse(result["customer_pseudo_label"]["wilson_iid_assumption_satisfied"])
+        self.assertEqual(9, result["transaction_pseudo_label"]["positive"])
+        self.assertEqual(6, result["transaction_pseudo_label"]["negative"])
+        self.assertEqual(0.6, result["transaction_pseudo_label"]["majority_baseline"])
         self.assertFalse(result["transaction_pseudo_label"]["wilson_iid_assumption_satisfied"])
-        self.assertEqual(3, result["split_audit"]["folds_with_both_training_classes"])
-        self.assertFalse(result["split_audit"]["stratified_group_holdout_possible"])
-        self.assertFalse(result["split_audit"]["per_fold_ranking_metrics_defined"])
+
+    def test_target_specific_grouped_split_limits_are_not_conflated(self):
+        result = ceiling.analyze()
+        customer = result["customer_pseudo_label"]
+        transaction = result["transaction_pseudo_label"]
+
+        self.assertEqual("customer/scenario", customer["observation_unit"])
+        self.assertEqual(4, customer["observations"])
+        self.assertEqual(3, customer["split_audit"]["folds_with_both_training_classes"])
+        self.assertEqual(0, customer["split_audit"]["folds_with_both_test_classes"])
+        self.assertEqual(
+            0,
+            customer["split_audit"]["folds_with_both_training_and_test_classes"],
+        )
+        self.assertFalse(
+            customer["split_audit"]["grouped_holdout_with_both_classes_possible"]
+        )
+
+        self.assertEqual(
+            "transaction row clustered within customer/scenario",
+            transaction["observation_unit"],
+        )
+        self.assertEqual(15, transaction["observations"])
+        self.assertEqual(4, transaction["split_audit"]["folds_with_both_training_classes"])
+        self.assertEqual(3, transaction["split_audit"]["folds_with_both_test_classes"])
+        self.assertEqual(
+            3,
+            transaction["split_audit"]["folds_with_both_training_and_test_classes"],
+        )
+        self.assertTrue(
+            transaction["split_audit"]["grouped_holdout_with_both_classes_possible"]
+        )
+        self.assertEqual(
+            {
+                "11111111-1111-1111-1111-111111111111": 2,
+                "22222222-2222-2222-2222-222222222222": 0,
+                "33333333-3333-3333-3333-333333333333": 3,
+                "44444444-4444-4444-4444-444444444444": 4,
+            },
+            transaction["positive_by_customer"],
+        )
 
     def test_report_keeps_performance_claims_bounded(self):
         report = ceiling.render_markdown(ceiling.analyze())
@@ -34,6 +76,13 @@ class DatasetCeilingTests(unittest.TestCase):
         self.assertIn("not defensible prevalence estimates", report)
         self.assertIn("ROC-AUC, PR-AUC and ranking metrics are undefined", report)
         self.assertIn("design reading, not a mechanically verified relationship", report)
+        self.assertIn("## Customer pseudo-target", report)
+        self.assertIn("### Customer-level conclusion", report)
+        self.assertIn("## Transaction pseudo-target", report)
+        self.assertIn("### Transaction-level conclusion", report)
+        self.assertIn("The 15 rows are therefore not 15 independent observations", report)
+        self.assertIn("four synthetic customers and no AML ground truth", report)
+        self.assertIn("an honest performance benchmark is impossible", report)
 
     def test_unknown_assessment_transaction_fails_closed(self):
         source = ceiling.DEFAULT_SQL.read_text(encoding="utf-8")
