@@ -5,28 +5,29 @@ import dev.specgraph.reference.customer.CustomerSnapshot;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
- * Small explainable fuzzy detector for the synthetic review domain.
- *
- * <p>The implementation deliberately keeps the fuzzy surface project-owned and bounded: four
- * normalized memberships, one coupled rule and monotonic weighted singleton defuzzification. This
- * avoids a heavyweight or license-constraining fuzzy runtime for a rule surface that is smaller
- * than the adapter glue such a dependency would require. The output is derived advisory evidence
- * only and never mutates source risk facts.
+ * Explainable fuzzy heuristic with overlap and small-sample shrinkage; not an AML probability.
  */
 @Component
 final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     static final String DETECTOR_IDENTITY = "graded-review-fuzzy-v1";
     static final String SIGNAL_IDENTITY = "fuzzy-review-elevation";
-    static final String RULE_SET_VERSION = "review-fuzzy-rules-v2";
-    static final String FEATURE_SCHEMA_VERSION = "review-fuzzy-features-v1";
+    static final String RULE_SET_VERSION = "review-fuzzy-rules-v3";
+    static final String FEATURE_SCHEMA_VERSION = "review-fuzzy-features-v2";
 
-    private static final double BASELINE_ACTIVATION = 0.25;
+    private static final int SMALL_SAMPLE_PRIOR_OBSERVATIONS = 2;
+    private static final double LOW_SHOULDER_END = 0.10;
+    private static final double MEDIUM_PEAK = 0.30;
+    private static final double HIGH_SHOULDER_START = 0.60;
+
     private static final double BASELINE_CONSEQUENT = 0.05;
-    private static final double ELEVATION_CONSEQUENT = 1.0;
+    private static final double CRYPTO_CONSEQUENT = 0.10;
+    private static final double INCOMPLETE_CONSEQUENT = 0.10;
+    private static final double CROSS_BORDER_CONSEQUENT = 0.2625;
+    private static final double SOURCE_RISK_CONSEQUENT = 0.4875;
+    private static final double COUPLED_CONSEQUENT = 0.0;
 
     @Override
     public List<RiskSignalEvidence> detect(CustomerSnapshot snapshot) {
@@ -35,61 +36,100 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
             return List.of();
         }
 
-        double crossBorderRatio = ratio(
-                snapshot.activities().stream().filter(FuzzyRiskSignalDetectorAdapter::isCrossBorderPayment).count(),
-                observations);
-        double cryptoRatio = ratio(
-                snapshot.activities().stream().filter(activity -> activity.type() == Activity.ActivityType.CRYPTO).count(),
-                observations);
-        double incompleteRatio = ratio(
-                snapshot.activities().stream().filter(FuzzyRiskSignalDetectorAdapter::isIncomplete).count(),
-                observations);
-        double sourceRiskDensity = Math.min(1.0, ratio(snapshot.riskEvidence().size(), observations));
+        long crossBorderCount = snapshot.activities().stream()
+                .filter(FuzzyRiskSignalDetectorAdapter::isCrossBorderPayment).count();
+        long cryptoCount = snapshot.activities().stream()
+                .filter(activity -> activity.type() == Activity.ActivityType.CRYPTO).count();
+        long incompleteCount = snapshot.activities().stream()
+                .filter(FuzzyRiskSignalDetectorAdapter::isIncomplete).count();
+        long sourceRiskCount = Math.min(observations, snapshot.riskEvidence().size());
 
-        LinkedHashMap<String, Double> activations = new LinkedHashMap<>();
-        activations.put("R0_BASELINE", BASELINE_ACTIVATION);
-        activations.put("R1_CRYPTO", rising(cryptoRatio, 0.00, 0.35));
-        activations.put("R2_CROSS_BORDER", rising(crossBorderRatio, 0.10, 0.60));
-        activations.put("R3_INCOMPLETE", rising(incompleteRatio, 0.10, 0.50));
-        activations.put("R4_SOURCE_RISK", rising(sourceRiskDensity, 0.10, 0.60));
-        activations.put("R5_CROSS_BORDER_WITH_SOURCE_RISK",
-                Math.min(activations.get("R2_CROSS_BORDER"), activations.get("R4_SOURCE_RISK")));
+        FeatureInference crypto = infer(cryptoCount, observations);
+        FeatureInference crossBorder = infer(crossBorderCount, observations);
+        FeatureInference incomplete = infer(incompleteCount, observations);
+        FeatureInference sourceRisk = infer(sourceRiskCount, observations);
+        double coupledActivation = Math.min(crossBorder.degree(), sourceRisk.degree());
 
-        Map<String, Double> consequents = Map.of(
-                "R0_BASELINE", BASELINE_CONSEQUENT,
-                "R1_CRYPTO", ELEVATION_CONSEQUENT,
-                "R2_CROSS_BORDER", ELEVATION_CONSEQUENT,
-                "R3_INCOMPLETE", ELEVATION_CONSEQUENT,
-                "R4_SOURCE_RISK", ELEVATION_CONSEQUENT,
-                "R5_CROSS_BORDER_WITH_SOURCE_RISK", ELEVATION_CONSEQUENT);
-
-        double weighted = 0.0;
-        double activationSum = 0.0;
-        for (Map.Entry<String, Double> activation : activations.entrySet()) {
-            weighted += activation.getValue() * consequents.get(activation.getKey());
-            activationSum += activation.getValue();
-        }
-        double score = clamp01(weighted / activationSum);
+        double score = clamp01(
+                BASELINE_CONSEQUENT
+                        + CRYPTO_CONSEQUENT * crypto.degree()
+                        + INCOMPLETE_CONSEQUENT * incomplete.degree()
+                        + CROSS_BORDER_CONSEQUENT * crossBorder.degree()
+                        + SOURCE_RISK_CONSEQUENT * sourceRisk.degree()
+                        + COUPLED_CONSEQUENT * coupledActivation);
 
         LinkedHashMap<String, String> provenance = new LinkedHashMap<>();
-        provenance.put("semantics", "monotonic weighted fuzzy review-elevation score in [0,1]");
+        provenance.put("semantics", "heuristic monotone fuzzy review-elevation degree in [0,1]");
+        provenance.put("calibration", "not an AML probability");
         provenance.put("featureSchemaVersion", FEATURE_SCHEMA_VERSION);
         provenance.put("ruleSetVersion", RULE_SET_VERSION);
-        provenance.put("defuzzification", "weighted-singleton-monotonic-v2");
-        provenance.put("positiveConsequent", format(ELEVATION_CONSEQUENT));
-        provenance.put("crossBorderRatio", format(crossBorderRatio));
-        provenance.put("cryptoRatio", format(cryptoRatio));
-        provenance.put("incompleteRatio", format(incompleteRatio));
-        provenance.put("sourceRiskDensity", format(sourceRiskDensity));
-        activations.forEach((rule, activation) -> provenance.put("activation." + rule, format(activation)));
-        provenance.put("implementation", "project-owned-minimal-fuzzy-inference-v2");
+        provenance.put("defuzzification", "fixed-weight-monotone-surface-v3");
+        provenance.put("monotonicDimensions",
+                "effective.cryptoRatio,effective.crossBorderRatio,effective.incompleteRatio,effective.sourceRiskRatio");
+        provenance.put("smallSampleTreatment", "add-two zero-positive prior observations");
+        provenance.put("observationCount", Integer.toString(observations));
+        provenance.put("effectiveObservationCount",
+                Integer.toString(observations + SMALL_SAMPLE_PRIOR_OBSERVATIONS));
+        provenance.put("cryptoRatio", format(crypto.rawRatio()));
+        provenance.put("crossBorderRatio", format(crossBorder.rawRatio()));
+        provenance.put("incompleteRatio", format(incomplete.rawRatio()));
+        provenance.put("sourceRiskDensity", format(sourceRisk.rawRatio()));
+
+        addFeatureProvenance(provenance, "crypto", crypto);
+        addFeatureProvenance(provenance, "crossBorder", crossBorder);
+        addFeatureProvenance(provenance, "incomplete", incomplete);
+        addFeatureProvenance(provenance, "sourceRisk", sourceRisk);
+
+        provenance.put("activation.R0_BASELINE", "1.000000");
+        provenance.put("activation.R1_CRYPTO", format(crypto.degree()));
+        provenance.put("activation.R2_CROSS_BORDER", format(crossBorder.degree()));
+        provenance.put("activation.R3_INCOMPLETE", format(incomplete.degree()));
+        provenance.put("activation.R4_SOURCE_RISK", format(sourceRisk.degree()));
+        provenance.put("activation.R5_CROSS_BORDER_WITH_SOURCE_RISK", format(coupledActivation));
+        provenance.put("consequent.R0_BASELINE", format(BASELINE_CONSEQUENT));
+        provenance.put("consequent.R1_CRYPTO", format(CRYPTO_CONSEQUENT));
+        provenance.put("consequent.R2_CROSS_BORDER", format(CROSS_BORDER_CONSEQUENT));
+        provenance.put("consequent.R3_INCOMPLETE", format(INCOMPLETE_CONSEQUENT));
+        provenance.put("consequent.R4_SOURCE_RISK", format(SOURCE_RISK_CONSEQUENT));
+        provenance.put("consequent.R5_CROSS_BORDER_WITH_SOURCE_RISK", format(COUPLED_CONSEQUENT));
+        provenance.put("interactionPolicy",
+                "diagnostic conjunction only; cross-border/source-risk consequents share a fixed 0.75 budget");
+        provenance.put("implementation", "project-owned-overlapping-fuzzy-inference-v3");
         provenance.put("demoLimitation", "synthetic heuristic; not production AML calibration");
 
-        return List.of(new RiskSignalEvidence(
-                DETECTOR_IDENTITY,
-                SIGNAL_IDENTITY,
-                score,
-                provenance));
+        return List.of(new RiskSignalEvidence(DETECTOR_IDENTITY, SIGNAL_IDENTITY, score, provenance));
+    }
+
+    private static FeatureInference infer(long positiveCount, int observations) {
+        double rawRatio = ratio(positiveCount, observations);
+        double effectiveRatio = ratio(positiveCount, observations + SMALL_SAMPLE_PRIOR_OBSERVATIONS);
+        Membership membership = partition(effectiveRatio);
+        double degree = 0.5 * membership.medium() + membership.high();
+        return new FeatureInference(rawRatio, effectiveRatio, membership, degree);
+    }
+
+    private static Membership partition(double value) {
+        if (value <= LOW_SHOULDER_END) {
+            return new Membership(1.0, 0.0, 0.0);
+        }
+        if (value <= MEDIUM_PEAK) {
+            double medium = rising(value, LOW_SHOULDER_END, MEDIUM_PEAK);
+            return new Membership(1.0 - medium, medium, 0.0);
+        }
+        if (value < HIGH_SHOULDER_START) {
+            double high = rising(value, MEDIUM_PEAK, HIGH_SHOULDER_START);
+            return new Membership(0.0, 1.0 - high, high);
+        }
+        return new Membership(0.0, 0.0, 1.0);
+    }
+
+    private static void addFeatureProvenance(
+            LinkedHashMap<String, String> provenance, String feature, FeatureInference inference) {
+        provenance.put("raw." + feature + "Ratio", format(inference.rawRatio()));
+        provenance.put("effective." + feature + "Ratio", format(inference.effectiveRatio()));
+        provenance.put("membership." + feature + ".low", format(inference.membership().low()));
+        provenance.put("membership." + feature + ".medium", format(inference.membership().medium()));
+        provenance.put("membership." + feature + ".high", format(inference.membership().high()));
     }
 
     private static boolean isCrossBorderPayment(Activity activity) {
@@ -109,12 +149,6 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     }
 
     private static double rising(double value, double low, double high) {
-        if (value <= low) {
-            return 0.0;
-        }
-        if (value >= high) {
-            return 1.0;
-        }
         return (value - low) / (high - low);
     }
 
@@ -125,4 +159,9 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     private static String format(double value) {
         return String.format(Locale.ROOT, "%.6f", value);
     }
+
+    private record Membership(double low, double medium, double high) {}
+
+    private record FeatureInference(
+            double rawRatio, double effectiveRatio, Membership membership, double degree) {}
 }
