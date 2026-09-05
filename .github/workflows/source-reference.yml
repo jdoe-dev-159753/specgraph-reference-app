@@ -1,0 +1,69 @@
+name: source-reference
+
+on:
+  pull_request:
+    paths:
+      - 'backend/pom.xml'
+      - 'backend/src/main/java/**'
+      - 'backend/src/main/resources/static/openapi.yaml'
+      - 'scripts/generate-source-reference.sh'
+      - 'scripts/render-openapi-reference.sh'
+      - 'scripts/source_doc_coverage.py'
+      - 'scripts/test_source_doc_coverage.py'
+      - '.github/workflows/source-reference.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/pom.xml'
+      - 'backend/src/main/java/**'
+      - 'backend/src/main/resources/static/openapi.yaml'
+      - 'scripts/generate-source-reference.sh'
+      - 'scripts/render-openapi-reference.sh'
+      - 'scripts/source_doc_coverage.py'
+      - 'scripts/test_source_doc_coverage.py'
+      - '.github/workflows/source-reference.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: source-reference-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Clean generated source reference before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules'
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Assert exact source revision
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - name: Generate implementation and HTTP API reference
+        run: bash scripts/generate-source-reference.sh
+
+      - name: Record artifact provenance
+        run: |
+          printf 'sourceSha=%s\nworkflowRun=%s\nworkflowAttempt=%s\n' \
+            "$SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > backend/target/source-reference/provenance.txt
+
+      - name: Upload navigable source reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-reference-${{ env.SOURCE_SHA }}
+          path: backend/target/source-reference/
+          if-no-files-found: error
+          retention-days: 30
