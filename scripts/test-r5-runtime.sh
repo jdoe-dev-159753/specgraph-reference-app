@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Contract test for R5 launcher/status/manifest behavior; it proves orchestration, not real LM inference.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

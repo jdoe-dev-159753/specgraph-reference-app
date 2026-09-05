@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Recomputes reviewer telemetry from tracked files and rejects README metrics that no longer match.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

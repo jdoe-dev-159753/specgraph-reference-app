@@ -1,3 +1,4 @@
+# Proves and publishes the one supported R5 composite/pgvector/LM-Studio deployment candidate.
 name: r5-release
 
 on:

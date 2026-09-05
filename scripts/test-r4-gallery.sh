@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Contract test for deterministic/OpenAI gallery opt-in and teardown; no external provider is contacted.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

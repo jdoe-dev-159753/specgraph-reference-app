@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Validates the manually operated LM Studio boundary before starting the single supported R5 topology.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,3 +1,4 @@
+# Provides the main deterministic application gate, with heavier compatibility proof only on request.
 name: application-ci
 
 on:

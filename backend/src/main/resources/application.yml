@@ -1,3 +1,4 @@
+# Safe default runtime: deterministic analysis until an infrastructure profile is selected explicitly.
 spring:
   application:
     name: specgraph-reference-app

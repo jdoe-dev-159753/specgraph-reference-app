@@ -1,3 +1,4 @@
+-- Persists a completed advisory analysis and its policy evidence as an auditable point-in-time record.
 CREATE TABLE analysis_history (
     analysis_id UUID PRIMARY KEY,
     customer_id UUID NOT NULL REFERENCES customers(customer_id),

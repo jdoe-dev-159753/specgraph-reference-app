@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1.7
+# Multi-stage production image compiles frontend/backend once and records exact source/recipe provenance.
 ARG SOURCE_ROOT=.
 ARG SOURCE_REVISION=unknown
 ARG BUILD_RECIPE_SHA256=unknown

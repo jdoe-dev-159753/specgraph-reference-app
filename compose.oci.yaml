@@ -1,3 +1,4 @@
+# Pull-only reviewer topology for published R0/R1 images, independent of a source checkout.
 name: specgraph-demo
 
 services:

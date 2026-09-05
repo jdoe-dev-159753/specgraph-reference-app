@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Starts one isolated R4 backend variant and prevents accidental credential reuse across variants.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
