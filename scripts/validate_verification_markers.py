@@ -7,7 +7,8 @@ test evidence: they may describe orchestration or historical gaps without being
 executed by a test harness.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import os
 from pathlib import Path
 import re
 import sys
@@ -17,11 +18,56 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE = Path("docs/assignment/VV/verification.yaml")
 PLAYWRIGHT_CONFIG = Path("e2e/playwright.config.ts")
 MARKER = re.compile(r"VFY-[A-Z0-9]+(?:-[A-Z0-9]+)*")
-JAVA_TAG_ANNOTATION = re.compile(r"@(?:org\.junit\.jupiter\.api\.)?Tag\b")
-JAVA_DISABLED = re.compile(r"@(?:org\.junit\.jupiter\.api\.)?Disabled\b")
+JAVA_TAG_ANNOTATION = re.compile(
+    r"@(?P<qualified>org\.junit\.jupiter\.api\.)?Tag\b"
+)
+JUNIT_TEST_ANNOTATIONS = {
+    "Test": "org.junit.jupiter.api.Test",
+    "ParameterizedTest": "org.junit.jupiter.params.ParameterizedTest",
+    "RepeatedTest": "org.junit.jupiter.api.RepeatedTest",
+    "TestFactory": "org.junit.jupiter.api.TestFactory",
+    "TestTemplate": "org.junit.jupiter.api.TestTemplate",
+}
 JAVA_TEST_ANNOTATION = re.compile(
-    r"@(?:org\.junit\.jupiter\.(?:api|params)\.)?"
-    r"(?:Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b"
+    r"@(?P<qualified>org\.junit\.jupiter\.(?:api|params)\.)?"
+    r"(?P<simple>Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b"
+)
+JUNIT_NESTED_ANNOTATIONS = {"Nested": "org.junit.jupiter.api.Nested"}
+JAVA_NESTED_ANNOTATION = re.compile(
+    r"@(?P<qualified>org\.junit\.jupiter\.api\.)?(?P<simple>Nested)\b"
+)
+JUNIT_EXECUTION_GUARD_NAMES = (
+    "Disabled",
+    "DisabledForJreRange",
+    "DisabledIf",
+    "DisabledIfEnvironmentVariable",
+    "DisabledIfEnvironmentVariables",
+    "DisabledIfSystemProperty",
+    "DisabledIfSystemProperties",
+    "DisabledInNativeImage",
+    "DisabledOnJre",
+    "DisabledOnOs",
+    "EnabledForJreRange",
+    "EnabledIf",
+    "EnabledIfEnvironmentVariable",
+    "EnabledIfEnvironmentVariables",
+    "EnabledIfSystemProperty",
+    "EnabledIfSystemProperties",
+    "EnabledInNativeImage",
+    "EnabledOnJre",
+    "EnabledOnOs",
+)
+# Runtime conditions are not reproducible static evidence. Once their JUnit
+# identity is resolved, only the annotated type or method is treated as guarded.
+JUNIT_EXECUTION_GUARD_ANNOTATIONS = {
+    name: "org.junit.jupiter.api.Disabled"
+    if name == "Disabled"
+    else f"org.junit.jupiter.api.condition.{name}"
+    for name in JUNIT_EXECUTION_GUARD_NAMES
+}
+JAVA_EXECUTION_GUARD_ANNOTATION = re.compile(
+    r"@(?P<qualified>org\.junit\.jupiter\.api(?:\.condition)?\.)?"
+    + r"(?P<simple>" + "|".join(JUNIT_EXECUTION_GUARD_NAMES) + r")\b"
 )
 JAVA_TYPE_DECLARATION = re.compile(
     r"\b(?P<modifiers>(?:(?:public|protected|private|abstract|static|final|sealed|non-sealed)\s+)*)"
@@ -35,10 +81,28 @@ JAVA_IMPORT = re.compile(
     r"(?m)^\s*import\s+(?!static\b)"
     r"([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$*][A-Za-z0-9_$*]*)*)\s*;"
 )
+JAVA_LOCAL_TAG_DECLARATION = re.compile(
+    r"(?:\b(?:class|interface|record|enum)|@interface)\s+Tag\b"
+)
+JAVA_ANY_ANNOTATION = re.compile(
+    r"@[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*"
+)
 PLAYWRIGHT_NON_PASSING = re.compile(r"\.\s*(?:skip|fixme|fail)\s*\(")
+PLAYWRIGHT_FOCUSED = re.compile(r"\.\s*only\s*\(")
 PLAYWRIGHT_TEST_MATCH = re.compile(r"\btestMatch\s*:\s*/((?:\\.|[^/\r\n])*)/([a-z]*)")
 PLAYWRIGHT_TEST_DIR = re.compile(r"\btestDir\s*:")
+PLAYWRIGHT_UNSUPPORTED_FILTER = re.compile(
+    r"(?<![.$A-Za-z0-9_])(?:testIgnore|grep|grepInvert|projects)\s*(?=:|[,}])"
+)
 SUREFIRE_DEFAULT_TEST_TYPE = re.compile(r"(?:Test.*|.*Test|.*Tests|.*TestCase)\Z")
+JAVA_METHOD_MODIFIERS = frozenset({
+    "public", "protected", "private", "static", "final", "abstract",
+    "synchronized", "native", "strictfp", "default",
+})
+JUNIT_FACTORY_NODE_TYPES = frozenset({"DynamicNode", "DynamicTest", "DynamicContainer"})
+JUNIT_FACTORY_CONTAINER_TYPES = frozenset({
+    "Stream", "Collection", "Iterable", "Iterator", "List", "Set", "Queue", "Deque",
+})
 
 CONTROLLED_OBLIGATION_IDS = frozenset({
     "VFY-CUSTOMER-READ-001",
@@ -83,10 +147,17 @@ class JavaType:
     name: str
     qualified_name: str
     parents: tuple[str, ...]
+    enclosing_qualified_name: str | None
     declaration_start: int
     body_start: int
     body_end: int
     depth: int
+    is_member_type: bool
+    is_static: bool
+    is_private: bool
+    is_junit_nested: bool
+    is_execution_guarded: bool
+    is_interface: bool
     is_abstract: bool
     has_direct_tests: bool
 
@@ -97,6 +168,8 @@ class JavaSource:
     explicit_imports: tuple[str, ...]
     wildcard_imports: tuple[str, ...]
     types: tuple[JavaType, ...]
+    test_annotations: tuple[re.Match[str], ...]
+    execution_guards: tuple[re.Match[str], ...]
 
 
 def catalogue_ids(text: str) -> frozenset[str]:
@@ -305,6 +378,15 @@ def brace_depths(structure: str) -> list[int]:
     return depths
 
 
+def declares_top_level_tag(structure: str) -> bool:
+    """Return whether this compilation unit declares the package-level type Tag."""
+    depths = brace_depths(structure)
+    return any(
+        depths[match.start()] == 0
+        for match in JAVA_LOCAL_TAG_DECLARATION.finditer(structure)
+    )
+
+
 def closing_brace(structure: str, opening: int) -> int:
     depth = 1
     for index in range(opening + 1, len(structure)):
@@ -317,52 +399,529 @@ def closing_brace(structure: str, opening: int) -> int:
     return len(structure)
 
 
-def java_types(structure: str, package_name: str = "") -> tuple[JavaType, ...]:
+def java_parent_names(header: str) -> tuple[str, ...]:
+    """Read extends/implements entries, ignoring commas inside generic arguments."""
+    keywords: list[tuple[str, int, int]] = []
+    angle_depth = 0
+    index = 0
+    while index < len(header):
+        character = header[index]
+        if character == "<":
+            angle_depth += 1
+            index += 1
+            continue
+        if character == ">":
+            angle_depth = max(0, angle_depth - 1)
+            index += 1
+            continue
+        if angle_depth == 0 and (character.isalpha() or character in "_$"):
+            end = index + 1
+            while end < len(header) and (header[end].isalnum() or header[end] in "_$"):
+                end += 1
+            word = header[index:end]
+            if word in {"extends", "implements", "permits"}:
+                keywords.append((word, index, end))
+            index = end
+            continue
+        index += 1
+
+    parents: list[str] = []
+    for keyword_index, (keyword, _, start) in enumerate(keywords):
+        if keyword not in {"extends", "implements"}:
+            continue
+        end = keywords[keyword_index + 1][1] if keyword_index + 1 < len(keywords) else len(header)
+        segment = header[start:end]
+        entry_start = 0
+        angle_depth = 0
+        entries: list[str] = []
+        for index, character in enumerate(segment):
+            if character == "<":
+                angle_depth += 1
+            elif character == ">":
+                angle_depth = max(0, angle_depth - 1)
+            elif character == "," and angle_depth == 0:
+                entries.append(segment[entry_start:index])
+                entry_start = index + 1
+        entries.append(segment[entry_start:])
+        for entry in entries:
+            cursor = 0
+            while True:
+                while cursor < len(entry) and entry[cursor].isspace():
+                    cursor += 1
+                if cursor >= len(entry) or entry[cursor] != "@":
+                    break
+                annotation = re.match(
+                    r"@[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*",
+                    entry[cursor:],
+                )
+                if annotation is None:
+                    break
+                cursor += annotation.end()
+                while cursor < len(entry) and entry[cursor].isspace():
+                    cursor += 1
+                if cursor < len(entry) and entry[cursor] == "(":
+                    depth = 1
+                    cursor += 1
+                    while cursor < len(entry) and depth:
+                        if entry[cursor] == "(":
+                            depth += 1
+                        elif entry[cursor] == ")":
+                            depth -= 1
+                        cursor += 1
+            parent = re.match(r"([A-Za-z_$][A-Za-z0-9_$.]*)", entry[cursor:])
+            if parent is not None:
+                parents.append(parent.group(1))
+    return tuple(dict.fromkeys(parents))
+
+
+def java_member_type_scopes(structure: str) -> dict[str, tuple[tuple[int, int], ...]]:
+    """Return lexical owner bodies in which a direct member type shadows imports."""
     depths = brace_depths(structure)
-    test_annotations = tuple(JAVA_TEST_ANNOTATION.finditer(structure))
+    declarations: list[tuple[re.Match[str], int, int, int]] = []
+    scopes: dict[str, list[tuple[int, int]]] = {}
+    for declaration in JAVA_TYPE_DECLARATION.finditer(structure):
+        body_start = declaration.end() - 1
+        body_end = closing_brace(structure, body_start)
+        depth = depths[body_start]
+        owner = next(
+            (
+                candidate
+                for candidate in reversed(declarations)
+                if candidate[1] < declaration.start() < candidate[2]
+                and depth == candidate[3] + 1
+            ),
+            None,
+        )
+        if owner is not None:
+            scopes.setdefault(declaration.group("name"), []).append(
+                (owner[1], owner[2])
+            )
+        declarations.append((declaration, body_start, body_end, depth))
+    return {name: tuple(ranges) for name, ranges in scopes.items()}
+
+
+def resolved_junit_annotations(
+    structure: str,
+    pattern: re.Pattern[str],
+    identities: dict[str, str],
+    package_type_names: frozenset[str],
+    explicit_imports: tuple[str, ...],
+    wildcard_imports: tuple[str, ...],
+) -> tuple[re.Match[str], ...]:
+    """Resolve short JUnit annotations conservatively from Java imports."""
+    resolved: list[re.Match[str]] = []
+    member_type_scopes = java_member_type_scopes(structure)
+    for annotation in pattern.finditer(structure):
+        simple = annotation.group("simple")
+        expected = identities[simple]
+        if annotation.group("qualified") is not None:
+            if annotation.group("qualified") + simple == expected:
+                resolved.append(annotation)
+            continue
+        if simple in package_type_names or any(
+            start < annotation.start() < end
+            for start, end in member_type_scopes.get(simple, ())
+        ):
+            continue
+        explicit_matches = {
+            imported
+            for imported in explicit_imports
+            if imported.rsplit(".", 1)[-1] == simple
+        }
+        if explicit_matches:
+            if explicit_matches == {expected}:
+                resolved.append(annotation)
+            continue
+        expected_package = expected.rsplit(".", 1)[0]
+        if set(wildcard_imports) == {expected_package}:
+            resolved.append(annotation)
+    return tuple(resolved)
+
+
+def resolved_junit_test_annotations(
+    structure: str,
+    package_type_names: frozenset[str],
+    explicit_imports: tuple[str, ...],
+    wildcard_imports: tuple[str, ...],
+) -> tuple[re.Match[str], ...]:
+    return resolved_junit_annotations(
+        structure,
+        JAVA_TEST_ANNOTATION,
+        JUNIT_TEST_ANNOTATIONS,
+        package_type_names,
+        explicit_imports,
+        wildcard_imports,
+    )
+
+
+def resolved_junit_nested_annotations(
+    structure: str,
+    package_type_names: frozenset[str],
+    explicit_imports: tuple[str, ...],
+    wildcard_imports: tuple[str, ...],
+) -> tuple[re.Match[str], ...]:
+    return resolved_junit_annotations(
+        structure,
+        JAVA_NESTED_ANNOTATION,
+        JUNIT_NESTED_ANNOTATIONS,
+        package_type_names,
+        explicit_imports,
+        wildcard_imports,
+    )
+
+
+def resolved_junit_execution_guards(
+    structure: str,
+    package_type_names: frozenset[str],
+    explicit_imports: tuple[str, ...],
+    wildcard_imports: tuple[str, ...],
+) -> tuple[re.Match[str], ...]:
+    return resolved_junit_annotations(
+        structure,
+        JAVA_EXECUTION_GUARD_ANNOTATION,
+        JUNIT_EXECUTION_GUARD_ANNOTATIONS,
+        package_type_names,
+        explicit_imports,
+        wildcard_imports,
+    )
+
+
+def java_top_level_type_names(structure: str) -> frozenset[str]:
+    depths = brace_depths(structure)
+    return frozenset(
+        declaration.group("name")
+        for declaration in JAVA_TYPE_DECLARATION.finditer(structure)
+        if depths[declaration.end() - 1] == 0
+    )
+
+
+def java_annotation_end(structure: str, annotation: re.Match[str]) -> int:
+    cursor = annotation.end()
+    while cursor < len(structure) and structure[cursor].isspace():
+        cursor += 1
+    if cursor >= len(structure) or structure[cursor] != "(":
+        return annotation.end()
+    depth = 1
+    cursor += 1
+    while cursor < len(structure) and depth:
+        if structure[cursor] == "(":
+            depth += 1
+        elif structure[cursor] == ")":
+            depth -= 1
+        cursor += 1
+    return cursor
+
+
+def java_annotations_share_declaration(
+    structure: str,
+    left: re.Match[str],
+    right: re.Match[str],
+) -> bool:
+    first, second = sorted((left, right), key=lambda annotation: annotation.start())
+    return not any(
+        separator in structure[java_annotation_end(structure, first):second.start()]
+        for separator in ";{}"
+    )
+
+
+def java_annotation_attaches_to_type(
+    structure: str,
+    annotation: re.Match[str],
+    declaration: re.Match[str],
+) -> bool:
+    return annotation.start() < declaration.start() and not any(
+        separator
+        in structure[java_annotation_end(structure, annotation):declaration.start()]
+        for separator in ";{}"
+    )
+
+
+def active_junit_test_annotations(
+    structure: str,
+    test_annotations: tuple[re.Match[str], ...],
+    execution_guards: tuple[re.Match[str], ...],
+) -> tuple[re.Match[str], ...]:
+    depths = brace_depths(structure)
+    return tuple(
+        annotation
+        for annotation in test_annotations
+        if not any(
+            depths[guard.start()] == depths[annotation.start()]
+            and java_annotations_share_declaration(structure, guard, annotation)
+            for guard in execution_guards
+        )
+    )
+
+
+def java_declaration_after_annotation(
+    structure: str,
+    annotation: re.Match[str],
+) -> tuple[str, str] | None:
+    """Read the declaration header and terminator following an annotation cluster."""
+    cursor = java_annotation_end(structure, annotation)
+    while True:
+        while cursor < len(structure) and structure[cursor].isspace():
+            cursor += 1
+        following = JAVA_ANY_ANNOTATION.match(structure, cursor)
+        if following is None:
+            break
+        cursor = java_annotation_end(structure, following)
+
+    start = cursor
+    parenthesis_depth = 0
+    while cursor < len(structure):
+        character = structure[cursor]
+        if character == "(":
+            parenthesis_depth += 1
+        elif character == ")":
+            parenthesis_depth = max(0, parenthesis_depth - 1)
+        elif character in "{};" and parenthesis_depth == 0:
+            if character == "}":
+                return None
+            return structure[start:cursor].strip(), character
+        cursor += 1
+    return None
+
+
+def java_leading_type_parameters_end(prefix: str) -> int | None:
+    if not prefix.startswith("<"):
+        return 0
+    depth = 0
+    for index, character in enumerate(prefix):
+        if character == "<":
+            depth += 1
+        elif character == ">":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return None
+
+
+def junit_factory_return_type_is_supported(return_type: str) -> bool:
+    """Accept statically recognisable TestFactory node/container return shapes."""
+    compact = re.sub(r"\s+", "", return_type)
+    if not compact or "@" in compact:
+        return False
+    if compact.endswith("[]"):
+        component = compact[:-2].rsplit(".", 1)[-1]
+        return component in JUNIT_FACTORY_NODE_TYPES
+    outer = compact.split("<", 1)[0].rsplit(".", 1)[-1]
+    if outer in JUNIT_FACTORY_NODE_TYPES:
+        return "<" not in compact
+    if outer not in JUNIT_FACTORY_CONTAINER_TYPES or "<" not in compact:
+        return False
+    arguments = compact[compact.find("<") + 1:compact.rfind(">")]
+    return re.fullmatch(
+        r"(?:\?extends)?(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*"
+        r"(?:DynamicNode|DynamicTest|DynamicContainer)",
+        arguments,
+    ) is not None
+
+
+def junit_method_is_executable(
+    structure: str,
+    annotation: re.Match[str],
+    owner: JavaType,
+) -> bool:
+    declaration = java_declaration_after_annotation(structure, annotation)
+    if declaration is None:
+        return False
+    header, terminator = declaration
+    if terminator != "{" or "=" in header:
+        return False
+    method = re.fullmatch(
+        r"(?s)(?P<prefix>.*?)\b(?P<name>[A-Za-z_$][A-Za-z0-9_$]*)\s*"
+        r"\((?P<parameters>.*)\)\s*(?:throws\s+[A-Za-z0-9_$.,<>?\s]+)?",
+        header,
+    )
+    if method is None:
+        return False
+
+    prefix = method.group("prefix").strip()
+    modifiers: set[str] = set()
+    while True:
+        modifier = re.match(r"([A-Za-z_$][A-Za-z0-9_$]*)\b", prefix)
+        if modifier is None or modifier.group(1) not in JAVA_METHOD_MODIFIERS:
+            break
+        modifiers.add(modifier.group(1))
+        prefix = prefix[modifier.end():].lstrip()
+    type_parameters_end = java_leading_type_parameters_end(prefix)
+    if type_parameters_end is None:
+        return False
+    prefix = prefix[type_parameters_end:].strip()
+    if not prefix or "@" in prefix:
+        return False
+    if modifiers & {"private", "static", "abstract", "native"}:
+        return False
+    if owner.is_interface and "default" not in modifiers:
+        return False
+
+    annotation_name = annotation.group("simple")
+    if annotation_name == "TestFactory":
+        return junit_factory_return_type_is_supported(prefix)
+    return re.sub(r"\s+", "", prefix) == "void"
+
+
+def executable_junit_test_annotations(
+    structure: str,
+    types: tuple[JavaType, ...],
+    test_annotations: tuple[re.Match[str], ...],
+    execution_guards: tuple[re.Match[str], ...],
+) -> tuple[re.Match[str], ...]:
+    depths = brace_depths(structure)
+    active = active_junit_test_annotations(structure, test_annotations, execution_guards)
+    executable: list[re.Match[str]] = []
+    for annotation in active:
+        owner = next(
+            (
+                java_type
+                for java_type in reversed(types)
+                if java_type.body_start < annotation.start() < java_type.body_end
+                and depths[annotation.start()] == java_type.depth + 1
+            ),
+            None,
+        )
+        if owner is not None and junit_method_is_executable(structure, annotation, owner):
+            executable.append(annotation)
+    return tuple(executable)
+
+
+def java_types(
+    structure: str,
+    package_name: str = "",
+    test_annotations: tuple[re.Match[str], ...] = (),
+    nested_annotations: tuple[re.Match[str], ...] = (),
+    execution_guards: tuple[re.Match[str], ...] = (),
+) -> tuple[JavaType, ...]:
+    depths = brace_depths(structure)
     types: list[JavaType] = []
     for declaration in JAVA_TYPE_DECLARATION.finditer(structure):
         body_start = declaration.end() - 1
         body_end = closing_brace(structure, body_start)
         depth = depths[body_start]
         header = declaration.group("header")
-        parents = tuple(
-            re.findall(
-                r"(?:\bextends\b|\bimplements\b|,)\s*([A-Za-z_$][A-Za-z0-9_$.]*)",
-                header,
-            )
+        parents = java_parent_names(header)
+        enclosing = next(
+            (
+                java_type
+                for java_type in reversed(types)
+                if java_type.body_start < declaration.start() < java_type.body_end
+            ),
+            None,
         )
-        has_direct_tests = any(
-            body_start < annotation.start() < body_end
-            and depths[annotation.start()] == depth + 1
-            for annotation in test_annotations
+        is_member_type = enclosing is not None and depth == enclosing.depth + 1
+        enclosing_name = enclosing.qualified_name if enclosing is not None else None
+        name = declaration.group("name")
+        qualified_name = (
+            f"{enclosing_name}${name}"
+            if enclosing_name is not None
+            else (f"{package_name}.{name}" if package_name else name)
+        )
+        type_guards = tuple(
+            guard
+            for guard in execution_guards
+            if depths[guard.start()] == depth
+            and java_annotation_attaches_to_type(structure, guard, declaration)
         )
         modifiers = declaration.group("modifiers").split()
-        name = declaration.group("name")
         types.append(JavaType(
-            name,
-            f"{package_name}.{name}" if package_name else name,
-            parents,
-            declaration.start(),
-            body_start,
-            body_end,
-            depth,
-            declaration.group("kind") == "interface" or "abstract" in modifiers,
-            has_direct_tests,
+            name=name,
+            qualified_name=qualified_name,
+            parents=parents,
+            enclosing_qualified_name=enclosing_name,
+            declaration_start=declaration.start(),
+            body_start=body_start,
+            body_end=body_end,
+            depth=depth,
+            is_member_type=is_member_type,
+            is_static="static" in modifiers,
+            is_private="private" in modifiers,
+            is_junit_nested=any(
+                depths[annotation.start()] == depth
+                and java_annotation_attaches_to_type(structure, annotation, declaration)
+                for annotation in nested_annotations
+            ),
+            is_execution_guarded=bool(type_guards),
+            is_interface=declaration.group("kind") == "interface",
+            is_abstract=declaration.group("kind") == "interface" or "abstract" in modifiers,
+            has_direct_tests=False,
         ))
-    return tuple(types)
+    parsed_types = tuple(types)
+    executable_annotations = executable_junit_test_annotations(
+        structure,
+        parsed_types,
+        test_annotations,
+        execution_guards,
+    )
+    return tuple(
+        replace(
+            java_type,
+            has_direct_tests=any(
+                java_type.body_start < annotation.start() < java_type.body_end
+                and depths[annotation.start()] == java_type.depth + 1
+                for annotation in executable_annotations
+            ),
+        )
+        for java_type in parsed_types
+    )
 
 
-def java_source(structure: str) -> JavaSource:
+def java_source(
+    structure: str,
+    package_type_names: frozenset[str] | None = None,
+) -> JavaSource:
     package = JAVA_PACKAGE.search(structure)
     package_name = package.group(1) if package is not None else ""
     imports = tuple(JAVA_IMPORT.findall(structure))
+    explicit_imports = tuple(
+        import_name for import_name in imports if not import_name.endswith(".*")
+    )
+    wildcard_imports = tuple(
+        import_name[:-2] for import_name in imports if import_name.endswith(".*")
+    )
+    if package_type_names is None:
+        package_type_names = java_top_level_type_names(structure)
+    test_annotations = resolved_junit_test_annotations(
+        structure,
+        package_type_names,
+        explicit_imports,
+        wildcard_imports,
+    )
+    nested_annotations = resolved_junit_nested_annotations(
+        structure,
+        package_type_names,
+        explicit_imports,
+        wildcard_imports,
+    )
+    execution_guards = resolved_junit_execution_guards(
+        structure,
+        package_type_names,
+        explicit_imports,
+        wildcard_imports,
+    )
     return JavaSource(
         package_name,
-        tuple(import_name for import_name in imports if not import_name.endswith(".*")),
-        tuple(import_name[:-2] for import_name in imports if import_name.endswith(".*")),
-        java_types(structure, package_name),
+        explicit_imports,
+        wildcard_imports,
+        java_types(
+            structure,
+            package_name,
+            test_annotations,
+            nested_annotations,
+            execution_guards,
+        ),
+        test_annotations,
+        execution_guards,
     )
+
+
+def java_package_types(structures: list[str]) -> dict[str, frozenset[str]]:
+    packages: dict[str, set[str]] = {}
+    for structure in structures:
+        package = JAVA_PACKAGE.search(structure)
+        package_name = package.group(1) if package is not None else ""
+        packages.setdefault(package_name, set()).update(java_top_level_type_names(structure))
+    return {package: frozenset(names) for package, names in packages.items()}
 
 
 def resolved_java_parent(
@@ -395,8 +954,22 @@ def resolved_java_parent(
     return None
 
 
-def discoverable_java_types(structures: list[str]) -> frozenset[str]:
-    sources = tuple(java_source(structure) for structure in structures)
+def discoverable_java_types(
+    structures: list[str],
+    package_types: dict[str, frozenset[str]] | None = None,
+) -> frozenset[str]:
+    if package_types is None:
+        package_types = java_package_types(structures)
+    sources = tuple(
+        java_source(
+            structure,
+            package_types.get(
+                (package.group(1) if (package := JAVA_PACKAGE.search(structure)) else ""),
+                frozenset(),
+            ),
+        )
+        for structure in structures
+    )
     occurrences: dict[str, list[tuple[JavaSource, JavaType]]] = {}
     for source in sources:
         for java_type in source.types:
@@ -417,24 +990,71 @@ def discoverable_java_types(structures: list[str]) -> frozenset[str]:
         )
         for name, (source, java_type) in by_name.items()
     }
-    inherited_tests = {
-        name for name, (_, java_type) in by_name.items() if java_type.has_direct_tests
+    effectively_guarded = {
+        name
+        for name, (_, java_type) in by_name.items()
+        if java_type.is_execution_guarded
     }
     changed = True
     while changed:
         changed = False
-        for name in by_name:
-            if name not in inherited_tests and any(
-                parent in inherited_tests for parent in parents[name]
+        for name, (_, java_type) in by_name.items():
+            if name in effectively_guarded:
+                continue
+            if (
+                any(parent in effectively_guarded for parent in parents[name])
+                or java_type.enclosing_qualified_name in effectively_guarded
+            ):
+                effectively_guarded.add(name)
+                changed = True
+    inherited_tests = {
+        name
+        for name, (_, java_type) in by_name.items()
+        if java_type.has_direct_tests and name not in effectively_guarded
+    }
+    changed = True
+    while changed:
+        changed = False
+        for name, (_, java_type) in by_name.items():
+            if (
+                name not in effectively_guarded
+                and name not in inherited_tests
+                and any(
+                    parent in inherited_tests for parent in parents[name]
+                )
             ):
                 inherited_tests.add(name)
+                changed = True
+
+    eligible_nested = {
+        name
+        for name, (_, java_type) in by_name.items()
+        if java_type.is_member_type
+        and java_type.enclosing_qualified_name is not None
+        and java_type.is_junit_nested
+        and not java_type.is_static
+        and not java_type.is_private
+        and not java_type.is_abstract
+        and name not in effectively_guarded
+    }
+    runnable_content = set(inherited_tests)
+    changed = True
+    while changed:
+        changed = False
+        for name in eligible_nested:
+            enclosing = by_name[name][1].enclosing_qualified_name
+            if name in runnable_content and enclosing not in runnable_content:
+                runnable_content.add(enclosing)
                 changed = True
 
     executable = {
         name
         for name, (_, java_type) in by_name.items()
-        if not java_type.is_abstract
-        and name in inherited_tests
+        if java_type.depth == 0
+        and java_type.enclosing_qualified_name is None
+        and not java_type.is_abstract
+        and name not in effectively_guarded
+        and name in runnable_content
         and SUREFIRE_DEFAULT_TEST_TYPE.fullmatch(java_type.name)
     }
     discoverable = set(executable)
@@ -445,15 +1065,50 @@ def discoverable_java_types(structures: list[str]) -> frozenset[str]:
             continue
         _, java_type = declaration
         for parent in parents[java_type.qualified_name]:
-            if parent in by_name and parent not in discoverable:
+            if (
+                parent in by_name
+                and parent not in effectively_guarded
+                and parent not in discoverable
+            ):
                 discoverable.add(parent)
                 frontier.append(parent)
+        for child in eligible_nested:
+            child_type = by_name[child][1]
+            if (
+                child_type.enclosing_qualified_name == java_type.qualified_name
+                and child in runnable_content
+                and child not in discoverable
+            ):
+                discoverable.add(child)
+                frontier.append(child)
     return frozenset(discoverable)
 
 
-def java_tag_occurrences(text: str, structure: str) -> tuple[tuple[str, int, int], ...]:
+def java_tag_occurrences(
+    text: str,
+    structure: str,
+    shadowed_tag_packages: frozenset[str],
+) -> tuple[tuple[str, int, int], ...]:
     occurrences: list[tuple[str, int, int]] = []
+    source = java_source(structure)
+    member_type_scopes = java_member_type_scopes(structure)
     for annotation in JAVA_TAG_ANNOTATION.finditer(structure):
+        if annotation.group("qualified") is None:
+            if source.package_name in shadowed_tag_packages or any(
+                start < annotation.start() < end
+                for start, end in member_type_scopes.get("Tag", ())
+            ):
+                continue
+            explicit_tags = {
+                imported
+                for imported in source.explicit_imports
+                if imported.rsplit(".", 1)[-1] == "Tag"
+            }
+            if explicit_tags:
+                if explicit_tags != {"org.junit.jupiter.api.Tag"}:
+                    continue
+            elif set(source.wildcard_imports) != {"org.junit.jupiter.api"}:
+                continue
         cursor = annotation.end()
         while cursor < len(structure) and structure[cursor].isspace():
             cursor += 1
@@ -479,13 +1134,21 @@ def java_tag_markers(
     text: str,
     structure: str,
     discoverable_types: frozenset[str],
+    shadowed_tag_packages: frozenset[str],
+    package_type_names: frozenset[str],
 ) -> frozenset[str]:
     """Keep tags attached to executable test methods or discoverable test types."""
     depths = brace_depths(structure)
-    types = java_source(structure).types
-    test_annotations = tuple(JAVA_TEST_ANNOTATION.finditer(structure))
+    source = java_source(structure, package_type_names)
+    types = source.types
+    executable_test_annotations = executable_junit_test_annotations(
+        structure,
+        types,
+        source.test_annotations,
+        source.execution_guards,
+    )
     markers: set[str] = set()
-    for marker, start, end in java_tag_occurrences(text, structure):
+    for marker, start, end in java_tag_occurrences(text, structure, shadowed_tag_packages):
         depth = depths[start]
         attached_type = next(
             (
@@ -522,15 +1185,89 @@ def java_tag_markers(
                 in structure[min(start, annotation.start()):max(end, annotation.end())]
                 for separator in ";{}"
             )
-            for annotation in test_annotations
+            for annotation in executable_test_annotations
         ):
             markers.add(marker)
     return frozenset(markers)
 
 
+def playwright_describe_callback_brace(structure: str, brace: int) -> bool:
+    boundary = max(
+        structure.rfind("{", 0, brace),
+        structure.rfind("}", 0, brace),
+        structure.rfind(";", 0, brace),
+    )
+    prefix = structure[boundary + 1:brace]
+    return re.search(
+        r"\btest\s*\.\s*describe\s*\([^{};]*,\s*"
+        r"(?:async\s*)?\([^{}]*\)\s*=>\s*\Z",
+        prefix,
+        re.DOTALL,
+    ) is not None
+
+
+def playwright_registration_scopes(structure: str) -> tuple[bool, ...]:
+    scopes: list[bool] = []
+    allowed_stack: list[bool] = []
+    for index, character in enumerate(structure):
+        scopes.append(all(allowed_stack))
+        if character == "{":
+            allowed_stack.append(playwright_describe_callback_brace(structure, index))
+        elif character == "}" and allowed_stack:
+            allowed_stack.pop()
+    return tuple(scopes)
+
+
+def matching_open_parenthesis(structure: str, closing: int) -> int | None:
+    depth = 1
+    for index in range(closing - 1, -1, -1):
+        if structure[index] == ")":
+            depth += 1
+        elif structure[index] == "(":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def playwright_has_control_prefix(structure: str, start: int) -> bool:
+    previous = start - 1
+    while previous >= 0 and structure[previous].isspace():
+        previous -= 1
+    if previous < 0:
+        return False
+    if structure[max(0, previous - 1):previous + 1] in {"=>", "&&", "||"}:
+        return True
+    if structure[previous] in "?:":
+        return True
+    if structure[previous] == ")":
+        opening = matching_open_parenthesis(structure, previous)
+        if opening is not None:
+            word_end = opening
+            word_start = word_end
+            while word_start > 0 and structure[word_start - 1].isspace():
+                word_start -= 1
+                word_end = word_start
+            while word_start > 0 and (
+                structure[word_start - 1].isalnum() or structure[word_start - 1] in "_$"
+            ):
+                word_start -= 1
+            if structure[word_start:word_end] in {"if", "for", "while", "with", "switch", "catch"}:
+                return True
+    word_end = previous + 1
+    word_start = word_end
+    while word_start > 0 and (
+        structure[word_start - 1].isalnum() or structure[word_start - 1] in "_$"
+    ):
+        word_start -= 1
+    return structure[word_start:word_end] in {"else", "do"}
+
+
 def playwright_test_titles(text: str) -> tuple[str, ...]:
     """Extract static titles from global ``test(...)`` calls in executable source."""
     titles: list[str] = []
+    structure = source_without_quoted_text(text)
+    registration_scopes = playwright_registration_scopes(structure)
     index = 0
     while index < len(text):
         character = text[index]
@@ -558,6 +1295,17 @@ def playwright_test_titles(text: str) -> tuple[str, ...]:
             index = after_index
             continue
 
+        # Direct top-level and test.describe callback registrations are trustworthy.
+        # Calls under any other brace/control-flow context are rejected conservatively.
+        line_start = max(structure.rfind("\n", 0, index), structure.rfind("\r", 0, index)) + 1
+        if (
+            not registration_scopes[index]
+            or structure[line_start:index].strip()
+            or playwright_has_control_prefix(structure, index)
+        ):
+            index = after_index
+            continue
+
         cursor = after_index
         while cursor < len(text) and text[cursor].isspace():
             cursor += 1
@@ -581,6 +1329,12 @@ def playwright_test_titles(text: str) -> tuple[str, ...]:
 def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
     config = source_without_comments((root / PLAYWRIGHT_CONFIG).read_text(encoding="utf-8"))
     structure = source_without_quoted_text(config)
+    unsupported_filter = PLAYWRIGHT_UNSUPPORTED_FILTER.search(structure)
+    if unsupported_filter is not None:
+        option = re.match(r"[A-Za-z]+", unsupported_filter.group(0)).group(0)
+        raise ValueError(
+            f"unsupported Playwright evidence filter {option}; refusing partial discovery"
+        )
     configured = PLAYWRIGHT_TEST_MATCH.search(structure)
     if configured is None:
         raise ValueError("playwright.config.ts must declare one regex testMatch")
@@ -616,28 +1370,60 @@ def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
         test_root.relative_to(e2e_root)
     except ValueError as error:
         raise ValueError("playwright.config.ts testDir must stay within e2e") from error
-    return tuple(
+    selected = tuple(
         path
         for path in sorted(test_root.rglob("*.ts"))
-        if test_match.search(path.relative_to(test_root).as_posix())
+        if test_match.search(str(path.resolve()))
+        or (
+            os.sep == "\\"
+            and test_match.search(str(path.resolve()).replace("\\", "/"))
+        )
     )
+    for path in selected:
+        text = source_without_comments(path.read_text(encoding="utf-8"))
+        text = source_without_javascript_regex_literals(text)
+        if PLAYWRIGHT_FOCUSED.search(source_without_quoted_text(text)):
+            raise ValueError(
+                "focused Playwright .only call prevents complete evidence discovery"
+            )
+    return selected
 
 
 def evidence_markers(
     path: Path,
     java_discoverable_types: frozenset[str] | None = None,
+    java_shadowed_tag_packages: frozenset[str] | None = None,
+    java_package_type_names: frozenset[str] | None = None,
 ) -> frozenset[str]:
     text = source_without_comments(path.read_text(encoding="utf-8"))
     if path.suffix == ".java":
         structure = source_without_quoted_text(text)
-        # Fail closed for the whole source file: class- and method-level @Disabled
-        # are ambiguous without a Java parser, so no colocated tag certifies evidence.
-        if JAVA_DISABLED.search(structure):
-            return frozenset()
+        package_type_names = java_package_type_names
+        if package_type_names is None:
+            package_type_names = java_top_level_type_names(structure)
         discoverable_types = java_discoverable_types
         if discoverable_types is None:
-            discoverable_types = discoverable_java_types([structure])
-        return java_tag_markers(text, structure, discoverable_types)
+            package = JAVA_PACKAGE.search(structure)
+            package_name = package.group(1) if package is not None else ""
+            discoverable_types = discoverable_java_types(
+                [structure],
+                {package_name: package_type_names},
+            )
+        shadowed_tag_packages = java_shadowed_tag_packages
+        if shadowed_tag_packages is None:
+            source = java_source(structure)
+            shadowed_tag_packages = (
+                frozenset({source.package_name})
+                if declares_top_level_tag(structure)
+                else frozenset()
+            )
+        return java_tag_markers(
+            text,
+            structure,
+            discoverable_types,
+            shadowed_tag_packages,
+            package_type_names,
+        )
     if path.suffix == ".ts":
         text = source_without_javascript_regex_literals(text)
         structure = source_without_quoted_text(text)
@@ -659,9 +1445,22 @@ def inventory(root: Path = ROOT) -> MarkerInventory:
         source_without_quoted_text(source_without_comments(path.read_text(encoding="utf-8")))
         for path in java_paths
     ]
-    discoverable_types = discoverable_java_types(java_structures)
-    for path in java_paths:
-        for marker in evidence_markers(path, discoverable_types):
+    package_types = java_package_types(java_structures)
+    discoverable_types = discoverable_java_types(java_structures, package_types)
+    shadowed_tag_packages = frozenset(
+        java_source(structure).package_name
+        for structure in java_structures
+        if declares_top_level_tag(structure)
+    )
+    for path, structure in zip(java_paths, java_structures, strict=True):
+        package = JAVA_PACKAGE.search(structure)
+        package_name = package.group(1) if package is not None else ""
+        for marker in evidence_markers(
+            path,
+            discoverable_types,
+            shadowed_tag_packages,
+            package_types.get(package_name, frozenset()),
+        ):
             found.setdefault(marker, set()).add(path.relative_to(root))
     for path in configured_playwright_tests(root):
         for marker in evidence_markers(path):
