@@ -27,29 +27,51 @@ measure generator leakage, not production AML validity.
 Transactions from one customer are correlated parts of one designed scenario. The effective
 evaluation unit is therefore the customer/scenario, not an individual transaction.
 
-## Candidate targets and naive baselines
+## Customer pseudo-target: customer has at least one source risk row
 
-| Diagnostic pseudo-target | Positive | Negative | Naive observation |
-| --- | ---: | ---: | --- |
-| Customer has at least one source risk row | 3 | 1 | Majority baseline 0.750; mechanical 95% Wilson range 0.301–0.954 |
-| Transaction is referenced by a source risk row | 9 | 6 | Positive share 0.600; mechanical 95% Wilson range 0.357–0.802 |
+### Customer-level statistics
 
-Neither pseudo-target is a verified adverse outcome. Absence of a risk row is not a demonstrated
-negative, and multiple rule hits on one transaction are not independent labels.
-The Wilson ranges are mechanical binomial calculations under an unsupported iid assumption. They
-are not defensible prevalence estimates or population confidence intervals: the scenarios were
-designed rather than sampled, and transactions are clustered within four customer scenarios.
+- observation unit: customer/scenario;
+- observations: 4 (3 positive, 1 negative; positive share 0.750);
+- naive majority baseline: 0.750;
+- mechanical 95% Wilson range: 0.301–0.954;
+- leave-one-customer-out: 4 folds, 3 with both classes in training and 0 with both classes in test.
 
-## Split and uncertainty limits
+### Customer-level conclusion
 
-- grouped leave-one-customer-out produces 4 folds with one test scenario each;
-- only 3 of those folds retain both pseudo-label classes in training;
-- every test fold contains one scenario and therefore one observed pseudo-label class, so per-fold
-  ROC-AUC, PR-AUC and ranking metrics are undefined and must not be averaged across folds;
-- a stratified grouped holdout with both classes in train and test is **not possible**;
-- transaction-level random splitting would leak customer/scenario identity across train and test;
-- the fixture has one short synthetic time window and no later outcome labels, so temporal, drift and concept-performance validation are unavailable;
-- no normalized counterparty graph or inter-customer edges exist for a graph-level performance claim.
+This pseudo-target has only four independent observations and only one negative scenario. A grouped
+holdout with both classes in both train and test is **not possible**. Every test fold contains one
+customer and one observed customer-level class. Per-fold ROC-AUC, PR-AUC and ranking metrics are undefined
+and must not be averaged across folds. Its Wilson range is only a mechanical calculation:
+four designed synthetic customers do not satisfy the iid assumption and cannot support a
+prevalence, uncertainty, calibration or detector-performance claim.
+
+## Transaction pseudo-target: transaction is referenced by a source risk row
+
+### Transaction-level statistics
+
+- observation unit: transaction row, clustered within customer/scenario;
+- observations: 15 (9 positive, 6 negative; positive share 0.600);
+- naive majority baseline: 0.600;
+- mechanical 95% Wilson range: 0.357–0.802;
+- positive transactions per customer: `{"11111111-1111-1111-1111-111111111111": 2, "22222222-2222-2222-2222-222222222222": 0, "33333333-3333-3333-3333-333333333333": 3, "44444444-4444-4444-4444-444444444444": 4}`;
+- negative transactions per customer: `{"11111111-1111-1111-1111-111111111111": 1, "22222222-2222-2222-2222-222222222222": 3, "33333333-3333-3333-3333-333333333333": 1, "44444444-4444-4444-4444-444444444444": 1}`;
+- leave-one-customer-out: 4 folds, 4 with both classes in training and 3 with both classes in test.
+
+### Transaction-level conclusion
+
+Although some grouped folds contain both transaction pseudo-classes, they still test on exactly one
+designed customer scenario. The 15 rows are therefore not 15 independent observations. A random
+transaction split would leak scenario identity, while leave-one-customer-out has only four possible
+test groups and cannot estimate population generalization. The transaction Wilson range likewise
+uses an unsupported iid assumption. These target-specific ranges are not defensible prevalence estimates
+or population confidence intervals.
+
+For both targets, absence of a risk row is not a demonstrated negative and multiple rule hits on one
+transaction are not independent labels. Neither pseudo-target is a verified adverse AML outcome.
+The fixture has one short synthetic time window and no later outcome labels, so temporal, drift and
+concept-performance validation are unavailable. No normalized counterparty graph or inter-customer
+edges exist for a graph-level performance claim.
 
 ## Leakage and irreducible ambiguity
 
@@ -71,5 +93,6 @@ boundedness and explanatory mechanics. Their outputs must not be described as ca
 probabilities or evidence of production AML performance. A classical-ML benchmark requires a new,
 independently justified labelled evaluation dataset with at least two groups per class for even a
 minimal stratified grouped holdout; materially more groups and later labels are required for useful
-uncertainty, calibration or drift conclusions. Until then, the honest practical performance ceiling
-is **not numerically identifiable from this fixture**.
+uncertainty, calibration or drift conclusions. With four synthetic customers and no AML ground truth,
+an honest performance benchmark is impossible. Until then, the honest practical performance
+ceiling is **not numerically identifiable from this fixture**.
