@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.validate_verification_markers import CONTROLLED_OBLIGATION_IDS
 from scripts.validate_verification_markers import evidence_markers, inventory, validate
 
 
@@ -23,6 +24,7 @@ class VerificationMarkerTests(unittest.TestCase):
     def test_repository_inventory_resolves_exactly_ten_controlled_obligations(self):
         result = validate()
 
+        self.assertEqual(frozenset(CONTROLLED), CONTROLLED_OBLIGATION_IDS)
         self.assertEqual(frozenset(CONTROLLED), result.catalogue_ids)
         self.assertFalse(result.unknown)
         self.assertFalse(result.missing)
@@ -41,6 +43,32 @@ class VerificationMarkerTests(unittest.TestCase):
 
             self.assertEqual(frozenset({"VFY-DELIVERY-001"}), result.missing)
             with self.assertRaisesRegex(ValueError, "obligations without discoverable executable evidence"):
+                validate(root)
+
+    def test_coordinated_catalogue_and_evidence_removal_is_rejected(self):
+        reduced = CONTROLLED[:-1]
+        with self.fixture(reduced, reduced) as root:
+            result = inventory(root)
+
+            self.assertFalse(result.unknown)
+            self.assertFalse(result.missing)
+            with self.assertRaisesRegex(
+                ValueError,
+                "controlled verification catalogue drift: missing stable IDs: VFY-DELIVERY-001",
+            ):
+                validate(root)
+
+    def test_coordinated_unexpected_catalogue_and_evidence_addition_is_rejected(self):
+        expanded = CONTROLLED + ("VFY-UNEXPECTED-001",)
+        with self.fixture(expanded, expanded) as root:
+            result = inventory(root)
+
+            self.assertFalse(result.unknown)
+            self.assertFalse(result.missing)
+            with self.assertRaisesRegex(
+                ValueError,
+                "controlled verification catalogue drift: unexpected IDs: VFY-UNEXPECTED-001",
+            ):
                 validate(root)
 
     def test_only_junit_tags_and_playwright_test_titles_are_markers(self):
@@ -74,6 +102,28 @@ class VerificationMarkerTests(unittest.TestCase):
             )
 
             self.assertEqual(frozenset({"VFY-HISTORY-001"}), evidence_markers(java))
+
+    def test_junit_scanner_ignores_marker_shaped_strings_and_text_blocks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            java = Path(directory) / "Evidence.java"
+            java.write_text(
+                'class MarkerShapedText {\n'
+                '  String normal = "@Tag(\\"VFY-NOT-CONTROLLED-001\\")";\n'
+                '  String block = """\n'
+                '      @Tag("VFY-NOT-CONTROLLED-002")\n'
+                '      """;\n'
+                '}\n'
+                '@Tag("VFY-HISTORY-001")\n'
+                'class RealEvidence {}\n'
+                '@org.junit.jupiter.api.Tag("VFY-DELIVERY-001")\n'
+                'class QualifiedRealEvidence {}\n',
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                frozenset({"VFY-HISTORY-001", "VFY-DELIVERY-001"}),
+                evidence_markers(java),
+            )
 
     def test_commented_out_playwright_tests_are_not_evidence(self):
         with tempfile.TemporaryDirectory() as directory:

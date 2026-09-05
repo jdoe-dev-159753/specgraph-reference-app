@@ -16,9 +16,22 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE = Path("docs/assignment/VV/verification.yaml")
 MARKER = re.compile(r"VFY-[A-Z0-9]+(?:-[A-Z0-9]+)*")
-JAVA_TAG = re.compile(r'@Tag\(\s*"(VFY-[A-Z0-9]+(?:-[A-Z0-9]+)*)"\s*\)')
+JAVA_TAG_ANNOTATION = re.compile(r"@(?:org\.junit\.jupiter\.api\.)?Tag\b")
 JAVA_DISABLED = re.compile(r"@(?:org\.junit\.jupiter\.api\.)?Disabled\b")
 PLAYWRIGHT_DISABLED = re.compile(r"\.\s*(?:skip|fixme)\s*\(")
+
+CONTROLLED_OBLIGATION_IDS = frozenset({
+    "VFY-CUSTOMER-READ-001",
+    "VFY-AUTH-001",
+    "VFY-ANALYSIS-CONTRACT-001",
+    "VFY-RAG-001",
+    "VFY-HISTORY-001",
+    "VFY-REPRODUCIBILITY-001",
+    "VFY-DETERMINISM-001",
+    "VFY-FAILURE-PATHS-001",
+    "VFY-CONFIDENTIALITY-001",
+    "VFY-DELIVERY-001",
+})
 
 EVIDENCE_GLOBS = (
     "backend/src/test/**/*.java",
@@ -80,6 +93,12 @@ def source_without_comments(text: str) -> str:
                 index += 2
                 state = "block-comment"
                 continue
+            if text.startswith('"""', index):
+                masked.extend(('"', '"', '"'))
+                index += 3
+                quote = '"""'
+                state = "quoted"
+                continue
             masked.append(character)
             if character in ('"', "'", "`"):
                 quote = character
@@ -104,12 +123,17 @@ def source_without_comments(text: str) -> str:
             index += 1
             continue
 
+        if quote == '"""' and text.startswith(quote, index):
+            masked.extend(('"', '"', '"'))
+            index += 3
+            state = "code"
+            continue
         masked.append(character)
         index += 1
         if character == "\\" and index < len(text):
             masked.append(text[index])
             index += 1
-        elif character == quote:
+        elif quote != '"""' and character == quote:
             state = "code"
 
     return "".join(masked)
@@ -123,6 +147,11 @@ def source_without_quoted_text(text: str) -> str:
     while index < len(text):
         character = text[index]
         if not quote:
+            if text.startswith('"""', index):
+                quote = '"""'
+                masked.extend((" ", " ", " "))
+                index += 3
+                continue
             if character in ('"', "'", "`"):
                 quote = character
                 masked.append(" ")
@@ -131,12 +160,17 @@ def source_without_quoted_text(text: str) -> str:
             index += 1
             continue
 
+        if quote == '"""' and text.startswith(quote, index):
+            masked.extend((" ", " ", " "))
+            index += 3
+            quote = ""
+            continue
         masked.append(character if character in "\r\n" else " ")
         index += 1
         if character == "\\" and index < len(text):
             masked.append(" ")
             index += 1
-        elif character == quote:
+        elif quote != '"""' and character == quote:
             quote = ""
 
     return "".join(masked)
@@ -158,6 +192,31 @@ def quoted_literal(text: str, start: int) -> tuple[str | None, int]:
         content.append(character)
         index += 1
     return None, len(text)
+
+
+def java_tag_markers(text: str, structure: str) -> frozenset[str]:
+    """Read direct string arguments from real Java ``@Tag`` annotations."""
+    markers: set[str] = set()
+    for annotation in JAVA_TAG_ANNOTATION.finditer(structure):
+        cursor = annotation.end()
+        while cursor < len(structure) and structure[cursor].isspace():
+            cursor += 1
+        if cursor >= len(structure) or structure[cursor] != "(":
+            continue
+        cursor += 1
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        if cursor >= len(text) or text[cursor] != '"' or text.startswith('"""', cursor):
+            continue
+
+        marker, cursor = quoted_literal(text, cursor)
+        if marker is None:
+            continue
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        if cursor < len(structure) and structure[cursor] == ")" and MARKER.fullmatch(marker):
+            markers.add(marker)
+    return frozenset(markers)
 
 
 def playwright_test_titles(text: str) -> tuple[str, ...]:
@@ -218,7 +277,7 @@ def evidence_markers(path: Path) -> frozenset[str]:
         # are ambiguous without a Java parser, so no colocated tag certifies evidence.
         if JAVA_DISABLED.search(structure):
             return frozenset()
-        return frozenset(JAVA_TAG.findall(text))
+        return java_tag_markers(text, structure)
     if path.suffix == ".ts":
         # Any member skip/fixme call can disable a test dynamically or an enclosing
         # suite. A file that mixes one with V&V titles supplies no evidence until split.
@@ -251,6 +310,15 @@ def inventory(root: Path = ROOT) -> MarkerInventory:
 def validate(root: Path = ROOT) -> MarkerInventory:
     result = inventory(root)
     failures: list[str] = []
+    removed_ids = CONTROLLED_OBLIGATION_IDS - result.catalogue_ids
+    added_ids = result.catalogue_ids - CONTROLLED_OBLIGATION_IDS
+    if removed_ids or added_ids:
+        drift: list[str] = []
+        if removed_ids:
+            drift.append("missing stable IDs: " + ", ".join(sorted(removed_ids)))
+        if added_ids:
+            drift.append("unexpected IDs: " + ", ".join(sorted(added_ids)))
+        failures.append("controlled verification catalogue drift: " + "; ".join(drift))
     if result.unknown:
         failures.append("unknown executable V&V markers: " + ", ".join(sorted(result.unknown)))
     if result.missing:
