@@ -43,7 +43,7 @@ elif [[ "$*" == *"inspect --format {{range .Config.Env}}{{println .}}{{end}} r5-
   printf 'SPECGRAPH_LOCAL_BASE_URL=%s\n' "${R5_TEST_BASE_URL:-http://192.168.1.20:1234/v1}"
   printf 'SPECGRAPH_LOCAL_API_KEY=%s\n' "${R5_TEST_LOCAL_API_KEY:-test-only-key}"
   printf 'SERVER_SERVLET_SESSION_COOKIE_NAME=%s\n' "${R5_TEST_SESSION_COOKIE:-specgraph-r5_session}"
-  printf 'SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS=%s\n' "${R5_TEST_CONTEXT_WINDOW_TOKENS:-4096}"
+  printf 'SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS=%s\n' "${R5_TEST_CONTEXT_WINDOW_TOKENS:-8192}"
   printf 'SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS=%s\n' "${R5_TEST_MAX_OUTPUT_TOKENS:-512}"
   printf 'SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS=%s\n' "${R5_TEST_TRANSPORT_MARGIN_TOKENS:-256}"
 elif [[ "$*" == *"port r5-container 8080/tcp"* ]]; then
@@ -82,7 +82,7 @@ elif [[ "$*" == *"/api/customers/44444444-4444-4444-4444-444444444444/analyses"*
   printf '%s' "${prompt}"
   printf '%s' '","evidenceReferences":[{"kind":"POLICY_RETRIEVAL","evidenceIdentity":"synthetic-policy:test"}],"metadata":{"runtime":"'
   printf '%s' "${runtime}"
-  printf '%s' '","externalTransmission":"false","request.contextWindowTokens":"4096","request.maxOutputTokens":"512","request.transportMarginTokens":"256","request.estimatedSystemTokens":"'
+  printf '%s' '","externalTransmission":"false","request.contextWindowTokens":"8192","request.maxOutputTokens":"512","request.transportMarginTokens":"256","request.estimatedSystemTokens":"'
   printf '%s' "${estimated_system}"
   printf '%s' '","request.estimatedUserTokens":"'
   printf '%s' "${estimated_user}"
@@ -131,7 +131,7 @@ SPECGRAPH_LOCAL_API_KEY=test-only-key \
 bash "${script_dir}/r5-runtime-up.sh" > "${temp_dir}/stdout"
 
 up_line="$(grep -F ' up -d --wait --no-build --pull always' "${docker_log}")"
-if [[ "${up_line}" != "local-key= projected-key=present openai-key= bind=127.0.0.1 detectors=,, budget=4096,512,256 "* ]]; then
+if [[ "${up_line}" != "local-key= projected-key=present openai-key= bind=127.0.0.1 detectors=,, budget=8192,512,256 "* ]]; then
   echo "R5 launcher leaked an ambient provider credential or lost its deliberate projection" >&2
   exit 1
 fi
@@ -161,7 +161,7 @@ grep -Fq 'stage3Backend=local' "${temp_dir}/stdout"
 grep -Fq 'stage3Runtime=lmstudio/llama.cpp' "${temp_dir}/stdout"
 grep -Fq 'stage3Model=test-model' "${temp_dir}/stdout"
 grep -Fq 'stage3PromptIdentity=grounded-analysis-v2' "${temp_dir}/stdout"
-grep -Fq 'request.contextWindowTokens=4096' "${temp_dir}/stdout"
+grep -Fq 'request.contextWindowTokens=8192' "${temp_dir}/stdout"
 grep -Fq 'request.maxOutputTokens=512' "${temp_dir}/stdout"
 grep -Fq 'request.transportMarginTokens=256' "${temp_dir}/stdout"
 grep -Fq 'request.estimatedSystemTokens=250' "${temp_dir}/stdout"
@@ -301,7 +301,7 @@ grep -Fq 'url=http://127.0.0.1:8088/' "${temp_dir}/healthy-status"
 grep -Fq 'runtimeState=healthy' "${temp_dir}/healthy-status"
 grep -Fq 'stage3Model=test-model' "${temp_dir}/healthy-status"
 grep -Fq 'sessionCookieName=specgraph-r5_session' "${temp_dir}/healthy-status"
-grep -Fq 'request.contextWindowTokens=4096' "${temp_dir}/healthy-status"
+grep -Fq 'request.contextWindowTokens=8192' "${temp_dir}/healthy-status"
 grep -Fq 'request.maxOutputTokens=512' "${temp_dir}/healthy-status"
 grep -Fq 'request.transportMarginTokens=256' "${temp_dir}/healthy-status"
 grep -Fq 'request.estimatedSystemTokens=not-evaluated-by-status' "${temp_dir}/healthy-status"
@@ -367,7 +367,7 @@ fi
 
 if bash "${script_dir}/r5-runtime-manifest.sh" \
   8088 test-model grounded-analysis-v2 lmstudio/llama.cpp \
-  4096 512 256 250 1900 154 2303 3071 cl100k-plus-25-percent \
+  8192 512 256 250 1900 154 2303 3071 cl100k-plus-25-percent \
   > /dev/null 2> "${temp_dir}/invalid-manifest-stderr"; then
   echo "R5 manifest accepted a non-recomposable request budget" >&2
   exit 1
@@ -399,14 +399,15 @@ grep -Fq 'SPECGRAPH_ANALYSIS_DETECTORS_2: RANDOM_FOREST' "${repo_root}/compose.r
 grep -Fq 'SPECGRAPH_ANALYSIS_BACKEND: local' "${repo_root}/compose.r5.yaml"
 grep -Fq 'SERVER_SERVLET_SESSION_COOKIE_NAME: specgraph-r5_session' "${repo_root}/compose.r5.yaml"
 grep -Fq 'SPECGRAPH_LOCAL_API_KEY: "${SPECGRAPH_R5_PROJECTED_LOCAL_API_KEY:-}"' "${repo_root}/compose.r5.yaml"
-grep -Fq 'SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS: "${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-4096}"' \
+grep -Fq 'SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS: "${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-8192}"' \
   "${repo_root}/compose.r5.yaml"
 grep -Fq 'SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS: "${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:-512}"' \
   "${repo_root}/compose.r5.yaml"
 grep -Fq 'SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS: "${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:-256}"' \
   "${repo_root}/compose.r5.yaml"
-grep -Fq -- '- "${R5_BIND_ADDRESS:-127.0.0.1}:${R5_PORT:-8088}:8080"' \
-  "${repo_root}/compose.r5.yaml"
+grep -Fq 'target: 8080' "${repo_root}/compose.r5.yaml"
+grep -Fq 'published: "${R5_PORT:-8088}"' "${repo_root}/compose.r5.yaml"
+grep -Fq 'host_ip: "${R5_BIND_ADDRESS:-127.0.0.1}"' "${repo_root}/compose.r5.yaml"
 grep -Fq -- '- r5-embedding-cache:/tmp/specgraph-embedding-model' \
   "${repo_root}/compose.r5.yaml"
 grep -Fq 'r5-cache-init:' "${repo_root}/compose.r5.yaml"

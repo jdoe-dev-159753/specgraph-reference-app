@@ -90,16 +90,16 @@ jobs:
           stub_port=$((41000 + GITHUB_RUN_ID % 10000))
           docker network create "$network_name"
           docker volume create specgraph-r5-ci-embedding-cache >/dev/null
-          gateway="$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$network_name")"
           mkdir -p e2e/test-results
-          docker run -d --name "$stub_name" --network host \
+          docker run -d --name "$stub_name" --network "$network_name" \
             -v "$PWD/scripts/ci/lm-studio-contract-stub.py:/stub.py:ro" \
             -v "$PWD/e2e/test-results:/evidence" \
             python:3.13-alpine \
             python /stub.py --port "$stub_port" --model "$R5_MODEL" \
               --request-log /evidence/r5-lm-studio-requests.jsonl
+          stub_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$stub_name")"
           for attempt in $(seq 1 30); do
-            curl -fsS "http://127.0.0.1:${stub_port}/v1/models" >/dev/null && break
+            docker exec "$stub_name" wget -q -O /dev/null "http://127.0.0.1:${stub_port}/v1/models" && break
             [ "$attempt" -lt 30 ] || exit 1
             sleep 1
           done
@@ -108,7 +108,7 @@ jobs:
             echo "R5_STUB_NAME=$stub_name"
             echo "R5_PORT=$app_port"
             echo "R5_STUB_PORT=$stub_port"
-            echo "R5_GATEWAY=$gateway"
+            echo "R5_STUB_IP=$stub_ip"
             echo "COMPOSE_PROJECT_NAME=specgraph-r5-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_ENV"
 
@@ -117,7 +117,7 @@ jobs:
           export APP_R5_IMAGE="$LOCAL_R5_IMAGE"
           export R5_BIND_ADDRESS=127.0.0.1
           export SPECGRAPH_LOCAL_MODEL="$R5_MODEL"
-          export SPECGRAPH_LOCAL_BASE_URL="http://${R5_GATEWAY}:${R5_STUB_PORT}/v1"
+          export SPECGRAPH_LOCAL_BASE_URL="http://${R5_STUB_IP}:${R5_STUB_PORT}/v1"
           docker compose -f compose.r5.yaml -f compose.r5.ci.yaml \
             up -d --no-build --pull missing --wait
           curl -fsS "http://127.0.0.1:${R5_PORT}/actuator/health" | grep -F '"status":"UP"'
@@ -133,6 +133,18 @@ jobs:
         run: |
           export BASE_URL="http://127.0.0.1:${R5_PORT}"
           bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
+
+      - name: Diagnose a failed browser proof
+        if: failure()
+        run: |
+          docker compose -f compose.r5.yaml -f compose.r5.ci.yaml logs --no-color r5 || true
+          docker logs "$R5_STUB_NAME" || true
+          if [ -f e2e/test-results/r5-lm-studio-requests.jsonl ]; then
+            echo 'LM Studio contract requests received:'
+            sed -n '1,3p' e2e/test-results/r5-lm-studio-requests.jsonl
+          else
+            echo 'No LM Studio contract request reached the endpoint.'
+          fi
 
       - name: Assert and collect R5 evidence
         run: |

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-CUSTOMER-READ-001")
-@Tag("VFY-ANALYSIS-001")
+@Tag("VFY-ANALYSIS-CONTRACT-001")
 @Tag("VFY-AUTH-001")
 @Tag("VFY-FAILURE-PATHS-001")
 class OpenApiContractTests {
