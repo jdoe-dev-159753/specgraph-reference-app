@@ -174,6 +174,21 @@ class VerificationMarkerTests(unittest.TestCase):
                 evidence_markers(playwright),
             )
 
+    def test_playwright_scanner_ignores_regex_literals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            playwright = Path(directory) / "evidence.spec.ts"
+            playwright.write_text(
+                "const markerPattern = /test('VFY-NOT-CONTROLLED-001 shaped')/;\n"
+                r"const failPattern = /testInfo\.fail\(/;" "\n"
+                "test('VFY-DELIVERY-001 real test', async () => {});\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                frozenset({"VFY-DELIVERY-001"}),
+                evidence_markers(playwright),
+            )
+
     def test_non_spec_typescript_helper_is_not_executable_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -274,6 +289,119 @@ class VerificationMarkerTests(unittest.TestCase):
                 (Path("backend/src/test/CustomerPortContract.java"),),
                 result.sources["VFY-CUSTOMER-READ-001"],
             )
+
+    def test_java_type_identity_is_package_qualified(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-DELIVERY-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            tests = root / "backend/src/test"
+            (tests / "a").mkdir(parents=True)
+            (tests / "b").mkdir()
+            (tests / "a/EvidenceTests.java").write_text(
+                "package a;\n"
+                '@Tag("VFY-NOT-CONTROLLED-001")\n'
+                "class EvidenceTests {}\n",
+                encoding="utf-8",
+            )
+            (tests / "b/EvidenceTests.java").write_text(
+                "package b;\nclass EvidenceTests { @Test void executes() {} }\n",
+                encoding="utf-8",
+            )
+            (tests / "DeliveryTests.java").write_text(
+                '@Tag("VFY-DELIVERY-001")\n'
+                "class DeliveryTests { @Test void executes() {} }\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                encoding="utf-8",
+            )
+
+            result = inventory(root)
+
+            self.assertFalse(result.unknown)
+            self.assertFalse(result.missing)
+
+    def test_explicit_import_resolves_inherited_contract_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-CUSTOMER-READ-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            tests = root / "backend/src/test"
+            (tests / "contracts").mkdir(parents=True)
+            (tests / "adapters").mkdir()
+            (tests / "contracts/CustomerContract.java").write_text(
+                "package contracts;\n"
+                '@Tag("VFY-CUSTOMER-READ-001")\n'
+                "abstract class CustomerContract { @Test void inheritedTest() {} }\n",
+                encoding="utf-8",
+            )
+            (tests / "adapters/CustomerAdapterTests.java").write_text(
+                "package adapters;\n"
+                "import contracts.CustomerContract;\n"
+                "class CustomerAdapterTests extends CustomerContract {}\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                encoding="utf-8",
+            )
+
+            result = inventory(root)
+
+            self.assertFalse(result.missing)
+            self.assertEqual(
+                (Path("backend/src/test/contracts/CustomerContract.java"),),
+                result.sources["VFY-CUSTOMER-READ-001"],
+            )
+
+    def test_wildcard_import_does_not_guess_inherited_contract_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-CUSTOMER-READ-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            tests = root / "backend/src/test"
+            (tests / "contracts").mkdir(parents=True)
+            (tests / "adapters").mkdir()
+            (tests / "contracts/CustomerContract.java").write_text(
+                "package contracts;\n"
+                '@Tag("VFY-CUSTOMER-READ-001")\n'
+                "abstract class CustomerContract { @Test void inheritedTest() {} }\n",
+                encoding="utf-8",
+            )
+            (tests / "adapters/CustomerAdapterTests.java").write_text(
+                "package adapters;\n"
+                "import contracts.*;\n"
+                "class CustomerAdapterTests extends CustomerContract {}\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                encoding="utf-8",
+            )
+
+            result = inventory(root)
+
+            self.assertEqual(frozenset({"VFY-CUSTOMER-READ-001"}), result.missing)
 
     def test_surefire_default_type_names_gate_executable_junit_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
