@@ -1,0 +1,45 @@
+@startuml
+title Appendix — Fuzzy graded review-elevation signal
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam wrapWidth 230
+
+rectangle "CustomerSnapshot" as input
+rectangle "Normalized features\ncrypto ratio\ncross-border ratio\nincomplete ratio\nsource-risk density" as features
+rectangle "Rising memberships\nfeature value -> activation [0,1]" as membership
+rectangle "Transparent rules\nR0 baseline = 0.25\nR1 crypto\nR2 cross-border\nR3 incomplete\nR4 source-risk\nR5 min(cross-border, source-risk)" as rules
+rectangle "Monotonic singleton consequents\nbaseline -> 0.05\nall risk-positive rules -> 1.0" as consequents
+rectangle "Weighted singleton mean\nclamped to [0,1]" as defuzz
+rectangle "RiskSignalEvidence\nfuzzy-review-elevation\nscore + features + rule activations" as output
+
+input --> features
+features --> membership
+membership --> rules
+rules --> consequents
+consequents --> defuzz
+defuzz --> output
+
+note bottom of rules
+Worked example (10 activities):
+crypto 2/10 -> 0.571
+cross-border 3/10 -> 0.400
+incomplete 0/10 -> 0
+source risk 2/10 -> 0.200
+coupled rule -> 0.200
+end note
+
+note bottom of defuzz
+baseline activation = 0.250
+weighted score ~= 0.854
+Increasing any positive activation
+cannot lower the aggregate score.
+end note
+
+note bottom of output
+Derived Stage-1 evidence only.
+Rule thresholds are synthetic demo choices,
+not calibrated production AML policy.
+end note
+@enduml

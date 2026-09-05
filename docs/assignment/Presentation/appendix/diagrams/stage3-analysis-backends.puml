@@ -1,0 +1,47 @@
+@startuml
+title Appendix — One Stage-3 contract, three explicit synthesis backends
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam wrapWidth 225
+
+rectangle "Bounded\nAnalysisEvidenceEnvelope" as input
+rectangle "Typed selector\nspecgraph.analysis.backend\ndeterministic | openai | local" as selection
+rectangle "AnalysisModelPort" as port
+rectangle "Deterministic\noffline fixed rule\nexternalTransmission=false" as deterministic
+cloud "OpenAI\nshared grounded prompt\nexternalTransmission=true" as openai
+rectangle "LM Studio / llama.cpp\nOpenAI-compatible local endpoint\nexternalTransmission=false" as local
+rectangle "AnalysisResult\n+ AnalysisModelProvenance" as result
+rectangle "Schema + grounding\nreference validation" as validation
+database "Persisted advisory\nanalysis history" as history
+
+input --> port
+selection --> port
+port --> deterministic
+port --> openai
+port --> local
+deterministic --> result
+openai --> result
+local --> result
+result --> validation
+validation --> history
+
+note bottom of selection
+Deterministic is the safe default.
+Unknown, mismatched or unavailable selections fail.
+Stage-1 selection is independent.
+end note
+
+note bottom of local
+Selected local endpoint must be a
+loopback/private IP literal.
+Public addresses and hostnames are rejected.
+end note
+
+note bottom of history
+Same project-owned input/output shape
+does not imply equal model quality.
+No calibrated AML claim.
+end note
+@enduml

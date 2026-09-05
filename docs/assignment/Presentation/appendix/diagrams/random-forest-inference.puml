@@ -1,0 +1,52 @@
+@startuml
+title Appendix — Random Forest inference foundation
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam wrapWidth 230
+
+rectangle "Explicit selection\nRANDOM_FOREST" as selection
+rectangle "CustomerSnapshot\nactivities only" as snapshot
+rectangle "Four bounded features\nvolume · crypto ratio\ncross-border ratio · incomplete ratio" as features
+rectangle "Packaged inputs\nTribuo protobuf + canonical manifest" as artifact
+rectangle "Lazy runtime\nload once + memoize" as runtime
+rectangle "Fail-closed validation\ntrust anchors · domains · uniform weights\ntrees · hyperparameters · provenance" as validation
+rectangle "Fixed weighted ensemble\n31 trees · request-time inference only" as forest
+rectangle "REVIEW_ELEVATED vote share\n+ predicted class + provenance" as output
+
+snapshot --> features
+selection --> runtime
+artifact --> runtime
+runtime --> validation
+validation --> forest
+features --> forest
+forest --> output
+
+note bottom of forest
+Example: 22 / 31 uniformly weighted trees
+vote REVIEW_ELEVATED -> score ~= 0.710.
+This is a vote share, not a calibrated probability.
+end note
+
+note bottom of output
+Packaged and selectable, but trained on
+12 hand-authored synthetic rows.
+#130: existing fixture cannot support a
+defensible performance/Bayes-error benchmark.
+end note
+
+rectangle "Bounded observation window\nminimum 12" as window
+rectangle "Pinned 12-row feature reference" as reference
+rectangle "Per-feature two-sample KS D\nmax D >= 0.50 -> REVIEW_TRIGGERED" as drift
+rectangle "Descriptive drift report\nobservability only" as report
+
+window --> drift : same four features
+reference --> drift
+drift --> report
+
+note bottom of report
+Input-shift review trigger only.
+No concept/performance/calibration/AML claim.
+end note
+@enduml

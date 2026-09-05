@@ -1,0 +1,35 @@
+@startuml
+title Appendix — Stage 2 supplies local policy grounding
+left to right direction
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam wrapWidth 225
+
+rectangle "Synthetic policy sources" as policy
+rectangle "TokenTextSplitter\nmax 20 chunks/source\nstable content-derived IDs" as chunks
+rectangle "Local all-MiniLM-L6-v2\n384-dimensional embeddings" as embedding
+database "PostgreSQL + pgvector\nHNSW / cosine distance" as pgvector
+
+rectangle "CustomerSnapshot" as snapshot
+rectangle "Bounded query text\n50 activities · 20 risk rows\nmax 4,000 characters" as query
+rectangle "Similarity search\ntopK 3 · threshold 0.35" as search
+rectangle "PolicyEvidence\nstable ID · text · metadata" as evidence
+rectangle "Bounded Stage-3\nevidence envelope" as envelope
+
+policy --> chunks
+chunks --> embedding
+embedding --> pgvector : store vectors
+snapshot --> query
+query --> embedding : embed query
+embedding --> search
+pgvector --> search
+search --> evidence
+evidence --> envelope
+
+note bottom of evidence
+Candidate grounding context only.
+Not a risk score, verdict or policy truth.
+Corpus and thresholds are synthetic demo choices.
+end note
+@enduml
