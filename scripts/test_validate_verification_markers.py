@@ -68,6 +68,7 @@ class VerificationMarkerTests(unittest.TestCase):
                 '// @Tag("VFY-COMMENTED-LINE-001")\n'
                 '/* @Tag("VFY-COMMENTED-BLOCK-001") */\n'
                 '@Tag("VFY-HISTORY-001")\n'
+                'String annotation = "@Disabled";\n'
                 'String endpoint = "https://example.test/*";\n',
                 encoding="utf-8",
             )
@@ -80,7 +81,7 @@ class VerificationMarkerTests(unittest.TestCase):
             playwright.write_text(
                 "// test('VFY-COMMENTED-LINE-001 disabled', async () => {});\n"
                 "/* test('VFY-COMMENTED-BLOCK-001 disabled', async () => {}); */\n"
-                "test('VFY-DELIVERY-001 preserves https:// and /* in a title', async () => {});\n",
+                "test('VFY-DELIVERY-001 preserves https://, /*, and test.skip( in a title', async () => {});\n",
                 encoding="utf-8",
             )
 
@@ -114,6 +115,46 @@ class VerificationMarkerTests(unittest.TestCase):
                 (Path("e2e/executed.spec.ts"),),
                 result.sources["VFY-DELIVERY-001"],
             )
+
+    def test_disabled_junit_source_cannot_certify_colocated_active_marker(self):
+        sources = {
+            "class": (
+                '@Disabled\n@Tag("VFY-HISTORY-001")\nclass DisabledEvidence {}\n'
+                '@Tag("VFY-DELIVERY-001")\nclass ActiveEvidence {}\n'
+            ),
+            "method": (
+                'class Evidence {\n'
+                '  @Disabled\n  @Tag("VFY-HISTORY-001")\n  void disabledEvidence() {}\n'
+                '  @Tag("VFY-DELIVERY-001")\n  void activeEvidence() {}\n'
+                '}\n'
+            ),
+        }
+        for scope, source in sources.items():
+            with self.subTest(scope=scope), tempfile.TemporaryDirectory() as directory:
+                java = Path(directory) / "Evidence.java"
+                java.write_text(source, encoding="utf-8")
+
+                self.assertEqual(frozenset(), evidence_markers(java))
+
+    def test_disabled_playwright_source_cannot_certify_colocated_active_marker(self):
+        disabled_calls = (
+            "test.skip('VFY-HISTORY-001 disabled test', async () => {});",
+            "test.fixme('VFY-HISTORY-001 disabled test', async () => {});",
+            "describe.skip('disabled suite', () => {});",
+            "describe.fixme('disabled suite', () => {});",
+            "test.describe.skip('disabled suite', () => {});",
+            "test.describe.fixme('disabled suite', () => {});",
+        )
+        for disabled_call in disabled_calls:
+            with self.subTest(disabled_call=disabled_call), tempfile.TemporaryDirectory() as directory:
+                playwright = Path(directory) / "evidence.spec.ts"
+                playwright.write_text(
+                    disabled_call
+                    + "\ntest('VFY-DELIVERY-001 active evidence', async () => {});\n",
+                    encoding="utf-8",
+                )
+
+                self.assertEqual(frozenset(), evidence_markers(playwright))
 
     class fixture:
         def __init__(self, controlled, discovered):

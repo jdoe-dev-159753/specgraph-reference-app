@@ -17,7 +17,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE = Path("docs/assignment/VV/verification.yaml")
 MARKER = re.compile(r"VFY-[A-Z0-9]+(?:-[A-Z0-9]+)*")
 JAVA_TAG = re.compile(r'@Tag\(\s*"(VFY-[A-Z0-9]+(?:-[A-Z0-9]+)*)"\s*\)')
+JAVA_DISABLED = re.compile(r"@(?:org\.junit\.jupiter\.api\.)?Disabled\b")
 PLAYWRIGHT_TITLE = re.compile(r"\btest\s*\(\s*(['\"])(.*?)\1", re.DOTALL)
+PLAYWRIGHT_DISABLED = re.compile(r"\b(?:test|describe)\s*\.\s*(?:skip|fixme)\s*\(")
 
 EVIDENCE_GLOBS = (
     "backend/src/test/**/*.java",
@@ -114,11 +116,47 @@ def source_without_comments(text: str) -> str:
     return "".join(masked)
 
 
+def source_without_quoted_text(text: str) -> str:
+    """Mask quoted text so disabled-looking content is not treated as syntax."""
+    masked: list[str] = []
+    index = 0
+    quote = ""
+    while index < len(text):
+        character = text[index]
+        if not quote:
+            if character in ('"', "'", "`"):
+                quote = character
+                masked.append(" ")
+            else:
+                masked.append(character)
+            index += 1
+            continue
+
+        masked.append(character if character in "\r\n" else " ")
+        index += 1
+        if character == "\\" and index < len(text):
+            masked.append(" ")
+            index += 1
+        elif character == quote:
+            quote = ""
+
+    return "".join(masked)
+
+
 def evidence_markers(path: Path) -> frozenset[str]:
     text = source_without_comments(path.read_text(encoding="utf-8"))
+    structure = source_without_quoted_text(text)
     if path.suffix == ".java":
+        # Fail closed for the whole source file: class- and method-level @Disabled
+        # are ambiguous without a Java parser, so no colocated tag certifies evidence.
+        if JAVA_DISABLED.search(structure):
+            return frozenset()
         return frozenset(JAVA_TAG.findall(text))
     if path.suffix == ".ts":
+        # Playwright modifiers can disable a test or an enclosing suite. A file that
+        # mixes one with V&V titles supplies no evidence until the sources are split.
+        if PLAYWRIGHT_DISABLED.search(structure):
+            return frozenset()
         titles = (match.group(2) for match in PLAYWRIGHT_TITLE.finditer(text))
         return frozenset(marker for title in titles for marker in MARKER.findall(title))
     return frozenset()
