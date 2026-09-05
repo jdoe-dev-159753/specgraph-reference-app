@@ -19,6 +19,22 @@ type StoredAnalysis = {
   findingsSummary: string
   recommendations: string[]
   evidenceProvenance: unknown[]
+  detectorProvenance: Array<{
+    detectorIdentity: string
+    signalIdentity: string
+    score: number
+    provenance: Record<string, string>
+  }>
+  modelProvenance: {
+    backendIdentity: string
+    modelIdentity: string
+    promptIdentity: string
+    evidenceReferences: Array<{
+      kind: 'ACTIVITY' | 'SOURCE_RISK' | 'DETECTOR_SIGNAL' | 'POLICY_RETRIEVAL'
+      evidenceIdentity: string
+    }>
+    metadata: Record<string, string>
+  }
 }
 
 function activity(index: number, status = index % 2 === 0 ? 'Completed' : 'Declined') {
@@ -144,6 +160,14 @@ export async function runHighVolumeReviewScenario(page: Page) {
         findingsSummary: `Deterministic dense analysis ${analysisRequests}`,
         recommendations: ['Retain bounded reviewer evidence'],
         evidenceProvenance: [],
+        detectorProvenance: [],
+        modelProvenance: {
+          backendIdentity: 'deterministic',
+          modelIdentity: 'r3-offline-baseline-v1',
+          promptIdentity: 'grounded-analysis-v1',
+          evidenceReferences: [],
+          metadata: { externalTransmission: 'false' },
+        },
       }
       retainedAnalyses.unshift(completed)
       await route.fulfill({
@@ -268,6 +292,12 @@ export async function runHighVolumeReviewScenario(page: Page) {
   expect(analysisRequests).toBe(1)
   await expect(page.getByTestId('analysis-result')).toHaveCount(1)
   await expect(page.getByTestId('analysis-findings')).toContainText('Deterministic dense analysis 1')
+  const currentProvenance = page.getByTestId('analysis-result').getByTestId('analysis-provenance')
+  await expect(currentProvenance.getByTestId('analysis-detector-provenance'))
+    .toContainText('No detector artifact was retained')
+  await expect(currentProvenance.getByTestId('analysis-model-backend')).toHaveText('backend: deterministic')
+  await expect(currentProvenance.getByTestId('analysis-external-transmission'))
+    .toHaveText('external transmission: no')
   await expect(page.getByTestId('analysis-history-77777777-7777-7777-7777-000000000001')).toBeVisible()
 
   const secondAnalysisResponse = page.waitForResponse(response =>
