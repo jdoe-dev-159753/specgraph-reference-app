@@ -1,20 +1,36 @@
+/**
+ * R2 browser acceptance for PostgreSQL-backed customer activity and source-risk identity.
+ *
+ * @remarks
+ * The scenarios prove exact transport shapes, stable assessment identity, growing
+ * cross-border fixture visibility, and not-found behavior through the deployed UI.
+ * They do not substitute for Testcontainers evidence of database query semantics.
+ *
+ * @module
+ */
 import { expect, test } from '@playwright/test'
 
+/** Canonical relational seed used for exact transport and rendering assertions. */
 const seededCustomer = '11111111-1111-1111-1111-111111111111'
+/** Crafted scenario exposes growing cross-border activity distinct from the seed. */
 const growingCrossBorderCustomer = '33333333-3333-3333-3333-333333333333'
+/** Stable negative fixture owns the explicit relational not-found assertion. */
 const unknownCustomer = '99999999-9999-9999-9999-999999999999'
 
+/** Exact seed assessments prevent accidental identity collapse or fixture drift. */
 const seededAssessmentIds = [
   '20000000-0000-0000-0000-000000000001',
   '20000000-0000-0000-0000-000000000002',
 ]
+/** Exact crafted-scenario assessments bind the browser evidence to its relational seed. */
 const growingScenarioAssessmentIds = [
   '20000000-0000-0000-0000-000000000003',
   '20000000-0000-0000-0000-000000000004',
   '20000000-0000-0000-0000-000000000005',
 ]
 
-type Activity = {
+/** HTTP activity shape asserted without lossy numeric coercion. */
+export type Activity = {
   transactionId: string
   type: 'CARD' | 'PAYMENT' | 'CRYPTO'
   amount: string
@@ -24,7 +40,8 @@ type Activity = {
   details: Record<string, string | boolean | null>
 }
 
-type RiskEvidence = {
+/** Source-risk shape whose assessment identity, rather than rule identity, owns rendered list keys. */
+export type RiskEvidence = {
   assessmentId: string
   transactionId: string
   ruleId: string
@@ -33,6 +50,7 @@ type RiskEvidence = {
   scoreContribution: number
 }
 
+/** Proves the observable R2 review workflow and exact seeded relational values. */
 test('VFY-CUSTOMER-READ-001 deployed R2 relational customer review', async ({ page }, testInfo) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Customer Activity Analytics' })).toBeVisible()
@@ -129,6 +147,7 @@ test('VFY-CUSTOMER-READ-001 deployed R2 relational customer review', async ({ pa
   await expect(page.getByRole('alert')).toContainText('Customer not found')
 })
 
+/** Guards against collapsing distinct assessments that happen to share one transaction and rule. */
 test('R2 UI renders repeated transaction-rule assessments by stable assessment identity', async ({ page }) => {
   const transactionId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'
   const ruleId = '10000000-0000-0000-0000-000000000001'

@@ -1,8 +1,21 @@
+/**
+ * R1 browser acceptance for the synthetic customer-review vertical slice.
+ *
+ * @remarks
+ * Proves operator-visible CARD/PAYMENT/CRYPTO data, exact amount/currency separation,
+ * source-risk labels, screenshot evidence, and explicit unknown-customer recovery.
+ * It does not prove relational persistence, authentication, or later analysis stages.
+ *
+ * @module
+ */
 import { expect, test } from '@playwright/test'
 
+/** Canonical R1 fixture containing all three required activity families. */
 const seededCustomer = '11111111-1111-1111-1111-111111111111'
+/** Stable negative fixture owns the explicit not-found assertion. */
 const unknownCustomer = '99999999-9999-9999-9999-999999999999'
 
+/** Measures the complete R1 reviewer path at the browser and HTTP boundaries. */
 test('VFY-CUSTOMER-READ-001 deployed R1 customer review', async ({ page }, testInfo) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Customer Activity Analytics' })).toBeVisible()

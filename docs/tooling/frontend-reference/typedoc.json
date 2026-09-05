@@ -1,0 +1,21 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "Customer Activity Analytics browser source reference",
+  "entryPoints": [
+    "../../../frontend/src",
+    "../../../frontend/vite.config.ts",
+    "../../../e2e/*.ts"
+  ],
+  "entryPointStrategy": "expand",
+  "tsconfig": "./tsconfig.json",
+  "excludeExternals": true,
+  "skipErrorChecking": true,
+  "disableGit": true,
+  "disableSources": true,
+  "readme": "../../reviewer/source-reference.md",
+  "requiredToBeDocumented": ["Function", "TypeAlias", "Variable"],
+  "treatWarningsAsErrors": true,
+  "treatValidationWarningsAsErrors": true,
+  "searchInComments": true,
+  "cleanOutputDir": true
+}

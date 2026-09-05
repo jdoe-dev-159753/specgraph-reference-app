@@ -1,12 +1,29 @@
+/**
+ * Browser composition root for the single-page reviewer application.
+ *
+ * @remarks
+ * The runtime intentionally shares one TanStack Query cache across session,
+ * customer, and analysis workflows and applies the repository's restrained
+ * evidence-first visual language through one MUI theme. No domain or HTTP
+ * authority is defined here; those remain in `App.tsx` and `openapi.yaml`.
+ *
+ * @module
+ */
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material'
 import App from './App'
 
-const queryClient = new QueryClient()
+/** Shared server-state cache whose scoped removal on logout prevents protected evidence leaking across operators. */
+export const queryClient = new QueryClient()
 
-const theme = createTheme({
+/**
+ * Presentation policy for a dense reviewer screen: high contrast evidence tables,
+ * low ornament, tabular readability, and responsive layout without a separate
+ * component-design subsystem.
+ */
+export const theme = createTheme({
   palette: {
     mode: 'light',
     primary: { main: '#a63a24', dark: '#7f2819', contrastText: '#ffffff' },
@@ -54,7 +71,10 @@ const theme = createTheme({
   },
 })
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+/** The HTML shell owns exactly one required mount point; absence is a packaging defect and therefore fails fast. */
+const applicationRoot = document.getElementById('root')!
+
+ReactDOM.createRoot(applicationRoot).render(
   <React.StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />

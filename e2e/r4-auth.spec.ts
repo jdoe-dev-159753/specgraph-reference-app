@@ -1,26 +1,42 @@
+/**
+ * R4 browser acceptance for authentication, operator attribution, logout cleanup, and guard recovery.
+ *
+ * @remarks
+ * Uses the real deployed security boundary to prove anonymous rejection, invalid
+ * credential handling, two distinct operators, retained attribution, and session
+ * invalidation. The delayed-response scenario specifically detects a stale local
+ * submission guard surviving logout; it does not model concurrent server writes.
+ *
+ * @module
+ */
 import { expect, test } from '@playwright/test'
 
+/** Shared customer makes operator attribution, rather than data selection, the varying dimension. */
 const seededCustomer = '11111111-1111-1111-1111-111111111111'
 
-type Analysis = {
+/** Minimal success contract required to prove persisted operator attribution. */
+export type Analysis = {
   analysisId: string
   customerId: string
   operatorId: string
 }
 
-async function signIn(page: import('@playwright/test').Page, operatorId: string, password: string) {
+/** Drives the public login form so tests observe the same CSRF/session workflow as a reviewer. */
+export async function signIn(page: import('@playwright/test').Page, operatorId: string, password: string) {
   await page.getByLabel('Operator ID').fill(operatorId)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
 }
 
-async function loadCustomer(page: import('@playwright/test').Page) {
+/** Enters the protected workspace and waits for server-confirmed customer evidence. */
+export async function loadCustomer(page: import('@playwright/test').Page) {
   await page.getByLabel('Customer ID').fill(seededCustomer)
   await page.getByRole('button', { name: 'Search' }).click()
   await expect(page.getByTestId('customer-activity')).toBeVisible()
 }
 
-async function runAnalysis(page: import('@playwright/test').Page): Promise<Analysis> {
+/** Couples the visible analysis action to its HTTP completion before inspecting attribution. */
+export async function runAnalysis(page: import('@playwright/test').Page): Promise<Analysis> {
   const responsePromise = page.waitForResponse(response =>
     response.url().endsWith(`/api/customers/${seededCustomer}/analyses`) &&
     response.request().method() === 'POST')
@@ -30,6 +46,7 @@ async function runAnalysis(page: import('@playwright/test').Page): Promise<Analy
   return await response.json() as Analysis
 }
 
+/** Proves fail-closed navigation and distinct persisted attribution across two sequential sessions. */
 test('VFY-AUTH-001 protects the browser workflow and retains distinct operator attribution', async ({ page, request }, testInfo) => {
   const anonymousApi = await request.get(`/api/customers/${seededCustomer}`)
   expect(anonymousApi.status()).toBe(401)
@@ -77,6 +94,7 @@ test('VFY-AUTH-001 protects the browser workflow and retains distinct operator a
   expect(afterLogout.status()).toBe(401)
 })
 
+/** Proves client-side de-duplication state cannot strand the next operator after session turnover. */
 test('VFY-AUTH-001 releases an in-flight analysis guard across logout and login', async ({ page }) => {
   let analysisRequests = 0
   let releaseFirstAnalysis!: () => void
