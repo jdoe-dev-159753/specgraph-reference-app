@@ -68,7 +68,11 @@ def expected_workflows(paths: list[str]) -> set[str]:
         ".github/workflows/application-ci.yml",
     }
     if prefixed("backend/", "frontend/") or any(
-        path in application_exact or (path.startswith("scripts/r4-") and path.endswith(".sh"))
+        path in application_exact or (
+            path.startswith("scripts/r4-")
+            and path.endswith(".sh")
+            and "/" not in path.removeprefix("scripts/")
+        )
         for path in paths
     ):
         expected.add("application-ci")

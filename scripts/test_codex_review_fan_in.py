@@ -20,6 +20,12 @@ class WorkflowSelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual({"application-ci"}, fan_in.expected_workflows([path]))
 
+    def test_only_root_r4_scripts_require_application(self):
+        self.assertIn("application-ci", fan_in.expected_workflows(["scripts/r4-check.sh"]))
+        self.assertNotIn(
+            "application-ci", fan_in.expected_workflows(["scripts/r4-tools/check.sh"])
+        )
+
     def test_diagram_change_requires_plantuml(self):
         self.assertEqual(
             {"plantuml-diagrams"},
@@ -51,6 +57,18 @@ class WorkflowSelectionTests(unittest.TestCase):
             with self.subTest(workflow=name):
                 self.assertIn("edited", source)
                 self.assertIn("github.event.changes.base != null", source)
+
+    def test_metadata_edits_cannot_cancel_verification_runs(self):
+        workflows = (
+            "application-ci.yml", "r4-acceptance-ci.yml", "plantuml-diagrams.yml",
+            "codex-review-fan-in.yml", "codex-review-fan-in-tests.yml",
+        )
+        for name in workflows:
+            source = Path(f".github/workflows/{name}").read_text(encoding="utf-8")
+            with self.subTest(workflow=name):
+                self.assertIn(
+                    "github.event.changes.base == null && github.run_id", source
+                )
 
     def test_workflow_source_changes_require_manual_review(self):
         self.assertTrue(fan_in.requires_manual_review([".github/workflows/application-ci.yml"]))

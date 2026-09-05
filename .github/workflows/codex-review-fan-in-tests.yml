@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: codex-review-fan-in-tests-${{ github.event.pull_request.number || github.ref }}
+  group: codex-review-fan-in-tests-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'edited' && github.event.changes.base == null && github.run_id || 'verification' }}
   cancel-in-progress: true
 
 jobs:
