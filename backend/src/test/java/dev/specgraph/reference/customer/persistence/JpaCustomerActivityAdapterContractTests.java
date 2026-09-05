@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterAll;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Tag;
@@ -42,10 +44,13 @@ final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPort
             UUID.fromString("20000000-0000-0000-0000-000000000011");
     private static final UUID DENSE_CUSTOMER_ID =
             UUID.fromString("55555555-5555-5555-5555-555555555555");
+    private static final long MAX_COMPLETE_READ_STATEMENTS = 3;
+    private static final long MAX_PAGED_READ_STATEMENTS = 5;
 
     private static final JdbcClient JDBC;
     private static final LocalContainerEntityManagerFactoryBean ENTITY_MANAGER_FACTORY;
     private static final EntityManager ENTITY_MANAGER;
+    private static final Statistics HIBERNATE_STATISTICS;
     private static final JpaCustomerActivityAdapter JPA_ADAPTER;
     private static final CustomerActivityPort ADAPTER;
 
@@ -64,9 +69,15 @@ final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPort
         ENTITY_MANAGER_FACTORY.setDataSource(dataSource);
         ENTITY_MANAGER_FACTORY.setJpaVendorAdapter(vendorAdapter);
         ENTITY_MANAGER_FACTORY.setPackagesToScan("dev.specgraph.reference.customer.persistence");
-        ENTITY_MANAGER_FACTORY.setJpaPropertyMap(Map.of("hibernate.hbm2ddl.auto", "validate"));
+        ENTITY_MANAGER_FACTORY.setJpaPropertyMap(Map.of(
+                "hibernate.hbm2ddl.auto", "validate",
+                "hibernate.generate_statistics", "true"));
         ENTITY_MANAGER_FACTORY.afterPropertiesSet();
         ENTITY_MANAGER = ENTITY_MANAGER_FACTORY.getObject().createEntityManager();
+        HIBERNATE_STATISTICS = ENTITY_MANAGER_FACTORY
+                .getObject()
+                .unwrap(SessionFactory.class)
+                .getStatistics();
         JPA_ADAPTER = new JpaCustomerActivityAdapter(ENTITY_MANAGER, "UTC");
         ADAPTER = JPA_ADAPTER;
     }
@@ -173,6 +184,58 @@ final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPort
             deleteDenseCustomer();
             ENTITY_MANAGER.clear();
         }
+    }
+
+    @Test
+    void boundsCompleteCustomerReadStatementsIndependentlyOfHistorySize() {
+        seedDenseCustomer();
+        try {
+            ENTITY_MANAGER.clear();
+            HIBERNATE_STATISTICS.clear();
+
+            var snapshot = JPA_ADAPTER.loadSnapshot(DENSE_CUSTOMER_ID).orElseThrow();
+
+            assertThat(snapshot.activities()).hasSize(250);
+            assertThat(snapshot.riskEvidence()).hasSize(25);
+            assertPreparedStatementCountAtMost(
+                    MAX_COMPLETE_READ_STATEMENTS, "complete customer read SQL statement count");
+        } finally {
+            deleteDenseCustomer();
+            ENTITY_MANAGER.clear();
+        }
+    }
+
+    @Test
+    void boundsPagedCustomerReadStatementsForDenseHistory() {
+        seedDenseCustomer();
+        try {
+            ENTITY_MANAGER.clear();
+            HIBERNATE_STATISTICS.clear();
+
+            var page = JPA_ADAPTER
+                    .loadReviewPage(DENSE_CUSTOMER_ID, new CustomerReviewQuery(0, 50, null, null, null, null))
+                    .orElseThrow();
+
+            assertThat(page.activities()).hasSize(50);
+            assertThat(page.riskEvidence()).hasSize(5);
+            assertThat(page.totalActivities()).isEqualTo(250);
+            assertThat(page.totalRiskEvidence()).isEqualTo(25);
+            assertPreparedStatementCountAtMost(
+                    MAX_PAGED_READ_STATEMENTS, "paged customer read SQL statement count");
+        } finally {
+            deleteDenseCustomer();
+            ENTITY_MANAGER.clear();
+        }
+    }
+
+    private static void assertPreparedStatementCountAtMost(long maximum, String description) {
+        assertThat(HIBERNATE_STATISTICS.isStatisticsEnabled())
+                .as("Hibernate statistics must be enabled for the query-count assertion")
+                .isTrue();
+        assertThat(HIBERNATE_STATISTICS.getPrepareStatementCount())
+                .as(description)
+                .isPositive()
+                .isLessThanOrEqualTo(maximum);
     }
 
     private void seedDenseCustomer() {
