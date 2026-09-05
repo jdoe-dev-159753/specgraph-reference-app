@@ -124,7 +124,7 @@ async function expectRenderedProvenance(container: Locator, completed: Analysis)
   )
 }
 
-test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DETERMINISM-001 prove the configured authenticated grounded R4 flow and retain reviewer evidence', async ({ page, request }, testInfo) => {
+test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-REPRODUCIBILITY-001 VFY-DETERMINISM-001 VFY-DELIVERY-001 prove the executable configured authenticated grounded R4 flow and retain reviewer evidence', async ({ page, request }, testInfo) => {
   const anonymous = await request.get(`/api/customers/${seededCustomer}`)
   expect(anonymous.status()).toBe(401)
 
