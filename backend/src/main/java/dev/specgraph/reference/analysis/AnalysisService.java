@@ -7,10 +7,14 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 final class AnalysisService implements AnalysisUseCase {
+    private static final Logger LOGGER = LoggerFactory.getLogger(AnalysisService.class);
+
     private final CustomerActivityPort customerActivity;
     private final RiskSignalDetectorPort riskSignalDetector;
     private final PolicyKnowledgePort policyKnowledge;
@@ -71,6 +75,9 @@ final class AnalysisService implements AnalysisUseCase {
         try {
             output = analysisModel.analyze(evidence);
         } catch (InvalidAnalysisResultException exception) {
+            LOGGER.warn(
+                    "Analysis model output failed the bounded structured-result contract: {}",
+                    exception.getMessage());
             throw invalidResult("Analysis model returned an invalid structured result", exception);
         } catch (RuntimeException exception) {
             throw new AnalysisFailureException(
