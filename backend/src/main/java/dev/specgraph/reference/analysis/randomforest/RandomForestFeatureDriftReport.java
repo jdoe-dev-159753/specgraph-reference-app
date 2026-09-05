@@ -65,6 +65,7 @@ public record RandomForestFeatureDriftReport(
         return status == Status.REVIEW_TRIGGERED;
     }
 
+    /** Diagnostic outcome; a triggered review is evidence for inspection, not automatic retraining. */
     public enum Status {
         INSUFFICIENT_OBSERVATIONS,
         WITHIN_REVIEW_THRESHOLD,

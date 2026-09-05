@@ -5,6 +5,13 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * Source transaction activity belonging to a customer snapshot.
+ *
+ * <p>The sealed detail variant must match {@link ActivityType}; construction rejects mismatches so
+ * downstream detectors can exhaustively interpret card, payment and crypto-specific evidence.
+ * This record carries observed source data and must not be confused with a derived risk signal.
+ */
 public record Activity(
         UUID transactionId,
         ActivityType type,
@@ -32,10 +39,13 @@ public record Activity(
         }
     }
 
+    /** Source activity family and discriminator for the corresponding detail variant. */
     public enum ActivityType { CARD, PAYMENT, CRYPTO }
 
+    /** Closed provider-neutral detail family selected by {@link ActivityType}. */
     public sealed interface ActivityDetails permits CardDetails, PaymentDetails, CryptoDetails {}
 
+    /** Card-transaction evidence; nullable provider fields remain unnormalized source values. */
     public record CardDetails(
             String cardPan,
             String cardType,
@@ -45,12 +55,14 @@ public record Activity(
             String authorizationCode,
             String declineReason) implements ActivityDetails {}
 
+    /** Account-payment evidence retained from the source activity provider. */
     public record PaymentDetails(
             String paymentMethod,
             String senderAccount,
             String receiverAccount,
             String receiverBankCountry) implements ActivityDetails {}
 
+    /** Crypto-transaction evidence retained from the source activity provider. */
     public record CryptoDetails(
             String blockchain,
             String walletAddressFrom,

@@ -6,6 +6,13 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * Retained analysis record returned to application consumers.
+ *
+ * <p>The generated assessment is advisory. Its policy retrievals and derived detector signals are
+ * preserved as provenance rather than promoted to source facts. All collections are immutable
+ * snapshots suitable for crossing an adapter boundary.
+ */
 public record AnalysisHistoryEntry(
         UUID analysisId,
         UUID customerId,
