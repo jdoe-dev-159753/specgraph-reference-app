@@ -28,8 +28,10 @@ JAVA_TYPE_DECLARATION = re.compile(
     r"(?P<kind>class|interface|record|enum)\s+"
     r"(?P<name>[A-Za-z_$][A-Za-z0-9_$]*)(?P<header>[^;{}]*)\{"
 )
-PLAYWRIGHT_DISABLED = re.compile(r"\.\s*(?:skip|fixme)\s*\(")
+PLAYWRIGHT_NON_PASSING = re.compile(r"\.\s*(?:skip|fixme|fail)\s*\(")
 PLAYWRIGHT_TEST_MATCH = re.compile(r"\btestMatch\s*:\s*/((?:\\.|[^/\r\n])*)/([a-z]*)")
+PLAYWRIGHT_TEST_DIR = re.compile(r"\btestDir\s*:")
+SUREFIRE_DEFAULT_TEST_TYPE = re.compile(r"(?:Test.*|.*Test|.*Tests|.*TestCase)\Z")
 
 CONTROLLED_OBLIGATION_IDS = frozenset({
     "VFY-CUSTOMER-READ-001",
@@ -45,8 +47,6 @@ CONTROLLED_OBLIGATION_IDS = frozenset({
 })
 
 JAVA_EVIDENCE_GLOB = "backend/src/test/**/*.java"
-PLAYWRIGHT_SOURCE_GLOB = "e2e/**/*.ts"
-
 # These qualifications are part of the ratchet output so marker presence cannot
 # be misread as proof that every heterogeneous method on an obligation passed.
 BOUNDED_METHOD_NOTES = {
@@ -291,7 +291,9 @@ def discoverable_java_types(structures: list[str]) -> frozenset[str]:
     executable = {
         java_type.name
         for java_type in types
-        if not java_type.is_abstract and java_type.name in inherited_tests
+        if not java_type.is_abstract
+        and java_type.name in inherited_tests
+        and SUREFIRE_DEFAULT_TEST_TYPE.fullmatch(java_type.name)
     }
     discoverable = set(executable)
     frontier = list(executable)
@@ -435,9 +437,21 @@ def playwright_test_titles(text: str) -> tuple[str, ...]:
 
 def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
     config = source_without_comments((root / PLAYWRIGHT_CONFIG).read_text(encoding="utf-8"))
-    configured = PLAYWRIGHT_TEST_MATCH.search(config)
+    structure = source_without_quoted_text(config)
+    configured = PLAYWRIGHT_TEST_MATCH.search(structure)
     if configured is None:
         raise ValueError("playwright.config.ts must declare one regex testMatch")
+    configured_dir = PLAYWRIGHT_TEST_DIR.search(structure)
+    if configured_dir is None:
+        raise ValueError("playwright.config.ts must declare one string testDir")
+    cursor = configured_dir.end()
+    while cursor < len(config) and config[cursor].isspace():
+        cursor += 1
+    if cursor >= len(config) or config[cursor] not in ('"', "'"):
+        raise ValueError("playwright.config.ts testDir must be a string literal")
+    test_dir, _ = quoted_literal(config, cursor)
+    if test_dir is None:
+        raise ValueError("playwright.config.ts testDir must be a closed string literal")
     flag_names = configured.group(2)
     unsupported = set(flag_names) - set("ims")
     if unsupported:
@@ -453,11 +467,16 @@ def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
         test_match = re.compile(configured.group(1), flags)
     except re.error as error:
         raise ValueError(f"unsupported Playwright testMatch regex: {error}") from error
-    e2e_root = root / "e2e"
+    e2e_root = (root / "e2e").resolve()
+    test_root = (e2e_root / Path(test_dir)).resolve()
+    try:
+        test_root.relative_to(e2e_root)
+    except ValueError as error:
+        raise ValueError("playwright.config.ts testDir must stay within e2e") from error
     return tuple(
         path
-        for path in sorted(root.glob(PLAYWRIGHT_SOURCE_GLOB))
-        if test_match.search(path.relative_to(e2e_root).as_posix())
+        for path in sorted(test_root.rglob("*.ts"))
+        if test_match.search(path.relative_to(test_root).as_posix())
     )
 
 
@@ -477,9 +496,9 @@ def evidence_markers(
             discoverable_types = discoverable_java_types([structure])
         return java_tag_markers(text, structure, discoverable_types)
     if path.suffix == ".ts":
-        # Any member skip/fixme call can disable a test dynamically or an enclosing
-        # suite. A file that mixes one with V&V titles supplies no evidence until split.
-        if PLAYWRIGHT_DISABLED.search(structure):
+        # Any member skip/fixme/fail call can make a test non-passing dynamically or
+        # disable an enclosing suite. A mixed file supplies no evidence until split.
+        if PLAYWRIGHT_NON_PASSING.search(structure):
             return frozenset()
         return frozenset(
             marker for title in playwright_test_titles(text) for marker in MARKER.findall(title)
