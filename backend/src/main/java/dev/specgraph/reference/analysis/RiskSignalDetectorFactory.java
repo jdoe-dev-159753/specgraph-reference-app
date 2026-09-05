@@ -26,6 +26,7 @@ final class RiskSignalDetectorFactory {
         this.registry = Map.copyOf(copy);
     }
 
+    /** Validates the ordered selection, loads only chosen leaves, and composes them without fallback. */
     RiskSignalDetectorPort resolve(List<RiskSignalDetectorId> selection) {
         Objects.requireNonNull(selection, "selection");
         if (selection.isEmpty()) {
@@ -60,6 +61,7 @@ final class RiskSignalDetectorFactory {
         return new CompositeRiskSignalDetector(children);
     }
 
+    /** Loads a selected expensive leaf at most once while keeping unselected providers lazy. */
     private static final class MemoizedDetectorProvider implements Supplier<RiskSignalDetectorPort> {
         private final RiskSignalDetectorId id;
         private final Supplier<? extends RiskSignalDetectorPort> delegate;
@@ -72,6 +74,7 @@ final class RiskSignalDetectorFactory {
             this.delegate = Objects.requireNonNull(delegate, "detector provider");
         }
 
+        /** Publishes one successfully constructed leaf safely across concurrent callers. */
         @Override
         public RiskSignalDetectorPort get() {
             RiskSignalDetectorPort resolved = detector;

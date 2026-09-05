@@ -8,8 +8,14 @@ import java.time.Duration;
 import java.util.Locale;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Validated connection policy for the manually operated LM Studio sidecar.
+ * Only explicit loopback, link-local or private IP literals are accepted; hostnames are rejected to
+ * avoid DNS rebinding from turning the LOCAL selection into unintended external transmission.
+ */
 @ConfigurationProperties("specgraph.analysis.local")
 record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, Duration timeout) {
+    /** Applies stable defaults but defers selection-specific requirements until LOCAL is chosen. */
     LmStudioAnalysisProperties {
         baseUrl = normalize(baseUrl);
         model = normalize(model);
@@ -17,6 +23,7 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
         timeout = timeout == null ? Duration.ofSeconds(60) : timeout;
     }
 
+    /** Validates the transport endpoint without resolving a hostname or permitting public routing. */
     String validatedBaseUrl() {
         if (baseUrl == null) {
             throw new IllegalStateException("SPECGRAPH_LOCAL_BASE_URL is required when backend=local");
@@ -59,6 +66,7 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    /** Accepts only literal addresses whose ranges are unambiguously local to the operator network. */
     private static boolean isNetworkLocal(String host) {
         String value = host;
         if (value.startsWith("[") && value.endsWith("]")) {
@@ -84,6 +92,7 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
                 || (octets[0] == 169 && octets[1] == 254);
     }
 
+    /** Applies the same loopback/link-local/private policy after parsing an IPv6 literal. */
     private static boolean isLocalAddress(InetAddress address) {
         if (address instanceof Inet6Address) {
             byte first = address.getAddress()[0];
@@ -100,6 +109,7 @@ record LmStudioAnalysisProperties(String baseUrl, String model, String apiKey, D
                 || (first == 169 && second == 254);
     }
 
+    /** Parses IPv6 and optional zone identifiers while failing closed on malformed literals. */
     private static boolean isLocalIpv6(String value) {
         try {
             String decoded = decodeIpv6ZoneSeparator(value);

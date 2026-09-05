@@ -29,6 +29,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 @Tag("VFY-HISTORY-001")
 @SpringBootTest(classes = ReferenceApplication.class)
+/**
+ * Proves JSONB provenance round trips and deterministic newest-first paging against migrated PostgreSQL.
+ * It validates the JPA adapter boundary rather than general database durability operations.
+ */
 final class JpaAnalysisHistoryAdapterIntegrationTests extends PostgresIntegrationTestSupport {
     private static final UUID FIRST_CUSTOMER =
             UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -106,6 +110,7 @@ final class JpaAnalysisHistoryAdapterIntegrationTests extends PostgresIntegratio
         }
     }
 
+    /** Keeps generated timestamps tied so the scenario specifically proves identity tie-breaking. */
     private AnalysisHistoryCreateCommand command(UUID customerId, String operatorId) {
         return new AnalysisHistoryCreateCommand(
                 customerId,

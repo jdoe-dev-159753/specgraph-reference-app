@@ -3,6 +3,11 @@ package dev.specgraph.reference.analysis;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Validated retrieval, chunking and embedding configuration for the synthetic policy corpus.
+ * Model and tokenizer identities are retained here because they are part of reproducible retrieval
+ * provenance rather than application-domain vocabulary.
+ */
 @ConfigurationProperties("specgraph.policy")
 record PolicyRetrievalProperties(
         String corpusIndex,
@@ -12,6 +17,7 @@ record PolicyRetrievalProperties(
         Chunking chunking,
         Embedding embedding) {
 
+    /** Validates the top-level retrieval bounds independently of nested chunk/model settings. */
     PolicyRetrievalProperties {
         corpusIndex = requireText(corpusIndex, "corpusIndex");
         vectorTable = requireText(vectorTable, "vectorTable");
@@ -25,6 +31,7 @@ record PolicyRetrievalProperties(
         }
     }
 
+    /** Bounds deterministic document splitting before embedding and indexing. */
     record Chunking(int chunkSize, int minChunkSizeChars, int minChunkLengthToEmbed, int maxNumChunks) {
         Chunking {
             if (chunkSize <= 0 || minChunkSizeChars < 0 || minChunkLengthToEmbed < 0 || maxNumChunks <= 0) {
@@ -33,6 +40,7 @@ record PolicyRetrievalProperties(
         }
     }
 
+    /** Pins local embedding dimensions, artifacts and cache location used by the vector store. */
     record Embedding(int dimensions, String modelIdentity, String tokenizerUri, String modelUri, String cacheDirectory) {
         Embedding {
             if (dimensions <= 0) {

@@ -12,6 +12,10 @@ import org.junit.jupiter.api.Test;
 
 @Tag("VFY-CUSTOMER-READ-001")
 @Tag("unit_property")
+/**
+ * Proves fixed-fixture repeatability, exact activity specialization and source-risk ownership.
+ * These invariants characterize synthetic demo data and do not validate an upstream data feed.
+ */
 final class SyntheticActivityInvariantTests {
     @Test
     void freshAdaptersProduceTheSameDeterministicSnapshot() {

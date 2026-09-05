@@ -11,6 +11,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
+/**
+ * Deterministically projects a complete customer snapshot into the bounded model context.
+ * Source-risk-backed activities are selected first, then recency and stable identities break ties;
+ * complete totals remain in the envelope even when detail collections are truncated.
+ */
 @Component
 final class AnalysisContextBuilder {
     private static final Comparator<Activity> ACTIVITY_ORDER = Comparator
@@ -32,6 +37,10 @@ final class AnalysisContextBuilder {
         this.properties = Objects.requireNonNull(properties, "properties");
     }
 
+    /**
+     * Selects a stable, citable subset while retaining complete source totals for diagnostics.
+     * Risk-backed activities take precedence so selected source-risk evidence never becomes orphaned.
+     */
     AnalysisEvidenceEnvelope build(
             CustomerSnapshot snapshot,
             List<RiskSignalEvidence> detectorEvidence,

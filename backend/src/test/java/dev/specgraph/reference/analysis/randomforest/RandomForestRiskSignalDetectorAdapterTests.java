@@ -22,6 +22,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/**
+ * Proves fixed-model reproducibility, PII-free feature projection and artifact/provenance validation.
+ * Golden synthetic rows characterize this packaged model only, not out-of-sample AML performance.
+ */
 final class RandomForestRiskSignalDetectorAdapterTests {
     private static final SyntheticRandomForestModelTrainer.GeneratedModel GENERATED =
             SyntheticRandomForestModelTrainer.train(SyntheticRandomForestModelTrainer.trainingPartition());

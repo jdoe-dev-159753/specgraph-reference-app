@@ -17,6 +17,10 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 
+/**
+ * Compatibility security chain for pre-R4 checkpoints where authentication was not yet active.
+ * It is intentionally profile-exclusive with the real operator security chain.
+ */
 @Configuration(proxyBeanMethods = false)
 @Profile("!r4 & !r4-auth")
 class LegacySecurityConfiguration {
@@ -29,6 +33,11 @@ class LegacySecurityConfiguration {
     }
 }
 
+/**
+ * Demonstration security boundary with two BCrypt-backed local operators, session CSRF protection
+ * and authentication for every application API. Public assets, health and session discovery remain
+ * reachable so a browser can establish the login flow.
+ */
 @Configuration(proxyBeanMethods = false)
 @Profile("r4 | r4-auth")
 class R4SecurityConfiguration {
@@ -62,6 +71,10 @@ class R4SecurityConfiguration {
         return repository;
     }
 
+    /**
+     * Keeps session establishment and static discovery public while protecting every application API
+     * and retaining CSRF checks for state-changing browser requests.
+     */
     @Bean
     SecurityFilterChain r4Security(HttpSecurity http, CsrfTokenRepository csrfTokenRepository) throws Exception {
         return http

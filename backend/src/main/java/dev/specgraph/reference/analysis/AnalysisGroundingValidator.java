@@ -3,9 +3,18 @@ package dev.specgraph.reference.analysis;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Enforces the post-model grounding boundary before a generated result may be persisted.
+ * References must be unique, resolve inside the supplied envelope, and cite both source evidence
+ * and retrieved policy; detector evidence alone cannot ground a completed analysis.
+ */
 final class AnalysisGroundingValidator {
     private AnalysisGroundingValidator() {}
 
+    /**
+     * Rejects fabricated, duplicate, or one-sided citations before the result crosses into history.
+     * A completed analysis must join at least one source fact with one policy artifact.
+     */
     static void validate(AnalysisEvidenceEnvelope evidence, AnalysisModelProvenance provenance) {
         var references = provenance.evidenceReferences();
         if (references.isEmpty()) {

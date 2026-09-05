@@ -48,6 +48,7 @@ public final class RandomForestRiskSignalDetectorRuntime {
         }
     }
 
+    /** Limits packaged resources to the model and library revisions reviewed with this runtime. */
     private static void validatePinnedProvenance(RandomForestModelManifest manifest) {
         if (!EXPECTED_MODEL_VERSION.equals(manifest.modelVersion())) {
             throw new IllegalArgumentException("unexpected packaged random-forest model version");
@@ -57,6 +58,7 @@ public final class RandomForestRiskSignalDetectorRuntime {
         }
     }
 
+    /** Reads one mandatory resource under a caller-specific upper bound and never substitutes it. */
     private byte[] readRequiredResource(String name, int maximumBytes) {
         try (InputStream input = classLoader.getResourceAsStream(name)) {
             if (input == null) {

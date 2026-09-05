@@ -91,6 +91,7 @@ class DegradationTestConfiguration {
         return new FailureInjectingHistory(delegate, plan);
     }
 
+    /** Ordered failure/recovery steps traversed by the browser degradation scenario. */
     private enum FailureStage {
         DATABASE,
         DETECTOR,
@@ -101,11 +102,16 @@ class DegradationTestConfiguration {
         PERSISTENCE
     }
 
+    /**
+     * Synchronizes one injected failure with its successful retry before advancing to the next stage.
+     * This state is fixture-local and is not an application lifecycle model.
+     */
     static final class ScenarioPlan {
         private final FailureStage[] stages = FailureStage.values();
         private int next;
         private boolean awaitingRecovery;
 
+        /** Claims only the next scheduled failure and requires a successful recovery before advancing. */
         synchronized boolean claim(FailureStage stage) {
             if (awaitingRecovery || next >= stages.length || stages[next] != stage) {
                 return false;
@@ -124,6 +130,7 @@ class DegradationTestConfiguration {
             return claim(FailureStage.INSUFFICIENT_GROUNDING);
         }
 
+        /** Advances a port-level stage only after its real delegate completes successfully. */
         synchronized void recoveryCompleted(FailureStage stage) {
             if (awaitingRecovery && next < stages.length && stages[next] == stage) {
                 awaitingRecovery = false;
@@ -131,6 +138,7 @@ class DegradationTestConfiguration {
             }
         }
 
+        /** Advances analysis stages only once the successful retry has reached durable history. */
         synchronized void analysisRecoveryPersisted() {
             if (awaitingRecovery && next < stages.length && stages[next] != FailureStage.DATABASE) {
                 awaitingRecovery = false;
@@ -139,11 +147,13 @@ class DegradationTestConfiguration {
         }
     }
 
+    /** Decorates both customer ports so database failure and recovery use the real delegate path. */
     private record FailureInjectingCustomerActivity(
             CustomerActivityPort activityDelegate,
             CustomerReviewQueryPort reviewDelegate,
             ScenarioPlan plan) implements CustomerActivityPort, CustomerReviewQueryPort {
 
+        /** Injects the database failure before delegation and records only a successful recovery. */
         @Override
         public Optional<CustomerSnapshot> loadSnapshot(UUID customerId) {
             plan.fail(FailureStage.DATABASE, "Injected customer database query failure");
@@ -152,6 +162,7 @@ class DegradationTestConfiguration {
             return snapshot;
         }
 
+        /** Applies the same database degradation semantics to the paged review boundary. */
         @Override
         public Optional<CustomerReviewPage> loadReviewPage(UUID customerId, CustomerReviewQuery query) {
             plan.fail(FailureStage.DATABASE, "Injected customer database query failure");
@@ -161,10 +172,12 @@ class DegradationTestConfiguration {
         }
     }
 
+    /** Decorates history persistence while leaving read behavior on the real JPA adapter. */
     private record FailureInjectingHistory(
             AnalysisHistoryPort delegate,
             ScenarioPlan plan) implements AnalysisHistoryPort {
 
+        /** Fails before persistence, then advances only after the real adapter commits the retry. */
         @Override
         public AnalysisHistoryEntry persist(AnalysisHistoryCreateCommand command) {
             plan.fail(FailureStage.PERSISTENCE, "Injected analysis history persistence failure");

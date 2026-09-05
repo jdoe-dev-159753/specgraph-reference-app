@@ -22,6 +22,10 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 
+/**
+ * Verifies bounded query construction and retrieval provenance through a mocked vector store.
+ * Real PostgreSQL similarity semantics are owned by the separate integration suite.
+ */
 final class PgVectorPolicyAdapterTests {
     @Test
     void retrievalProvenanceUsesConfiguredEmbeddingModelIdentity() {
@@ -102,6 +106,7 @@ final class PgVectorPolicyAdapterTests {
                 .doesNotContain("oldestriskmarker");
     }
 
+    /** Builds the minimal valid retrieval boundary while allowing provenance identity to vary. */
     private PolicyRetrievalProperties properties(String embeddingIdentity) {
         return new PolicyRetrievalProperties(
                 "classpath:policy/synthetic/index.txt",

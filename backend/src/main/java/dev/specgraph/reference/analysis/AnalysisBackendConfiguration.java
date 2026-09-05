@@ -10,6 +10,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
+/**
+ * Composition boundary for the independently selected Stage-3 analysis backend.
+ * The project-owned selector remains authoritative even when Spring AI also exposes a chat-model
+ * selector, preventing ambient provider configuration from silently changing data transmission.
+ */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AnalysisBackendProperties.class)
 class AnalysisBackendConfiguration {
@@ -26,6 +31,7 @@ class AnalysisBackendConfiguration {
         return new AnalysisBackendFactory(adapters);
     }
 
+    /** Rejects disagreement between the project selector and Spring AI before a provider is used. */
     @Bean
     @Primary
     AnalysisModelPort selectedAnalysisModel(

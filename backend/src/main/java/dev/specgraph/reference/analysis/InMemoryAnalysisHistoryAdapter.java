@@ -6,10 +6,16 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
+/**
+ * Process-local history adapter for the hollow baseline profile.
+ * Synchronization makes its mutable list deterministic within one process, but entries deliberately
+ * disappear on restart; durable profiles replace it through the same port.
+ */
 @Component
 class InMemoryAnalysisHistoryAdapter implements AnalysisHistoryPort {
     private final List<AnalysisHistoryEntry> analyses = new ArrayList<>();
 
+    /** Creates a fresh identity and stores one immutable process-local history entry atomically. */
     @Override
     public synchronized AnalysisHistoryEntry persist(AnalysisHistoryCreateCommand command) {
         var entry = new AnalysisHistoryEntry(

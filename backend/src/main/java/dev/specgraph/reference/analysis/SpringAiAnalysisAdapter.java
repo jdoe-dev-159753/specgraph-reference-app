@@ -8,6 +8,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+/**
+ * Explicit opt-in OpenAI Stage-3 adapter using provider-native structured output validation.
+ * It marks external transmission and the synthetic-data policy in provenance; merely having Spring
+ * AI on the classpath cannot select this adapter.
+ */
 @Component
 @ConditionalOnProperty(prefix = "specgraph.analysis", name = "backend", havingValue = "openai")
 final class SpringAiAnalysisAdapter implements AnalysisModelPort {
@@ -23,6 +28,7 @@ final class SpringAiAnalysisAdapter implements AnalysisModelPort {
         this.modelIdentity = modelIdentity;
     }
 
+    /** Submits bounded synthetic evidence and marks the resulting provenance as externally transmitted. */
     @Override
     public AnalysisModelOutput analyze(AnalysisEvidenceEnvelope evidence) {
         AnalysisResult result = chatClient.prompt()

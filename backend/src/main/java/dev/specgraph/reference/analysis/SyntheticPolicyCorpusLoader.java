@@ -22,6 +22,11 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionOperations;
 
+/**
+ * Rebuilds the owned synthetic policy-vector snapshot from repository resources at startup.
+ * Stable content-derived UUIDv8 identifiers make repeated ingestion idempotent, while one
+ * transaction prevents a failed replacement from committing an empty corpus.
+ */
 @Component
 @Profile("r4")
 final class SyntheticPolicyCorpusLoader implements ApplicationRunner {
@@ -44,6 +49,7 @@ final class SyntheticPolicyCorpusLoader implements ApplicationRunner {
         this.transactions = transactions;
     }
 
+    /** Replaces the loader-owned corpus snapshot atomically, including the intentional empty case. */
     @Override
     public void run(ApplicationArguments args) {
         List<Document> documents = loadDocuments();
@@ -71,6 +77,7 @@ final class SyntheticPolicyCorpusLoader implements ApplicationRunner {
                 .toList();
     }
 
+    /** Splits one policy resource and assigns stable content identities to usable chunks. */
     private List<Document> chunk(String sourcePath, String content) {
         var chunking = properties.chunking();
         TokenTextSplitter splitter = TokenTextSplitter.builder()
@@ -110,6 +117,7 @@ final class SyntheticPolicyCorpusLoader implements ApplicationRunner {
         return stableChunks;
     }
 
+    /** Derives an RFC-variant UUIDv8 from source path, chunk position, and exact chunk content. */
     private String deterministicId(String sourcePath, int chunkIndex, String content) {
         String stableSeed = sourcePath + "\n" + chunkIndex + "\n" + content;
         byte[] digest = sha256(stableSeed);

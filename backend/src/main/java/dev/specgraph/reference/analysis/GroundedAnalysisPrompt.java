@@ -32,6 +32,7 @@ final class GroundedAnalysisPrompt {
 
     private GroundedAnalysisPrompt() {}
 
+    /** Serializes only the bounded envelope, preserving evidence-family labels used by grounding. */
     static String render(AnalysisEvidenceEnvelope evidence) {
         StringBuilder prompt = new StringBuilder();
         prompt.append("customerId=").append(evidence.customerId()).append('\n');
@@ -82,6 +83,7 @@ final class GroundedAnalysisPrompt {
         return prompt.toString();
     }
 
+    /** Projects the closed activity variants without adding attributes absent from source data. */
     private static String safeActivityDetails(Activity activity) {
         return switch (activity.details()) {
             case Activity.CardDetails card -> "cardType=" + card.cardType()

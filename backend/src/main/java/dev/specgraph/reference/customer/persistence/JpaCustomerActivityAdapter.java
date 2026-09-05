@@ -29,6 +29,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * JPA adapter for complete analysis snapshots and independently bounded operator review pages.
+ * Database-side filters, counts and pagination avoid loading an entire history for the UI; a
+ * repeatable-read transaction keeps each multi-query projection internally consistent.
+ */
 @Component
 @Primary
 class JpaCustomerActivityAdapter implements CustomerActivityPort, CustomerReviewQueryPort {
@@ -42,6 +47,7 @@ class JpaCustomerActivityAdapter implements CustomerActivityPort, CustomerReview
         this.sourceTimeZone = ZoneId.of(sourceTimeZone);
     }
 
+    /** Loads source facts and risk evidence inside one database snapshot for analysis. */
     @Override
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Optional<CustomerSnapshot> loadSnapshot(UUID customerId) {
@@ -55,6 +61,7 @@ class JpaCustomerActivityAdapter implements CustomerActivityPort, CustomerReview
                 selectRiskEvidence(customerId, null, null)));
     }
 
+    /** Returns one filtered page while keeping totals and evidence consistent with its snapshot. */
     @Override
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Optional<CustomerReviewPage> loadReviewPage(UUID customerId, CustomerReviewQuery query) {
@@ -81,6 +88,7 @@ class JpaCustomerActivityAdapter implements CustomerActivityPort, CustomerReview
         return entityManager.find(PersistenceCustomerEntity.class, customerId) != null;
     }
 
+    /** Applies stable source ordering and optional database pagination after all review filters. */
     private List<SourceTransactionEntity> selectTransactions(
             UUID customerId, CustomerReviewQuery review, boolean paged) {
         CriteriaBuilder criteria = entityManager.getCriteriaBuilder();
@@ -119,6 +127,7 @@ class JpaCustomerActivityAdapter implements CustomerActivityPort, CustomerReview
         return entityManager.createQuery(query).getSingleResult();
     }
 
+    /** Selects evidence either for an entire filtered review or strictly for the current page. */
     private List<RiskEvidence> selectRiskEvidence(
             UUID customerId, CustomerReviewQuery review, List<UUID> transactionIds) {
         if (transactionIds != null && transactionIds.isEmpty()) {
@@ -141,6 +150,7 @@ class JpaCustomerActivityAdapter implements CustomerActivityPort, CustomerReview
         return entityManager.createQuery(query).getResultList().stream().map(this::mapRiskEvidence).toList();
     }
 
+    /** Centralizes identical customer, type, status, and half-open time filters for rows and counts. */
     private List<Predicate> reviewPredicates(
             CriteriaBuilder criteria,
             From<?, SourceTransactionEntity> transaction,
@@ -168,6 +178,7 @@ class JpaCustomerActivityAdapter implements CustomerActivityPort, CustomerReview
         return predicates;
     }
 
+    /** Fails closed unless persistence contains exactly one specialization matching the closed type. */
     private Activity mapActivity(SourceTransactionEntity transaction) {
         int specializationCount = (transaction.card() != null ? 1 : 0)
                 + (transaction.payment() != null ? 1 : 0)

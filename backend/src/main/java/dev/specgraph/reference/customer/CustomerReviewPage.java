@@ -14,6 +14,7 @@ public record CustomerReviewPage(
         int pageSize,
         long totalActivities,
         long totalRiskEvidence) {
+    /** Freezes page contents and rejects metadata that could misrepresent the bounded result. */
     public CustomerReviewPage {
         Objects.requireNonNull(customerId, "customerId");
         activities = List.copyOf(Objects.requireNonNull(activities, "activities"));

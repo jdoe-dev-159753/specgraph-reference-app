@@ -11,6 +11,11 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 
+/**
+ * Composition boundary for one ordered detector selection or bounded composite.
+ * Typed configuration is authoritative; historical Spring profiles are consulted only when the
+ * typed selector is absent, preserving compatibility without creating a second active control.
+ */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(RiskSignalDetectorProperties.class)
 class RiskSignalDetectorConfiguration {
@@ -43,6 +48,7 @@ class RiskSignalDetectorConfiguration {
         return factory.resolve(selection);
     }
 
+    /** Translates legacy profile combinations only when no explicit typed selection is present. */
     static List<RiskSignalDetectorId> legacyProfileSelection(Environment environment) {
         boolean bayesian = environment.acceptsProfiles(Profiles.of("bayesian-detector"));
         boolean fuzzy = environment.acceptsProfiles(Profiles.of("fuzzy-detector"));

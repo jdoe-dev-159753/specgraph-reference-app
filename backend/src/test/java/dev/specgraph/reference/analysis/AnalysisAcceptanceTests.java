@@ -24,6 +24,10 @@ import org.springframework.test.web.servlet.MockMvc;
 @Tag("VFY-HISTORY-001")
 @SpringBootTest(classes = ReferenceApplication.class)
 @AutoConfigureMockMvc
+/**
+ * End-to-end application/HTTP evidence for structured, attributed and retained analysis outcomes.
+ * The deterministic backend makes orchestration assertions reproducible; it does not validate a live model.
+ */
 class AnalysisAcceptanceTests extends PostgresIntegrationTestSupport {
     private static final UUID SEEDED_CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID STABLE_CUSTOMER_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");

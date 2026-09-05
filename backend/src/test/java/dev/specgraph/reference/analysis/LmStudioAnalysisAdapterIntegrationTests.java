@@ -27,6 +27,10 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 @Tag("VFY-CONFIDENTIALITY-001")
 @Tag("VFY-ANALYSIS-CONTRACT-001")
 @Tag("VFY-FAILURE-PATHS-001")
+/**
+ * Exercises the LOCAL adapter against an in-process OpenAI-compatible HTTP stub, including budget and
+ * structured-result failures. It proves wire contract behavior, not a particular LM Studio model's quality.
+ */
 final class LmStudioAnalysisAdapterIntegrationTests {
     private static final String MODEL = "ministral-3-8b-instruct-2512";
     private static final AtomicReference<String> RESPONSE = new AtomicReference<>();
@@ -40,6 +44,7 @@ final class LmStudioAnalysisAdapterIntegrationTests {
             .withUserConfiguration(AnalysisBackendConfiguration.class, LmStudioAnalysisConfiguration.class)
             .withBean(DeterministicAnalysisAdapter.class);
 
+    /** Starts the loopback fake provider used to inspect requests without external transmission. */
     @BeforeAll
     static void startServer() throws IOException {
         InetAddress ipv4Loopback = InetAddress.getByAddress(new byte[] {127, 0, 0, 1});
@@ -217,6 +222,7 @@ final class LmStudioAnalysisAdapterIntegrationTests {
                 "specgraph.analysis.local.timeout=60s");
     }
 
+    /** Reproduces the dense R5 browser envelope used to guard the practical local-model budget. */
     private static AnalysisEvidenceEnvelope r5SizedEvidence() {
         AnalysisEvidenceEnvelope source = SpringAiAnalysisAdapterTests.evidence();
         List<Activity> activities = new ArrayList<>(source.activities());

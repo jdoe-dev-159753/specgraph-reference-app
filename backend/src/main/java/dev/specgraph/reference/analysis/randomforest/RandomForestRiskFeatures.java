@@ -23,6 +23,7 @@ record RandomForestRiskFeatures(
         requireUnitInterval(incompleteRatio, "incompleteRatio");
     }
 
+    /** Projects only bounded aggregate ratios; source risk labels never enter model features. */
     static RandomForestRiskFeatures from(CustomerSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot");
         int count = snapshot.activities().size();

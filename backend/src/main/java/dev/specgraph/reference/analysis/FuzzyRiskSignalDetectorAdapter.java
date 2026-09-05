@@ -29,6 +29,10 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     private static final double SOURCE_RISK_CONSEQUENT = 0.4875;
     private static final double COUPLED_CONSEQUENT = 0.0;
 
+    /**
+     * Evaluates the complete snapshot against the versioned fuzzy surface and records every input
+     * ratio and rule activation needed to explain the bounded score.
+     */
     @Override
     public List<RiskSignalEvidence> detect(CustomerSnapshot snapshot) {
         int observations = snapshot.activities().size();
@@ -148,6 +152,7 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
         return denominator == 0 ? 0.0 : (double) numerator / denominator;
     }
 
+    /** Maps a feature onto a monotonic linear membership between its inactive and saturated bounds. */
     private static double rising(double value, double low, double high) {
         return (value - low) / (high - low);
     }

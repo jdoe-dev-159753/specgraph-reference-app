@@ -23,6 +23,10 @@ final class LmStudioAnalysisAdapter implements AnalysisModelPort {
         this.promptBudget = promptBudget;
     }
 
+    /**
+     * Rejects an oversized request before transmission, then binds the validated response to the
+     * exact evidence references and conservative token estimate used for that call.
+     */
     @Override
     public AnalysisModelOutput analyze(AnalysisEvidenceEnvelope evidence) {
         String userPrompt = GroundedAnalysisPrompt.render(evidence);
