@@ -30,6 +30,26 @@ type PolicyEvidence = {
   retrievalMetadata: Record<string, string>
 }
 
+type DetectorProvenance = {
+  detectorIdentity: string
+  signalIdentity: string
+  score: number
+  provenance: Record<string, string>
+}
+
+type EvidenceReference = {
+  kind: 'ACTIVITY' | 'SOURCE_RISK' | 'DETECTOR_SIGNAL' | 'POLICY_RETRIEVAL'
+  evidenceIdentity: string
+}
+
+type ModelProvenance = {
+  backendIdentity: string
+  modelIdentity: string
+  promptIdentity: string
+  evidenceReferences: EvidenceReference[]
+  metadata: Record<string, string>
+}
+
 type Analysis = {
   analysisId: string
   customerId: string
@@ -39,6 +59,8 @@ type Analysis = {
   findingsSummary: string
   recommendations: string[]
   evidenceProvenance: PolicyEvidence[]
+  detectorProvenance: DetectorProvenance[]
+  modelProvenance: ModelProvenance
 }
 
 type CustomerSnapshot = {
@@ -156,6 +178,82 @@ function GroundingEvidence({ evidence }: { evidence: PolicyEvidence[] }) {
           </Paper>
         )
       })}
+    </Stack>
+  )
+}
+
+function DetectorArtifacts({ artifacts }: { artifacts: DetectorProvenance[] }) {
+  return (
+    <Box data-testid="analysis-detector-provenance">
+      <Typography variant="subtitle2">Stage 1 · Detector artifacts</Typography>
+      {artifacts.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          No detector artifact was retained for this analysis.
+        </Typography>
+      ) : (
+        <Stack spacing={1} sx={{ mt: 0.75 }}>
+          {artifacts.map((artifact, index) => (
+            <Paper
+              key={`${artifact.detectorIdentity}:${artifact.signalIdentity}:${index}`}
+              variant="outlined"
+              data-testid={`analysis-detector-artifact-${index}`}
+              sx={{ p: 1.25 }}
+            >
+              <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                <Chip label={`detector: ${artifact.detectorIdentity}`} size="small" variant="outlined" />
+                <Chip label={`signal: ${artifact.signalIdentity}`} size="small" variant="outlined" />
+                <Chip label={`score: ${artifact.score}`} size="small" variant="outlined" />
+              </Stack>
+              {Object.keys(artifact.provenance).length > 0 && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.75, display: 'block', fontFamily: 'monospace', overflowWrap: 'anywhere' }}
+                >
+                  {Object.entries(artifact.provenance).map(([key, value]) => `${key}: ${value}`).join(' · ')}
+                </Typography>
+              )}
+            </Paper>
+          ))}
+        </Stack>
+      )}
+    </Box>
+  )
+}
+
+function ModelExecution({ provenance }: { provenance: ModelProvenance }) {
+  const externalTransmission = provenance.metadata.externalTransmission
+  const externalTransmissionLabel = externalTransmission === 'true'
+    ? 'yes'
+    : externalTransmission === 'false' ? 'no' : 'unknown'
+  return (
+    <Box data-testid="analysis-model-provenance">
+      <Typography variant="subtitle2">Stage 3 · Model execution</Typography>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ mt: 0.75, flexWrap: 'wrap' }}>
+        <Chip data-testid="analysis-model-backend" label={`backend: ${provenance.backendIdentity}`} size="small" variant="outlined" />
+        <Chip data-testid="analysis-model-identity" label={`model: ${provenance.modelIdentity}`} size="small" variant="outlined" />
+        <Chip data-testid="analysis-prompt-identity" label={`prompt: ${provenance.promptIdentity}`} size="small" variant="outlined" />
+        <Chip
+          data-testid="analysis-external-transmission"
+          label={`external transmission: ${externalTransmissionLabel}`}
+          size="small"
+          color={externalTransmission === 'true' ? 'warning' : externalTransmission === 'false' ? 'success' : 'default'}
+          variant="outlined"
+        />
+      </Stack>
+    </Box>
+  )
+}
+
+function AnalysisProvenance({ analysis }: { analysis: Analysis }) {
+  return (
+    <Stack spacing={2} data-testid="analysis-provenance">
+      <DetectorArtifacts artifacts={analysis.detectorProvenance} />
+      <Box data-testid="analysis-grounding-provenance">
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>Stage 2 · Policy grounding</Typography>
+        <GroundingEvidence evidence={analysis.evidenceProvenance} />
+      </Box>
+      <ModelExecution provenance={analysis.modelProvenance} />
     </Stack>
   )
 }
@@ -668,8 +766,9 @@ export default function App() {
                       <Typography variant="caption" color="text.secondary">
                         Operator {analysis.data.operatorId} · {new Date(analysis.data.generatedAt).toLocaleString()}
                       </Typography>
-                      <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Grounding evidence</Typography>
-                      <GroundingEvidence evidence={analysis.data.evidenceProvenance} />
+                      <Box sx={{ mt: 2 }}>
+                        <AnalysisProvenance analysis={analysis.data} />
+                      </Box>
                     </Box>
                   )}
 
@@ -698,7 +797,7 @@ export default function App() {
                             {entry.recommendations.join(' · ')}
                           </Typography>
                           <Box sx={{ mt: 1.5 }}>
-                            <GroundingEvidence evidence={entry.evidenceProvenance} />
+                            <AnalysisProvenance analysis={entry} />
                           </Box>
                         </ListItem>
                       ))}
