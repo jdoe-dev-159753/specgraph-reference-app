@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Renders browsable frontend reference without changing application build authority.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
