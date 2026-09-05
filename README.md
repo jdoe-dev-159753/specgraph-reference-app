@@ -48,10 +48,10 @@ export SPECGRAPH_LOCAL_MODEL=ministral-3-8b-instruct-2512
 export R5_BIND_ADDRESS=10.77.0.31
 export R5_PORT=8088
 docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-883ada763d6b6427df7709dd8295f8672c4a4dd4 \
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-68d1d84bd728065df361d81c9f044def6429162c \
   up -d --wait --no-build --pull always
 docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-883ada763d6b6427df7709dd8295f8672c4a4dd4 ps
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-68d1d84bd728065df361d81c9f044def6429162c ps
 ```
 
 This immutable candidate was proven and published by the successful R5 workflow. The shorter `:r5` tag is promoted only after merge to `main`.
@@ -71,7 +71,7 @@ Stop and reset the R5 demo with the same OCI Compose package:
 
 ```bash
 docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-883ada763d6b6427df7709dd8295f8672c4a4dd4 \
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-68d1d84bd728065df361d81c9f044def6429162c \
   down -v
 ```
 
