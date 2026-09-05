@@ -178,13 +178,33 @@ final class LmStudioAnalysisAdapterIntegrationTests {
     void rejectsResponseThatExceedsTheLiveProviderBounds() {
         RESPONSE.set(chatCompletion("""
                 {"riskLevel":"LOW","findingsSummary":"%s","recommendations":["Review."]}
-                """.formatted("x".repeat(501)).trim()));
+                """.formatted("x".repeat(AnalysisResultStructuredOutputConverter.MAX_FINDINGS_SUMMARY_CHARACTERS + 1))
+                .trim()));
 
         localContext().run(context -> assertThatThrownBy(() -> context.getBean(AnalysisModelPort.class)
                         .analyze(SpringAiAnalysisAdapterTests.evidence()))
                 .isInstanceOf(RuntimeException.class));
 
         assertThat(REQUEST_COUNT.get()).isPositive();
+    }
+
+    @Test
+    void acceptsDetailedOperationalOutputWithinTheProviderTokenBudget() {
+        String detailedSummary = "s".repeat(643);
+        String detailedRecommendation = "r".repeat(257);
+        RESPONSE.set(chatCompletion("""
+                {"riskLevel":"MEDIUM","findingsSummary":"%s","recommendations":["%s"]}
+                """.formatted(detailedSummary, detailedRecommendation).trim()));
+
+        localContext().run(context -> {
+            AnalysisModelOutput output = context.getBean(AnalysisModelPort.class)
+                    .analyze(SpringAiAnalysisAdapterTests.evidence());
+
+            assertThat(output.result().findingsSummary()).hasSize(643);
+            assertThat(output.result().recommendations().getFirst()).hasSize(257);
+        });
+
+        assertThat(REQUEST_COUNT).hasValue(1);
     }
 
     private ApplicationContextRunner localContext() {

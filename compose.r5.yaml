@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: "${PGVECTOR_IMAGE:-pgvector/pgvector:0.8.6-pg17}"
+    environment:
+      POSTGRES_DB: specgraph
+      POSTGRES_USER: specgraph
+      POSTGRES_PASSWORD: specgraph
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U specgraph -d specgraph"]
+      interval: 2s
+      timeout: 2s
+      retries: 45
+      start_period: 5s
+
+  r5-cache-init:
+    image: "${ALPINE_IMAGE:-alpine:3.22}"
+    command: ["sh", "-c", "chown -R 10001:10001 /cache"]
+    volumes:
+      - r5-embedding-cache:/cache
+    restart: "no"
+
+  r5:
+    image: "${APP_R5_IMAGE:-ghcr.io/jdoe-dev-159753/specgraph-reference-app:r5}"
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      args:
+        SOURCE_ROOT: "${R5_SOURCE_ROOT:-.}"
+    environment:
+      SPRING_PROFILES_ACTIVE: r4
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/specgraph
+      SPRING_DATASOURCE_USERNAME: specgraph
+      SPRING_DATASOURCE_PASSWORD: specgraph
+      SERVER_SERVLET_SESSION_COOKIE_NAME: specgraph-r5_session
+      SPECGRAPH_SOURCE_TIME_ZONE: "${SPECGRAPH_SOURCE_TIME_ZONE:-UTC}"
+      SPECGRAPH_ANALYSIS_DETECTORS_0: BAYESIAN
+      SPECGRAPH_ANALYSIS_DETECTORS_1: FUZZY
+      SPECGRAPH_ANALYSIS_DETECTORS_2: RANDOM_FOREST
+      SPECGRAPH_ANALYSIS_BACKEND: local
+      SPECGRAPH_LOCAL_BASE_URL: "${SPECGRAPH_LOCAL_BASE_URL:-}"
+      SPECGRAPH_LOCAL_MODEL: "${SPECGRAPH_LOCAL_MODEL:-ministral-3-8b-instruct-2512}"
+      # Only the launcher-owned projection enters the container. An ambient local
+      # token is cleared before Compose is invoked.
+      SPECGRAPH_LOCAL_API_KEY: "${SPECGRAPH_R5_PROJECTED_LOCAL_API_KEY:-}"
+      SPECGRAPH_LOCAL_TIMEOUT: "${SPECGRAPH_LOCAL_TIMEOUT:-60s}"
+      SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS: "${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-8192}"
+      SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS: "${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:-512}"
+      SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS: "${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:-256}"
+      SPECGRAPH_EMBEDDING_CACHE: /tmp/specgraph-embedding-model
+      OPENAI_API_KEY: ""
+    volumes:
+      - r5-embedding-cache:/tmp/specgraph-embedding-model
+    depends_on:
+      postgres:
+        condition: service_healthy
+      r5-cache-init:
+        condition: service_completed_successfully
+    ports:
+      - target: 8080
+        published: "${R5_PORT:-8088}"
+        host_ip: "${R5_BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/actuator/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 120
+      start_period: 20s
+
+volumes:
+  r5-embedding-cache:
