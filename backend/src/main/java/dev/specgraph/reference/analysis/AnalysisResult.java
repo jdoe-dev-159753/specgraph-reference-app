@@ -2,6 +2,13 @@ package dev.specgraph.reference.analysis;
 
 import java.util.List;
 
+/**
+ * Structured, operator-facing assessment produced by an analysis model.
+ *
+ * <p>A result always has a risk level, a non-blank findings narrative and at least one non-blank
+ * recommendation. It is advisory output rather than a calibrated probability or automated
+ * decision, and its recommendations are defensively copied.
+ */
 public record AnalysisResult(RiskLevel riskLevel, String findingsSummary, List<String> recommendations) {
     public AnalysisResult {
         if (riskLevel == null) {
@@ -19,5 +26,6 @@ public record AnalysisResult(RiskLevel riskLevel, String findingsSummary, List<S
         recommendations = List.copyOf(recommendations);
     }
 
+    /** Ordinal review classification; it is not a calibrated numeric probability. */
     public enum RiskLevel { LOW, MEDIUM, HIGH }
 }

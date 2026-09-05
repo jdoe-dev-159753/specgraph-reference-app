@@ -7,11 +7,13 @@ import java.util.Objects;
  */
 public sealed interface OperatorContext permits OperatorContext.Authenticated, OperatorContext.Unauthenticated {
 
+    /** Context variant carrying the operator accountable for the current action. */
     record Authenticated(OperatorId operatorId) implements OperatorContext {
         public Authenticated {
             Objects.requireNonNull(operatorId, "operatorId");
         }
     }
 
+    /** Explicit absence of an authenticated operator; never represented by a nullable identity. */
     record Unauthenticated() implements OperatorContext {}
 }

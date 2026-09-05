@@ -16,6 +16,7 @@ public record AnalysisEvidenceReference(Kind kind, String evidenceIdentity) {
         }
     }
 
+    /** Evidence family used to resolve the identity against the supplied model envelope. */
     public enum Kind {
         ACTIVITY,
         SOURCE_RISK,
