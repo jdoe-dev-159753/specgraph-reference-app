@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Builds one reviewer artifact while preserving source files as the only maintained authority.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,12 +15,17 @@ mkdir -p "$OUTPUT_DIR"
 
 python3 -B -m unittest scripts/test_source_doc_coverage.py
 python3 -B scripts/source_doc_coverage.py
+python3 -B -m unittest scripts/test_maintained_source_docs.py
+python3 -B scripts/maintained_source_docs.py \
+  --html backend/target/source-reference/maintained-source/index.html
 
 if command -v mvn >/dev/null 2>&1; then
   mvn -B -q \
     -f backend/pom.xml \
+    -Psource-reference \
     "-Dsource.reference.directory=$OUTPUT_DIR" \
-    javadoc:javadoc
+    javadoc:javadoc@source-main-reference \
+    javadoc:test-javadoc@source-test-reference
 elif command -v docker >/dev/null 2>&1; then
   docker run --rm \
     -v "$ROOT:/workspace" \
@@ -27,16 +33,24 @@ elif command -v docker >/dev/null 2>&1; then
     "$MAVEN_IMAGE" \
     mvn -B -q \
       -f backend/pom.xml \
+      -Psource-reference \
       -Dsource.reference.directory=/workspace/backend/target/source-reference \
-      javadoc:javadoc
+      javadoc:javadoc@source-main-reference \
+      javadoc:test-javadoc@source-test-reference
 else
   echo 'Source-reference generation requires Maven 3.9+ or Docker.' >&2
   exit 1
 fi
 
+bash scripts/render-frontend-reference.sh backend/target/source-reference/frontend
 bash scripts/render-openapi-reference.sh backend/target/source-reference/http-api
 
-for required in "$OUTPUT_DIR/java/index.html" "$OUTPUT_DIR/http-api/index.html"; do
+for required in \
+  "$OUTPUT_DIR/java/main/index.html" \
+  "$OUTPUT_DIR/java/tests/index.html" \
+  "$OUTPUT_DIR/frontend/index.html" \
+  "$OUTPUT_DIR/maintained-source/index.html" \
+  "$OUTPUT_DIR/http-api/index.html"; do
   if [[ ! -s "$required" ]]; then
     echo "Missing generated documentation entry point: $required" >&2
     exit 1
@@ -56,7 +70,10 @@ cat > "$OUTPUT_DIR/index.html" <<'HTML'
     <h1>SpecGraph source reference</h1>
     <p>This generated view is derived from maintained source documentation and the repository-owned OpenAPI contract.</p>
     <ul>
-      <li><a href="java/index.html">Java implementation reference</a></li>
+      <li><a href="java/main/index.html">Java production implementation reference</a></li>
+      <li><a href="java/tests/index.html">Java verification-intent reference</a></li>
+      <li><a href="frontend/index.html">Browser and end-to-end implementation reference</a></li>
+      <li><a href="maintained-source/index.html">Scripts, migrations and executable-configuration reference</a></li>
       <li><a href="http-api/index.html">HTTP API reference</a></li>
     </ul>
   </main>

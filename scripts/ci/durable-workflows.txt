@@ -1,3 +1,4 @@
+# Lists workflow files whose removal would weaken repository delivery and review enforcement.
 application-ci.yml
 demo-images.yml
 plantuml-diagrams.yml
