@@ -25,7 +25,7 @@ printf 'local-key=%s projected-key=%s openai-key=%s bind=%s detectors=%s,%s,%s b
   "${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:-}" \
   "$*" >> "${R5_TEST_DOCKER_LOG}"
 if [[ "$*" == *"compose -p specgraph-r5"* \
-      && "$*" == *" up --build -d --wait"* \
+      && "$*" == *" up -d --wait --no-build --pull always"* \
       && "${R5_TEST_FAIL_COMPOSE:-false}" == "true" ]]; then
   exit 1
 elif [[ "$*" == *"compose -p specgraph-r5"* && "$*" == *" ps -q --all r5"* ]]; then
@@ -130,7 +130,7 @@ SPECGRAPH_LOCAL_MODEL=test-model \
 SPECGRAPH_LOCAL_API_KEY=test-only-key \
 bash "${script_dir}/r5-runtime-up.sh" > "${temp_dir}/stdout"
 
-up_line="$(grep -F ' up --build -d --wait' "${docker_log}")"
+up_line="$(grep -F ' up -d --wait --no-build --pull always' "${docker_log}")"
 if [[ "${up_line}" != "local-key= projected-key=present openai-key= bind=127.0.0.1 detectors=,, budget=4096,512,256 "* ]]; then
   echo "R5 launcher leaked an ambient provider credential or lost its deliberate projection" >&2
   exit 1
@@ -174,6 +174,15 @@ grep -Fq 'externalTransmission=false' "${temp_dir}/stdout"
 grep -Fq 'preflight=lmstudio-models+authenticated-session+seed-analysis+request-budget' "${temp_dir}/stdout"
 grep -Fq 'validatedCustomer=44444444-4444-4444-4444-444444444444' "${temp_dir}/stdout"
 
+: > "${docker_log}"
+PATH="${temp_dir}/bin:${PATH}" \
+R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \
+SPECGRAPH_LOCAL_BASE_URL=http://192.168.1.20:1234/v1 \
+SPECGRAPH_LOCAL_MODEL=test-model \
+R5_SOURCE_BUILD=true \
+bash "${script_dir}/r5-runtime-up.sh" > "${temp_dir}/source-build-stdout"
+grep -Fq ' up -d --wait --build' "${docker_log}"
+
 PATH="${temp_dir}/bin:${PATH}" \
 R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \
 SPECGRAPH_LOCAL_BASE_URL=http://192.168.1.20:1234/v1 \
@@ -192,6 +201,17 @@ bash "${script_dir}/r5-runtime-up.sh" > "${temp_dir}/wildcard-bind-stdout"
 grep -Fq 'url=http://127.0.0.1:8088/' "${temp_dir}/wildcard-bind-stdout"
 grep -Fq 'bindAddress=0.0.0.0' "${temp_dir}/wildcard-bind-stdout"
 
+: > "${curl_log}"
+PATH="${temp_dir}/bin:${PATH}" \
+R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \
+SPECGRAPH_LOCAL_BASE_URL=http://192.168.1.20:1234/v1 \
+SPECGRAPH_LOCAL_MODEL=test-model \
+R5_BIND_ADDRESS=:: \
+bash "${script_dir}/r5-runtime-up.sh" > "${temp_dir}/ipv6-wildcard-bind-stdout"
+grep -Fq 'url=http://[::1]:8088/' "${temp_dir}/ipv6-wildcard-bind-stdout"
+grep -Fq 'bindAddress=::' "${temp_dir}/ipv6-wildcard-bind-stdout"
+grep -F '/api/session' "${curl_log}" | grep -Fq 'http://[::1]:8088/api/session'
+
 : > "${docker_log}"
 if PATH="${temp_dir}/bin:${PATH}" \
   R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \
@@ -201,7 +221,7 @@ if PATH="${temp_dir}/bin:${PATH}" \
   echo "R5 launcher ignored a failed Compose startup" >&2
   exit 1
 fi
-grep -Fq ' up --build -d --wait' "${docker_log}"
+grep -Fq ' up -d --wait --no-build --pull always' "${docker_log}"
 grep -Fq ' down --remove-orphans' "${docker_log}"
 grep -Fq 'partial R5 stack has been stopped' "${temp_dir}/compose-failed-stderr"
 

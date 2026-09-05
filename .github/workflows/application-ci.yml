@@ -16,10 +16,14 @@ on:
       - 'compose.oci.yaml'
       - 'compose.r4.yaml'
       - 'compose.r5.yaml'
+      - 'compose.r5.ci.yaml'
       - 'scripts/r4-*.sh'
       - 'scripts/r5-*.sh'
       - 'scripts/test-r4-gallery.sh'
       - 'scripts/test-r5-runtime.sh'
+      - 'scripts/ci/lm-studio-contract-stub.py'
+      - 'e2e/r4-complete-flow.spec.ts'
+      - '.github/workflows/r5-release.yml'
       - 'scripts/analyze_dataset_ceiling.py'
       - 'scripts/test_analyze_dataset_ceiling.py'
       - 'scripts/validate_design_map.py'
@@ -34,10 +38,14 @@ on:
       - 'compose.oci.yaml'
       - 'compose.r4.yaml'
       - 'compose.r5.yaml'
+      - 'compose.r5.ci.yaml'
       - 'scripts/r4-*.sh'
       - 'scripts/r5-*.sh'
       - 'scripts/test-r4-gallery.sh'
       - 'scripts/test-r5-runtime.sh'
+      - 'scripts/ci/lm-studio-contract-stub.py'
+      - 'e2e/r4-complete-flow.spec.ts'
+      - '.github/workflows/r5-release.yml'
       - 'scripts/analyze_dataset_ceiling.py'
       - 'scripts/test_analyze_dataset_ceiling.py'
       - 'scripts/validate_design_map.py'
@@ -118,6 +126,8 @@ jobs:
           docker compose -f compose.oci.yaml config --quiet
           docker compose -f compose.r4.yaml config --quiet
           docker compose -f compose.r5.yaml config --quiet
+          R5_NETWORK_NAME=specgraph-r5-ci docker compose \
+            -f compose.r5.yaml -f compose.r5.ci.yaml config --quiet
           if OPENAI_API_KEY=must-not-enter-deterministic-r4 \
               docker compose -f compose.r4.yaml config | grep -Fq must-not-enter-deterministic-r4; then
             echo 'Raw deterministic R4 Compose configuration leaked the ambient OpenAI credential.' >&2

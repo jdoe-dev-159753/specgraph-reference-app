@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:0.8.6-pg17
+    image: "${PGVECTOR_IMAGE:-pgvector/pgvector:0.8.6-pg17}"
     environment:
       POSTGRES_DB: specgraph
       POSTGRES_USER: specgraph
@@ -13,14 +13,14 @@ services:
       start_period: 5s
 
   r5-cache-init:
-    image: alpine:3.22
+    image: "${ALPINE_IMAGE:-alpine:3.22}"
     command: ["sh", "-c", "chown -R 10001:10001 /cache"]
     volumes:
       - r5-embedding-cache:/cache
     restart: "no"
 
   r5:
-    image: "${APP_R5_IMAGE:-specgraph-reference-app:r5}"
+    image: "${APP_R5_IMAGE:-ghcr.io/jdoe-dev-159753/specgraph-reference-app:r5}"
     build:
       context: .
       dockerfile: docker/app.Dockerfile

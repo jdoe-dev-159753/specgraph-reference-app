@@ -27,66 +27,80 @@ The demo data is synthetic. Detector scores are reviewer signals for this bounde
 
 | What | Link |
 | --- | --- |
-| R4 baseline and Bayesian demo | [Run the R4 demo](#docker-quickstart) |
-| R4 implementation guide | [Open the reviewer guide](docs/reviewer/r4-gallery.md) |
-| R5 / J5 final product candidate | [Track R5 delivery](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/398) |
+| **R5 interview demonstrator** | [Run the full local-model demo](#docker-quickstart) |
+| R5 implementation guide | [Open the reviewer guide](docs/reviewer/r5-runtime.md) |
+| R4 comparison fallback | [Open the retained R4 gallery](docs/reviewer/r4-gallery.md) |
 | J5 immutable submission | [Track the final release](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/127) |
 
-R4 is the currently runnable product foundation. R5 is a capability-maturity target: remaining evidence and optional classical-ML work must be completed or explicitly excluded before it can be called delivered.
+R5 is the one full interview configuration: authenticated customer review, Bayesian + fuzzy + Random Forest Stage-1 evidence, PostgreSQL/pgvector grounding, and advisory synthesis by the local Ministral model in LM Studio. It is a dense one-week demonstrator, not a production AML platform.
 
 ## Docker quickstart
 
-Prerequisites: Docker with Compose 2.34+ and read access to the repository's private GHCR packages.
+Prerequisites: LM Studio on Windows, Docker Compose 2.34+ on `watch-infra-01`, and read access to the repository's private GHCR packages. In LM Studio, load `ministral-3-8b-instruct-2512`, enable **Serve on Local Network**, and open **Developer > Logs**.
+
+From `watch-infra-01`, copy and run this block. The first command proves the VPS-to-LM-Studio route before Docker starts anything:
 
 ```bash
 docker login ghcr.io -u jdoe-dev-159753
-docker compose -p customer-activity-demo \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo \
-  up -d --wait
+curl -fsS http://10.77.0.1:1234/v1/models
+export SPECGRAPH_LOCAL_BASE_URL=http://10.77.0.1:1234/v1
+export SPECGRAPH_LOCAL_MODEL=ministral-3-8b-instruct-2512
+export R5_BIND_ADDRESS=10.77.0.31
+export R5_PORT=8088
+docker compose -p specgraph-r5 \
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5 \
+  up -d --wait --no-build --pull always
+docker compose -p specgraph-r5 \
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5 ps
 ```
 
-The `:demo` tag advances only after remote-pull and browser verification; a failed publication leaves the previous accepted demo intact.
+If the VPS cannot route `10.77.0.1`, retry the route check with the LM Studio address reported by Windows, currently `169.254.123.79`, and use that same address in `SPECGRAPH_LOCAL_BASE_URL`. Do not continue until `/v1/models` returns the Ministral model.
 
-Open the two R4 configurations after startup:
-
-- [R4 baseline — http://localhost:8084/](http://localhost:8084/)
-- [R4 Bayesian — http://localhost:8085/](http://localhost:8085/)
-
-Replace `localhost` with the Docker host name or IP when Docker runs remotely. On the private demonstration host the usual addresses are `http://watch-infra-01:8084/` and `http://watch-infra-01:8085/`.
-
-Sign in with either repository-owned demo account:
+Open [http://10.77.0.31:8088/](http://10.77.0.31:8088/), then sign in with either repository-owned demo account:
 
 | Operator | Password |
 | --- | --- |
 | `operator-alpha` | `alpha-demo-2026` |
 | `operator-beta` | `beta-demo-2026` |
 
-Search for customer `44444444-4444-4444-4444-444444444444`, run an analysis, inspect its evidence and reload the page to confirm retained history. Use separate browser profiles when comparing both variants so their sessions remain isolated.
+Search for customer `44444444-4444-4444-4444-444444444444` and select **Run analysis**. LM Studio Developer Logs must show the OpenAI-compatible request; the browser must then show the generated analysis, all three detector artifacts, pgvector grounding, `backend: local`, the Ministral model identity, and `external transmission: no`. Reload the page to confirm retained history.
 
-To confirm the Bayesian variant, inspect the browser network response from `POST /api/customers/{customerId}/analyses`: `detectorProvenance` identifies `beta-binomial-review-elevation-v1`, while the baseline has no detector provenance.
-
-Stop and reset the demo with Docker Compose:
+Stop and reset the R5 demo with the same OCI Compose package:
 
 ```bash
-docker compose -p customer-activity-demo \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:demo \
+docker compose -p specgraph-r5 \
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5 \
   down -v
 ```
 
-If GHCR access is unavailable, the [R4 reviewer guide](docs/reviewer/r4-gallery.md) gives the Docker-only source-build commands for the same baseline and Bayesian comparison.
+From a repository checkout, `./scripts/r5-runtime-up.sh` is the stricter alternative: it invokes the same Compose topology, pulls the registered R5 image by default, and performs the model, login, analysis and provenance preflights before printing the reviewer URL. Set `R5_SOURCE_BUILD=true` only when deliberately rebuilding from source.
+
+## Screenshot fallback
+
+These unedited screenshots were promoted from successful browser-validation artifacts. They keep the interface and evidence story reviewable if the live model or network is unavailable during the interview.
+
+### R4 deterministic baseline
+
+![Authenticated R4 baseline with pgvector grounding and retained analysis](docs/reviewer/screenshots/R4_baseline_customer_444.png)
+
+### R4 Bayesian detector
+
+![Authenticated R4 Bayesian variant with pgvector grounding and retained analysis](docs/reviewer/screenshots/R4_bayesian_customer_444.png)
+
+The R5 workflow publishes the equivalent full composite + LM Studio-compatible screenshot artifact; its exact image is promoted here unchanged after that run succeeds.
 
 ## What the reviewer is seeing
 
 The application keeps four authorities distinct:
 
 1. persisted CARD, PAYMENT and CRYPTO activity plus source risk assessments;
-2. optional detector evidence, with no-op baseline and Bayesian configuration demonstrated side by side;
+2. three separately retained detector artifacts from Bayesian, fuzzy and Random Forest mechanisms;
 3. relevant policy evidence retrieved from PostgreSQL/pgvector with local MiniLM embeddings;
 4. structured advisory synthesis, selected explicitly as deterministic, local LM Studio or external OpenAI.
 
 Only bounded, citable evidence crosses the model boundary. The deterministic backend is the no-credential default; provider credentials configure an adapter but never select it implicitly.
 
-Local LM Studio is an explicit opt-in through `SPECGRAPH_ANALYSIS_BACKEND=local`; its base URL must use a loopback, private, link-local or ULA IP literal rather than a hostname. From a Linux VPS, use the Windows LAN IP because loopback is valid only when the application and LM Studio share a host. The [R4 reviewer guide](docs/reviewer/r4-gallery.md) owns the Docker-only launch details.
+LM Studio is selected explicitly through `SPECGRAPH_ANALYSIS_BACKEND=local`; its base URL must use a loopback, private, link-local or ULA IP literal rather than a hostname. The R5 Compose package fixes the detector selection and local-model backend while keeping generated output advisory.
 
 ![Hexagonal architecture, ports and adapters](docs/assignment/SDD/diagrams/hexagonal-architecture.svg)
 
@@ -94,12 +108,14 @@ The runtime is one modular monolith with hexagonal boundaries. HTTP/UI, relation
 
 ## Evidence
 
-- [R4 gallery and copy/paste Docker commands](docs/reviewer/r4-gallery.md)
+- [R5 copy/paste Docker commands and evidence boundaries](docs/reviewer/r5-runtime.md)
+- [R4 fallback gallery](docs/reviewer/r4-gallery.md)
 - [Authentic screenshot provenance](docs/reviewer/screenshot-manifest.md)
 - [Architecture figures and controlled sources](docs/reviewer/architecture-figures.md)
 - [Application CI runs](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
 - [Published-image and remote-pull proof](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
 - [Configuration-sensitive R4 browser evidence](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r4-gallery-ci.yml)
+- [R5 registered image and browser evidence](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r5-release.yml)
 
 ## Engineering documents
 

@@ -13,6 +13,7 @@ preflight_timeout="${R5_PREFLIGHT_TIMEOUT_SECONDS:-10}"
 context_window_tokens="${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-4096}"
 max_output_tokens="${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:-512}"
 transport_margin_tokens="${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:-256}"
+source_build="${R5_SOURCE_BUILD:-false}"
 project="specgraph-r5"
 compose=(docker compose -p "${project}" -f "${repo_root}/compose.r5.yaml")
 temp_dir=""
@@ -71,6 +72,10 @@ if [[ ! "${transport_margin_tokens}" =~ ^[0-9]+$ ]]; then
   echo "SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS must be a non-negative integer" >&2
   exit 2
 fi
+if [[ "${source_build}" != "true" && "${source_build}" != "false" ]]; then
+  echo "R5_SOURCE_BUILD must be true or false" >&2
+  exit 2
+fi
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker with the Compose plugin is required on the runtime host" >&2
   exit 2
@@ -93,7 +98,13 @@ export SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS="${context_window_tokens}"
 export SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS="${max_output_tokens}"
 export SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS="${transport_margin_tokens}"
 export OPENAI_API_KEY=""
-if ! "${compose[@]}" up --build -d --wait; then
+startup=(up -d --wait)
+if [[ "${source_build}" == "true" ]]; then
+  startup+=(--build)
+else
+  startup+=(--no-build --pull always)
+fi
+if ! "${compose[@]}" "${startup[@]}"; then
   echo "R5 Compose startup failed; the partial R5 stack has been stopped" >&2
   cleanup_failed_start
   exit 1
@@ -127,6 +138,11 @@ cookie_jar="${temp_dir}/cookies.txt"
 app_probe_host="${R5_APP_PROBE_HOST:-${bind_address}}"
 if [[ "${app_probe_host}" == "0.0.0.0" ]]; then
   app_probe_host="127.0.0.1"
+elif [[ "${app_probe_host}" == "::" || "${app_probe_host}" == "[::]" ]]; then
+  app_probe_host="::1"
+fi
+if [[ "${app_probe_host}" == *:* && "${app_probe_host}" != \[*\] ]]; then
+  app_probe_host="[${app_probe_host}]"
 fi
 app_url="http://${app_probe_host}:${port}"
 if ! session_json="$(curl --silent --show-error --fail \

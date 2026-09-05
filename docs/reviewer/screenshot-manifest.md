@@ -27,26 +27,26 @@ The artifact has been re-downloaded during the reviewer-gallery preparation rath
 
 This artifact has also been re-downloaded during reviewer-gallery preparation.
 
-## New configuration-sensitive R4 captures
+## Promoted configuration-sensitive R4 captures
 
-PR #255 introduces `r4-gallery-ci`. Each variant runs the complete browser proof against its own PostgreSQL/pgvector topology and asserts the advertised detector/retrieval/model provenance **before** taking the screenshot.
+`r4-gallery-ci` run `33783606658` completed successfully from source SHA `08dc7a81c920d9908fb83807292c27f55b3f6568`. Each variant ran the complete browser proof against its own PostgreSQL/pgvector topology and asserted the advertised detector/retrieval/model provenance **before** taking the screenshot.
 
-Expected artifacts for each exact PR head:
+- baseline artifact id `9904939931`, digest `sha256:d5c863d47557bc10aeddca73f2cd4830f4be7a06e42629fa129c76bd2452a81b`;
+- Bayesian artifact id `9905134533`, digest `sha256:50d0e84ddbbfc9be5ada38d6f7e4f2bfdcf19dccea13731fd8301425cebb11e3`.
 
-- `r4-gallery-baseline-<sha>`: no Stage-1 detector evidence; pgvector + `all-MiniLM-L6-v2`; deterministic Stage 3; no external transmission;
-- `r4-gallery-bayesian-<sha>`: `beta-binomial-review-elevation-v1` evidence and `DETECTOR_SIGNAL` reference; same pgvector/MiniLM grounding; deterministic Stage 3; no external transmission.
+The artifacts were re-downloaded and their exact PNG payloads promoted unchanged:
 
-After a green run, download both artifacts, extract the exact PNG produced by Playwright and promote it unchanged into:
+- `docs/reviewer/screenshots/R4_baseline_customer_444.png`, PNG SHA-256 `badfab38f6f3e6561875b1e5d1636bac7d7a264f5fea2e4e44b833011a4402f1`;
+- `docs/reviewer/screenshots/R4_bayesian_customer_444.png`, PNG SHA-256 `beaec890414350b10fc68ea1fb29fc158aa3f31bc6bf3010f72002d8802fa148`.
 
-```text
-docs/reviewer/screenshots/
-  R1_customer_111.png
-  R2_customer_222.png
-  R3_customer_333.png
-  R4_baseline_customer_444.png
-  R4_bayesian_customer_444.png
-```
+The baseline has no Stage-1 detector evidence; the Bayesian capture retains `beta-binomial-review-elevation-v1`. Both prove pgvector + `all-MiniLM-L6-v2`, deterministic Stage 3 and no external transmission.
+
+## R5 full-composite capture
+
+`r5-release` first proves the exact source with an authenticated browser flow, the three ordered Stage-1 artifacts, pgvector grounding, local/OpenAI-compatible Stage 3, retained history and the captured model-boundary request. It then uploads `r5-lmstudio-ensemble-<sha>-run-<run>-attempt-<attempt>` and publishes the same exact-head application and Compose candidate to GHCR.
+
+The workflow endpoint is a deterministic LM Studio contract double. The separate WatchInfra rehearsal supplies the actual LM Studio hardware/log proof. After the first successful R5 run, the workflow PNG is promoted unchanged into `docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png`, and its run, source SHA, artifact digest and PNG digest are recorded here before the README embeds it.
 
 Record the successful workflow run, exact source SHA and artifact digest beside each promoted image. The root README embeds screenshots only after those files are repository-owned. Do not link ephemeral sandbox paths or expiring Actions download URLs.
 
-Later local-model / Composite-ensemble variants follow the same rule: configuration-sensitive Playwright assertions first, screenshot artifact second, repository promotion last.
+The promotion rule remains: configuration-sensitive Playwright assertions first, screenshot artifact second, repository promotion last.

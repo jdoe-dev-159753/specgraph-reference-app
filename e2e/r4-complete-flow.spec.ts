@@ -1,8 +1,28 @@
 import { expect, test, type Locator } from '@playwright/test'
+import { writeFile } from 'node:fs/promises'
 
 const seededCustomer = '44444444-4444-4444-4444-444444444444'
-const expectedDetector = process.env.EXPECT_DETECTOR ?? 'none'
+const expectedDetectorSelection = process.env.EXPECT_DETECTORS ?? process.env.EXPECT_DETECTOR ?? 'none'
+const expectedDetectors = expectedDetectorSelection === 'none'
+  ? []
+  : expectedDetectorSelection.split(',').map(value => value.trim()).filter(Boolean)
+const expectedModelBackend = process.env.EXPECT_MODEL_BACKEND ?? 'deterministic'
+const expectedModelIdentity = process.env.EXPECT_MODEL_IDENTITY ?? 'r3-offline-baseline-v1'
+const expectedPromptIdentity = process.env.EXPECT_PROMPT_IDENTITY ?? 'grounded-analysis-v1'
+const expectedExternalTransmission = process.env.EXPECT_EXTERNAL_TRANSMISSION ?? 'false'
 const evidenceName = process.env.EVIDENCE_NAME ?? 'r4-complete-flow'
+
+const detectorContracts: Record<string, { signalIdentity: string, library?: string }> = {
+  'beta-binomial-review-elevation-v1': {
+    signalIdentity: 'posterior-review-elevation-rate',
+    library: 'apache-commons-math3-3.6.1',
+  },
+  'graded-review-fuzzy-v1': { signalIdentity: 'fuzzy-review-elevation' },
+  'random-forest-review-v1': {
+    signalIdentity: 'random-forest-review-elevation-vote',
+    library: 'tribuo-4.3.2',
+  },
+}
 
 type EvidenceReference = {
   kind: 'ACTIVITY' | 'SOURCE_RISK' | 'DETECTOR_SIGNAL' | 'POLICY_RETRIEVAL'
@@ -63,9 +83,9 @@ async function loadCustomer(page: import('@playwright/test').Page) {
 }
 
 async function annotateReviewerEvidence(page: import('@playwright/test').Page, completed: Analysis) {
-  const detectorLabel = expectedDetector === 'none'
+  const detectorLabel = expectedDetectors.length === 0
     ? 'Stage 1: no-op baseline'
-    : `Stage 1: ${expectedDetector}`
+    : `Stage 1: ${expectedDetectors.join(' + ')}`
   const modelLabel = `Stage 3: ${completed.modelProvenance.backendIdentity} / ${completed.modelProvenance.modelIdentity}`
 
   await page.evaluate(({ detectorLabel, modelLabel }) => {
@@ -159,15 +179,22 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DET
   expect(completed.findingsSummary.trim()).not.toBe('')
   expect(completed.recommendations.length).toBeGreaterThan(0)
 
-  if (expectedDetector === 'none') {
+  if (expectedDetectors.length === 0) {
     expect(completed.detectorProvenance).toEqual([])
   } else {
-    const detector = completed.detectorProvenance.find(item => item.detectorIdentity === expectedDetector)
-    expect(detector).toBeDefined()
-    expect(detector?.signalIdentity).toBe('posterior-review-elevation-rate')
-    expect(detector?.score).toBeGreaterThanOrEqual(0)
-    expect(detector?.score).toBeLessThanOrEqual(1)
-    expect(detector?.provenance.library).toBe('apache-commons-math3-3.6.1')
+    expect(completed.detectorProvenance.map(item => item.detectorIdentity)).toEqual(expectedDetectors)
+    for (const detector of completed.detectorProvenance) {
+      const contract = detectorContracts[detector.detectorIdentity]
+      if (contract === undefined) {
+        throw new Error(`unknown detector contract ${detector.detectorIdentity}`)
+      }
+      expect(detector.signalIdentity).toBe(contract.signalIdentity)
+      expect(detector.score).toBeGreaterThanOrEqual(0)
+      expect(detector.score).toBeLessThanOrEqual(1)
+      if (contract.library !== undefined) {
+        expect(detector.provenance.library).toBe(contract.library)
+      }
+    }
   }
 
   expect(completed.evidenceProvenance.length).toBeGreaterThan(0)
@@ -179,16 +206,16 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DET
   }
 
   expect(completed.modelProvenance).toMatchObject({
-    backendIdentity: 'deterministic',
-    modelIdentity: 'r3-offline-baseline-v1',
-    promptIdentity: 'grounded-analysis-v1',
-    metadata: { externalTransmission: 'false' },
+    backendIdentity: expectedModelBackend,
+    modelIdentity: expectedModelIdentity,
+    promptIdentity: expectedPromptIdentity,
+    metadata: { externalTransmission: expectedExternalTransmission },
   })
   const referenceKinds = new Set(completed.modelProvenance.evidenceReferences.map(reference => reference.kind))
   expect(referenceKinds).toContain('ACTIVITY')
   expect(referenceKinds).toContain('SOURCE_RISK')
   expect(referenceKinds).toContain('POLICY_RETRIEVAL')
-  if (expectedDetector === 'none') {
+  if (expectedDetectors.length === 0) {
     expect(referenceKinds).not.toContain('DETECTOR_SIGNAL')
   } else {
     expect(referenceKinds).toContain('DETECTOR_SIGNAL')
@@ -224,15 +251,67 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DET
   const reloaded = history.find(entry => entry.analysisId === completed.analysisId)
   expect(reloaded).toBeDefined()
   expect(reloaded?.operatorId).toBe('operator-alpha')
-  expect(reloaded?.modelProvenance.backendIdentity).toBe('deterministic')
+  expect(reloaded?.modelProvenance.backendIdentity).toBe(expectedModelBackend)
   expect(reloaded?.evidenceProvenance.some(evidence => evidence.retrievalMetadata.adapter === 'pgvector')).toBe(true)
-  if (expectedDetector !== 'none') {
-    expect(reloaded?.detectorProvenance.some(item => item.detectorIdentity === expectedDetector)).toBe(true)
+  if (expectedDetectors.length > 0) {
+    expect(reloaded?.detectorProvenance.map(item => item.detectorIdentity)).toEqual(expectedDetectors)
   }
 
   const reloadedEntry = page.getByTestId(`analysis-history-${completed.analysisId}`)
   await expect(reloadedEntry).toBeVisible()
   await expectRenderedProvenance(reloadedEntry, reloaded as Analysis)
+})
+
+test('records the full-composite detector scores against the crafted scenario order', async ({ page }, testInfo) => {
+  test.skip(expectedDetectors.length !== 3, 'R5 full-composite evidence only')
+
+  await page.goto('/')
+  await signIn(page)
+  const sessionResponse = await page.request.get('/api/session')
+  expect(sessionResponse.status()).toBe(200)
+  const session = await sessionResponse.json() as { csrf: { token: string } }
+  const scenarios = [
+    { name: 'ordinary', customerId: '22222222-2222-2222-2222-222222222222' },
+    { name: 'mixed-seed', customerId: '11111111-1111-1111-1111-111111111111' },
+    { name: 'growing-cross-border', customerId: '33333333-3333-3333-3333-333333333333' },
+    { name: 'dense-mixed-risk', customerId: seededCustomer },
+  ]
+  const comparison: Array<{
+    oracleRank: number
+    scenario: string
+    customerId: string
+    scores: Record<string, number>
+  }> = []
+
+  for (const [oracleRank, scenario] of scenarios.entries()) {
+    const response = await page.request.post(`/api/customers/${scenario.customerId}/analyses`, {
+      headers: { 'X-CSRF-TOKEN': session.csrf.token },
+    })
+    expect(response.status()).toBe(201)
+    const analysis = await response.json() as Analysis
+    expect(analysis.detectorProvenance.map(item => item.detectorIdentity)).toEqual(expectedDetectors)
+    comparison.push({
+      oracleRank,
+      scenario: scenario.name,
+      customerId: scenario.customerId,
+      scores: Object.fromEntries(analysis.detectorProvenance.map(item => [item.detectorIdentity, item.score])),
+    })
+  }
+
+  const bayesian = comparison.map(row => row.scores['beta-binomial-review-elevation-v1'])
+  expect(bayesian[0]).toBeLessThan(bayesian[1])
+  expect(bayesian[1]).toBeLessThan(bayesian[2])
+  expect(bayesian[2]).toBeLessThan(bayesian[3])
+  const fuzzy = comparison.map(row => row.scores['graded-review-fuzzy-v1'])
+  expect(fuzzy.slice(1).every(score => score > fuzzy[0])).toBe(true)
+  const forest = comparison.map(row => row.scores['random-forest-review-v1'])
+  expect(forest[3]).toBeGreaterThan(forest[0])
+
+  await writeFile(
+    testInfo.outputPath('detector-scenario-scores.json'),
+    `${JSON.stringify({ semantics: 'diagnostic-only; heterogeneous scores are not calibrated probabilities', comparison }, null, 2)}\n`,
+    'utf8',
+  )
 })
 
 test('renders local Stage-3 provenance as retained internal execution without conflating detector or grounding evidence', async ({ page }) => {
