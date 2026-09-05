@@ -14,6 +14,7 @@ estimated_schema_tokens="${10:-not-evaluated-by-status}"
 estimated_input_tokens="${11:-not-evaluated-by-status}"
 estimated_total_tokens="${12:-not-evaluated-by-status}"
 token_estimator="${13:-not-evaluated-by-status}"
+publish_address="${14:-127.0.0.1}"
 
 if [[ ! "${port}" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
   echo "port must be an integer in 1..65535" >&2
@@ -37,6 +38,14 @@ for identity in "${model}" "${prompt_identity}" "${runtime_identity}" "${token_e
     exit 2
   fi
 done
+if [[ -z "${publish_address}" || "${publish_address}" == *[[:space:]/]* ]]; then
+  echo "publish address must be a non-empty host address without whitespace or '/'" >&2
+  exit 2
+fi
+url_host="${publish_address}"
+if [[ "${url_host}" == *:* && "${url_host}" != \[*\] ]]; then
+  url_host="[${url_host}]"
+fi
 if [[ "${estimated_total_tokens}" != "not-evaluated-by-status" ]]; then
   for estimate in "${estimated_system_tokens}" "${estimated_user_tokens}" \
       "${estimated_schema_tokens}" "${estimated_input_tokens}" "${estimated_total_tokens}"; do
@@ -61,7 +70,8 @@ fi
 
 cat <<EOF
 R5 runtime ready
-url=http://localhost:${port}/
+url=http://${url_host}:${port}/
+bindAddress=${publish_address}
 port=${port}
 ring=R5
 composeProject=specgraph-r5

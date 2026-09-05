@@ -47,7 +47,7 @@ elif [[ "$*" == *"inspect --format {{range .Config.Env}}{{println .}}{{end}} r5-
   printf 'SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS=%s\n' "${R5_TEST_MAX_OUTPUT_TOKENS:-512}"
   printf 'SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS=%s\n' "${R5_TEST_TRANSPORT_MARGIN_TOKENS:-256}"
 elif [[ "$*" == *"port r5-container 8080/tcp"* ]]; then
-  printf '127.0.0.1:%s\n' "${R5_TEST_PORT:-8088}"
+  printf '%s:%s\n' "${R5_TEST_PUBLISHED_ADDRESS:-127.0.0.1}" "${R5_TEST_PORT:-8088}"
 fi
 EOF
 
@@ -154,6 +154,8 @@ grep -F '/api/customers/44444444-4444-4444-4444-444444444444/analyses' "${curl_l
 grep -F '/api/customers/44444444-4444-4444-4444-444444444444/analyses' "${curl_log}" \
   | grep -Fq -- 'X-CSRF-TOKEN: analysis-csrf'
 grep -Fq 'stage1Detectors=BAYESIAN,FUZZY,RANDOM_FOREST' "${temp_dir}/stdout"
+grep -Fq 'url=http://127.0.0.1:8088/' "${temp_dir}/stdout"
+grep -Fq 'bindAddress=127.0.0.1' "${temp_dir}/stdout"
 grep -Fq 'stage1Semantics=not-a-calibrated-fused-probability' "${temp_dir}/stdout"
 grep -Fq 'stage3Backend=local' "${temp_dir}/stdout"
 grep -Fq 'stage3Runtime=lmstudio/llama.cpp' "${temp_dir}/stdout"
@@ -171,6 +173,15 @@ grep -Fq 'request.tokenEstimator=cl100k-plus-25-percent' "${temp_dir}/stdout"
 grep -Fq 'externalTransmission=false' "${temp_dir}/stdout"
 grep -Fq 'preflight=lmstudio-models+authenticated-session+seed-analysis+request-budget' "${temp_dir}/stdout"
 grep -Fq 'validatedCustomer=44444444-4444-4444-4444-444444444444' "${temp_dir}/stdout"
+
+PATH="${temp_dir}/bin:${PATH}" \
+R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \
+SPECGRAPH_LOCAL_BASE_URL=http://192.168.1.20:1234/v1 \
+SPECGRAPH_LOCAL_MODEL=test-model \
+R5_BIND_ADDRESS=192.168.1.44 \
+bash "${script_dir}/r5-runtime-up.sh" > "${temp_dir}/private-bind-stdout"
+grep -Fq 'url=http://192.168.1.44:8088/' "${temp_dir}/private-bind-stdout"
+grep -Fq 'bindAddress=192.168.1.44' "${temp_dir}/private-bind-stdout"
 
 : > "${docker_log}"
 if PATH="${temp_dir}/bin:${PATH}" \
@@ -257,6 +268,7 @@ R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \
 R5_TEST_CONTAINER=r5-container \
 bash "${script_dir}/r5-runtime-status.sh" > "${temp_dir}/healthy-status"
 grep -Fq 'R5 runtime ready' "${temp_dir}/healthy-status"
+grep -Fq 'url=http://127.0.0.1:8088/' "${temp_dir}/healthy-status"
 grep -Fq 'runtimeState=healthy' "${temp_dir}/healthy-status"
 grep -Fq 'stage3Model=test-model' "${temp_dir}/healthy-status"
 grep -Fq 'sessionCookieName=specgraph-r5_session' "${temp_dir}/healthy-status"
@@ -272,6 +284,13 @@ if grep -Fq 'test-only-key' "${curl_log}"; then
   echo "R5 status exposed the LM Studio token in curl argv" >&2
   exit 1
 fi
+
+PATH="${temp_dir}/bin:${PATH}" \
+R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \
+R5_TEST_CONTAINER=r5-container R5_TEST_PUBLISHED_ADDRESS=192.168.1.44 \
+bash "${script_dir}/r5-runtime-status.sh" > "${temp_dir}/private-bind-status"
+grep -Fq 'url=http://192.168.1.44:8088/' "${temp_dir}/private-bind-status"
+grep -Fq 'bindAddress=192.168.1.44' "${temp_dir}/private-bind-status"
 
 if PATH="${temp_dir}/bin:${PATH}" \
   R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \

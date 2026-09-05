@@ -121,11 +121,13 @@ if [[ "${models_json_compact}" != *"\"id\":\"${runtime_model}\""* ]]; then
 fi
 
 port="${published_endpoint##*:}"
+publish_address="${published_endpoint%:*}"
 model="${runtime_model:-${model}}"
 bash "${script_dir}/r5-runtime-manifest.sh" \
   "${port}" "${model}" "not-evaluated-by-status" "not-evaluated-by-status" \
   "${context_window_tokens}" "${max_output_tokens}" "${transport_margin_tokens}" \
   "not-evaluated-by-status" "not-evaluated-by-status" "not-evaluated-by-status" \
-  "not-evaluated-by-status" "not-evaluated-by-status" "not-evaluated-by-status"
+  "not-evaluated-by-status" "not-evaluated-by-status" "not-evaluated-by-status" \
+  "${publish_address}"
 printf 'lmStudioState=ready\n'
 printf 'runtimeState=healthy\n'

@@ -254,7 +254,8 @@ bash "${script_dir}/r5-runtime-manifest.sh" \
   "${port}" "${response_model}" "${response_prompt}" "${response_runtime}" \
   "${context_window_tokens}" "${max_output_tokens}" "${transport_margin_tokens}" \
   "${estimated_system_tokens}" "${estimated_user_tokens}" "${estimated_schema_tokens}" \
-  "${estimated_input_tokens}" "${estimated_total_tokens}" "${response_token_estimator}"
+  "${estimated_input_tokens}" "${estimated_total_tokens}" "${response_token_estimator}" \
+  "${bind_address}"
 printf 'preflight=lmstudio-models+authenticated-session+seed-analysis+request-budget\n'
 printf 'validatedCustomer=%s\n' "${customer_id}"
 stack_requires_cleanup=false
