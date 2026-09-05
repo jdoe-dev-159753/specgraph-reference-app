@@ -33,6 +33,14 @@ if [[ "${backend}" == "local" && -z "${SPECGRAPH_LOCAL_BASE_URL:-}" ]]; then
 fi
 
 project="specgraph-r4-${variant}"
+session_cookie_name="${project}_session"
+
+# Keep the browser-visible identifier in a deliberately small cookie-token
+# subset and bound its length before Compose receives it.
+if [[ ! "${session_cookie_name}" =~ ^[a-zA-Z][a-zA-Z0-9_-]{0,63}$ ]]; then
+  echo "derived session cookie name '${session_cookie_name}' is not a safe 1..64 character cookie name" >&2
+  exit 2
+fi
 
 # A credential supplied for an external gallery variant must not leak into the
 # deterministic baseline container through the parent shell environment.
@@ -51,6 +59,7 @@ if [[ "${backend}" == "local" ]]; then
 fi
 
 R4_PORT="${port}" \
+R4_SESSION_COOKIE_NAME="${session_cookie_name}" \
 SPECGRAPH_ANALYSIS_BACKEND="${backend}" \
 OPENAI_API_KEY="" \
 SPECGRAPH_OPENAI_API_KEY="${compose_openai_api_key}" \
@@ -59,6 +68,10 @@ SPECGRAPH_LOCAL_MODEL="${compose_local_model}" \
 SPECGRAPH_LOCAL_API_KEY="" \
 SPECGRAPH_PROJECTED_LOCAL_API_KEY="${compose_local_api_key}" \
 SPECGRAPH_LOCAL_TIMEOUT="${SPECGRAPH_LOCAL_TIMEOUT:-60s}" \
+SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS="${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-4096}" \
+SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS="${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:-512}" \
+SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS="${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:-256}" \
 docker compose -p "${project}" -f "${repo_root}/compose.r4.yaml" up --build -d --wait
 
-bash "${script_dir}/r4-variant-manifest.sh" "${variant}" "${port}" "${backend}"
+bash "${script_dir}/r4-variant-manifest.sh" \
+  "${variant}" "${port}" "${backend}" "${session_cookie_name}"

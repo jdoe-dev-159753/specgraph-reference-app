@@ -1,0 +1,9 @@
+networks:
+  default:
+    external: true
+    name: "${R5_NETWORK_NAME}"
+
+volumes:
+  r5-embedding-cache:
+    external: true
+    name: specgraph-r5-ci-embedding-cache
