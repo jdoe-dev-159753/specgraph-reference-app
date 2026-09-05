@@ -28,6 +28,10 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
     private static final double BASELINE_CONSEQUENT = 0.05;
     private static final double ELEVATION_CONSEQUENT = 1.0;
 
+    /**
+     * Evaluates the complete snapshot against the versioned fuzzy surface and records every input
+     * ratio and rule activation needed to explain the bounded score.
+     */
     @Override
     public List<RiskSignalEvidence> detect(CustomerSnapshot snapshot) {
         int observations = snapshot.activities().size();
@@ -108,6 +112,7 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
         return denominator == 0 ? 0.0 : (double) numerator / denominator;
     }
 
+    /** Maps a feature onto a monotonic linear membership between its inactive and saturated bounds. */
     private static double rising(double value, double low, double high) {
         if (value <= low) {
             return 0.0;

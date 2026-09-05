@@ -20,6 +20,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * HTTP adapter for bounded customer activity and source-risk review.
+ * Invalid filters remain client errors, while data-adapter failures become a bounded problem that
+ * does not disclose persistence exception details.
+ */
 @RestController
 @RequestMapping("/api/customers")
 final class CustomerReviewHttpAdapter {
@@ -29,6 +34,7 @@ final class CustomerReviewHttpAdapter {
         this.customerReview = customerReview;
     }
 
+    /** Separates bad filters, absent customers, and unavailable data without leaking adapter details. */
     @GetMapping("/{customerId}")
     ResponseEntity<CustomerSnapshotResponse> customer(
             @PathVariable UUID customerId,
@@ -68,12 +74,14 @@ final class CustomerReviewHttpAdapter {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problem);
     }
 
+    /** Internal marker used to prevent raw data-adapter failures from crossing the HTTP boundary. */
     private static final class CustomerDataFailureException extends RuntimeException {
         private CustomerDataFailureException(RuntimeException cause) {
             super("Customer data could not be loaded", cause);
         }
     }
 
+    /** Transport page whose totals describe the complete filtered result, not only returned rows. */
     record CustomerSnapshotResponse(
             UUID customerId,
             List<ActivityResponse> activities,
@@ -85,6 +93,7 @@ final class CustomerReviewHttpAdapter {
             long totalPages,
             boolean hasPrevious,
             boolean hasNext) {
+        /** Preserves filtered totals while projecting only current-page activities and evidence. */
         static CustomerSnapshotResponse from(CustomerReviewPage reviewPage) {
             return new CustomerSnapshotResponse(
                     reviewPage.customerId(),
@@ -100,6 +109,7 @@ final class CustomerReviewHttpAdapter {
         }
     }
 
+    /** HTTP activity projection that serializes money exactly as a decimal string. */
     record ActivityResponse(
             UUID transactionId,
             Activity.ActivityType type,

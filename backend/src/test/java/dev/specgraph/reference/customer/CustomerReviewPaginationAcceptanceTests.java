@@ -18,6 +18,10 @@ import org.springframework.test.web.servlet.MockMvc;
 @Tag("VFY-CUSTOMER-READ-001")
 @SpringBootTest(classes = ReferenceApplication.class)
 @AutoConfigureMockMvc
+/**
+ * HTTP acceptance evidence for backward-compatible defaults, bounded paging/filtering and invalid bounds.
+ * Real PostgreSQL is used so filtering is proven at the deployed relational boundary.
+ */
 final class CustomerReviewPaginationAcceptanceTests extends PostgresIntegrationTestSupport {
     private static final UUID SEEDED_CUSTOMER_ID =
             UUID.fromString("11111111-1111-1111-1111-111111111111");

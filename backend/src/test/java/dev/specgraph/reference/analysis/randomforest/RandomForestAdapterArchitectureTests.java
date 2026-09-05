@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("architecture")
+/** Proves ML/statistics library types and offline training remain outside application contracts. */
 final class RandomForestAdapterArchitectureTests {
     @Test
     void externalLibraryTypesAndOfflineTrainingStayInsideAdapters() throws IOException {

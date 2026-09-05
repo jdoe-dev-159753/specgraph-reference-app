@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/** Verifies lazy Strategy resolution and explicit failure for absent or unavailable Stage-3 leaves. */
 final class AnalysisBackendFactoryTests {
 
     @Test

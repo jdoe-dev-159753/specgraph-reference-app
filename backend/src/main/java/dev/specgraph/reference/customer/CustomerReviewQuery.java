@@ -19,6 +19,7 @@ public record CustomerReviewQuery(
     public static final int DEFAULT_PAGE_SIZE = 50;
     public static final int MAX_PAGE_SIZE = 200;
 
+    /** Normalizes optional status and rejects bounds that cannot be represented by adapters. */
     public CustomerReviewQuery {
         if (page < 0) {
             throw new IllegalArgumentException("page must be >= 0");

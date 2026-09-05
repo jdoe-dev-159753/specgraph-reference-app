@@ -10,6 +10,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
+/**
+ * Fixed in-memory customer fixture implementing the same complete-snapshot and bounded-review ports
+ * as relational storage. It supports offline acceptance only and never fabricates unknown customers.
+ */
 @Component
 class SyntheticActivityAdapter implements CustomerActivityPort, CustomerReviewQueryPort {
     static final UUID SEEDED_CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -46,6 +50,7 @@ class SyntheticActivityAdapter implements CustomerActivityPort, CustomerReviewQu
         return SEEDED_CUSTOMER_ID.equals(customerId) ? Optional.of(seeded) : Optional.empty();
     }
 
+    /** Applies the same filter/page/evidence semantics as the durable adapter to the fixed fixture. */
     @Override
     public Optional<CustomerReviewPage> loadReviewPage(UUID customerId, CustomerReviewQuery query) {
         if (!SEEDED_CUSTOMER_ID.equals(customerId)) {
@@ -86,6 +91,7 @@ class SyntheticActivityAdapter implements CustomerActivityPort, CustomerReviewQu
                 totalRiskEvidence));
     }
 
+    /** Uses a half-open upper timestamp bound to match the database review query contract. */
     private static boolean matches(Activity activity, CustomerReviewQuery query) {
         if (query.activityType() != null && activity.type() != query.activityType()) {
             return false;

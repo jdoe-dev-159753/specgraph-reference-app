@@ -48,6 +48,7 @@ public record RandomForestModelManifest(
             "score-semantics",
             "limitation");
 
+    /** Establishes the immutable hyperparameter, schema, label, and provenance trust contract. */
     public RandomForestModelManifest {
         modelVersion = requireText(modelVersion, "modelVersion");
         artifactSha256 = requireSha256(artifactSha256, "artifactSha256");
@@ -74,6 +75,7 @@ public record RandomForestModelManifest(
         }
     }
 
+    /** Parses the exact ordered-key manifest format and rejects ambiguous encodings or omissions. */
     static RandomForestModelManifest fromCanonicalProperties(byte[] bytes) {
         Objects.requireNonNull(bytes, "bytes");
         String content = decodeUtf8(bytes);
@@ -123,6 +125,7 @@ public record RandomForestModelManifest(
         }
     }
 
+    /** Emits stable LF-terminated UTF-8 bytes suitable for reproducible hashing. */
     byte[] toCanonicalProperties() {
         Map<String, String> values = new LinkedHashMap<>();
         values.put("format-version", FORMAT_VERSION);
@@ -147,6 +150,7 @@ public record RandomForestModelManifest(
         return canonical.toString().getBytes(StandardCharsets.UTF_8);
     }
 
+    /** Decodes without replacing malformed input so a changed artifact cannot be normalized silently. */
     private static String decodeUtf8(byte[] bytes) {
         try {
             return StandardCharsets.UTF_8

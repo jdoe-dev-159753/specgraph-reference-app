@@ -29,6 +29,9 @@ public record RandomForestFeatureDriftReport(
 
     private static final Set<String> EXPECTED_FEATURES = Set.copyOf(RandomForestRiskFeatures.ORDERED_NAMES);
 
+    /**
+     * Rejects reports whose counts, feature set, maximum statistic, threshold, and status disagree.
+     */
     public RandomForestFeatureDriftReport {
         Objects.requireNonNull(maximumStatistic, "maximumStatistic");
         Objects.requireNonNull(status, "status");

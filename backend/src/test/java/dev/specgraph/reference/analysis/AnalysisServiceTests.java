@@ -21,6 +21,10 @@ import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-001")
 @Tag("VFY-FAILURE-PATHS-001")
+/**
+ * Failure-injection specification for orchestration order, grounding validation and no-false-success
+ * behavior. In-memory doubles isolate application semantics from transport and persistence frameworks.
+ */
 final class AnalysisServiceTests {
     private static final UUID CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID ACTIVITY_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
@@ -347,6 +351,7 @@ final class AnalysisServiceTests {
         return new AnalysisModelOutput(result, provenance(evidence));
     }
 
+    /** Cites every supplied family to produce the valid control provenance used by failure variants. */
     private AnalysisModelProvenance provenance(AnalysisEvidenceEnvelope evidence) {
         List<AnalysisEvidenceReference> references = new ArrayList<>();
         evidence.activities().forEach(activity -> references.add(new AnalysisEvidenceReference(

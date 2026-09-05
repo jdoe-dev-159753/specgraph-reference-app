@@ -12,6 +12,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/**
+ * Characterizes repeatable beta-binomial vote-share behavior and source-fact immutability.
+ * Synthetic scenarios demonstrate sensitivity only; they do not establish calibrated AML accuracy.
+ */
 final class BayesianSequentialRiskSignalDetectorAdapterTests {
     private final BayesianSequentialRiskSignalDetectorAdapter detector =
             new BayesianSequentialRiskSignalDetectorAdapter();
@@ -67,6 +71,7 @@ final class BayesianSequentialRiskSignalDetectorAdapterTests {
                 List.of());
     }
 
+    /** Isolates status as the varying Bayesian observation while keeping all other source fields fixed. */
     private Activity card(int suffix, String status) {
         return new Activity(
                 id(suffix),

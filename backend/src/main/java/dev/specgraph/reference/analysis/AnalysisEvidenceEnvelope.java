@@ -27,6 +27,7 @@ public record AnalysisEvidenceEnvelope(
         List<RiskEvidence> sourceRiskEvidence,
         List<RiskSignalEvidence> detectorEvidence,
         List<PolicyEvidence> policyEvidence) {
+    /** Rejects inconsistent totals and source-risk facts whose supporting activity was truncated. */
     public AnalysisEvidenceEnvelope {
         Objects.requireNonNull(customerId, "customerId");
         activities = List.copyOf(Objects.requireNonNull(activities, "activities"));
@@ -50,6 +51,7 @@ public record AnalysisEvidenceEnvelope(
         });
     }
 
+    /** Exposes selected-versus-total counts without disclosing evidence payloads to telemetry. */
     Map<String, String> contextDiagnostics() {
         Map<String, String> diagnostics = new LinkedHashMap<>();
         diagnostics.put("context.activities.total", Integer.toString(totalActivityCount));

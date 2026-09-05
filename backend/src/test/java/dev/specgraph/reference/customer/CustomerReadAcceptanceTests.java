@@ -36,6 +36,10 @@ import org.springframework.test.web.servlet.MockMvc;
 @Tag("VFY-CUSTOMER-READ-001")
 @SpringBootTest(classes = ReferenceApplication.class)
 @AutoConfigureMockMvc
+/**
+ * HTTP-to-PostgreSQL acceptance evidence for typed activities, exact decimals, source-risk ownership
+ * and consistent snapshots. Seeded scenarios prove repository behavior, not production data quality.
+ */
 class CustomerReadAcceptanceTests extends PostgresIntegrationTestSupport {
     private static final UUID SEEDED_CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID STABLE_CUSTOMER = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -194,6 +198,7 @@ class CustomerReadAcceptanceTests extends PostgresIntegrationTestSupport {
         }
     }
 
+    /** Waits for the database lock state proving the concurrent commit occurred between snapshot reads. */
     private void awaitBlockedRiskEvidenceRead() throws InterruptedException {
         for (int attempt = 0; attempt < 200; attempt++) {
             Integer waitingReaders = jdbc.queryForObject("""

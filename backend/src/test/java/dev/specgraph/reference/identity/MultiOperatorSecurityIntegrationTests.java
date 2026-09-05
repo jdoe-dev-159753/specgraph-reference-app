@@ -23,6 +23,10 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(classes = ReferenceApplication.class)
 @AutoConfigureMockMvc
 @ActiveProfiles("r4-auth")
+/**
+ * Full filter-chain evidence for protected capabilities, credential rejection and distinct persisted
+ * operator attribution. Local demo users exercise application security, not enterprise IAM integration.
+ */
 class MultiOperatorSecurityIntegrationTests extends PostgresIntegrationTestSupport {
     private static final UUID CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 

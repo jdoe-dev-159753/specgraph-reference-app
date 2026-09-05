@@ -5,6 +5,7 @@ public record AnalysisHistoryQuery(int page, int pageSize) {
     public static final int DEFAULT_PAGE_SIZE = 20;
     public static final int MAX_PAGE_SIZE = 100;
 
+    /** Normalizes and bounds pagination before an adapter computes its database offset. */
     public AnalysisHistoryQuery {
         if (page < 0) {
             throw new IllegalArgumentException("page must be >= 0");

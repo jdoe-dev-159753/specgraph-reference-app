@@ -17,6 +17,7 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/** Minimal existence row; customer activity remains the source-backed aggregate payload. */
 @Entity(name = "PersistenceCustomer")
 @Table(name = "customers")
 class PersistenceCustomerEntity {
@@ -27,6 +28,10 @@ class PersistenceCustomerEntity {
     protected PersistenceCustomerEntity() {}
 }
 
+/**
+ * Base transaction row with lazy optional joins to the mutually exclusive specialization tables.
+ * The adapter validates the exact-one-specialization invariant before constructing an activity.
+ */
 @Entity(name = "SourceTransaction")
 @Table(name = "transactions")
 class SourceTransactionEntity {
@@ -80,6 +85,7 @@ class SourceTransactionEntity {
     CryptoActivityEntity crypto() { return crypto; }
 }
 
+/** Adapter-private mapping of the CARD specialization keyed by its transaction identity. */
 @Entity(name = "CardActivityRow")
 @Table(name = "card_activity")
 class CardActivityEntity {
@@ -119,6 +125,7 @@ class CardActivityEntity {
     String declineReason() { return declineReason; }
 }
 
+/** Adapter-private mapping of the PAYMENT specialization keyed by its transaction identity. */
 @Entity(name = "PaymentActivityRow")
 @Table(name = "payment_activity")
 class PaymentActivityEntity {
@@ -147,6 +154,7 @@ class PaymentActivityEntity {
     String receiverBankCountry() { return receiverBankCountry; }
 }
 
+/** Adapter-private mapping of the CRYPTO specialization keyed by its transaction identity. */
 @Entity(name = "CryptoActivityRow")
 @Table(name = "crypto_activity")
 class CryptoActivityEntity {
@@ -178,6 +186,7 @@ class CryptoActivityEntity {
     String exchangeName() { return exchangeName; }
 }
 
+/** Source rule identity and display name referenced by persisted assessments. */
 @Entity(name = "RiskRuleRow")
 @Table(name = "risk_rules")
 class RiskRuleEntity {
@@ -194,6 +203,10 @@ class RiskRuleEntity {
     String name() { return name; }
 }
 
+/**
+ * Persisted source-risk assessment; its joins provide source transaction ownership and rule name.
+ * It is mapped to source {@code RiskEvidence}, never to a detector-generated signal.
+ */
 @Entity(name = "RiskAssessmentRow")
 @Table(name = "risk_assessments")
 class RiskAssessmentEntity {

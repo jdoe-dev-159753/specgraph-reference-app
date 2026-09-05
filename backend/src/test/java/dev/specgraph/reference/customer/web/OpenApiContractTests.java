@@ -15,6 +15,10 @@ import org.junit.jupiter.api.Test;
 @Tag("VFY-ANALYSIS-001")
 @Tag("VFY-AUTH-001")
 @Tag("VFY-FAILURE-PATHS-001")
+/**
+ * Parses the repository-owned OpenAPI authority and asserts the delivered customer, analysis, session,
+ * security and provenance surface. It checks contract structure, not controller annotation generation.
+ */
 class OpenApiContractTests {
     @Test
     void r4ContractRetainsTypedCustomerAnalysisSessionSecurityAndGroundingReferences() {
@@ -205,6 +209,7 @@ class OpenApiContractTests {
         assertThat(risk.getProperties().get("assessmentId").getFormat()).isEqualTo("uuid");
     }
 
+    /** Proves each polymorphic branch fixes its discriminator and points at the matching detail schema. */
     private static void assertActivityVariant(OpenAPI api, String schemaName, String expectedType, String detailsSchema) {
         Schema<?> variant = api.getComponents().getSchemas().get(schemaName);
         assertThat(variant).as(schemaName).isNotNull();
@@ -224,6 +229,7 @@ class OpenApiContractTests {
         assertThat(details.get$ref()).isEqualTo("#/components/schemas/" + detailsSchema);
     }
 
+    /** Verifies reusable pagination parameters retain type, default, and validation bounds. */
     private static void assertIntegerParameter(
             OpenAPI api,
             String componentName,

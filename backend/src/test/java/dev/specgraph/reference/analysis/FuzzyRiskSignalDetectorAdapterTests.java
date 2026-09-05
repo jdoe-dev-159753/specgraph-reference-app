@@ -13,6 +13,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/**
+ * Characterizes deterministic bounds, explainability and risk-positive monotonicity of the heuristic
+ * fuzzy surface. Crafted scenarios are not calibration or production-performance evidence.
+ */
 final class FuzzyRiskSignalDetectorAdapterTests {
     private final FuzzyRiskSignalDetectorAdapter detector = new FuzzyRiskSignalDetectorAdapter();
 
@@ -137,6 +141,7 @@ final class FuzzyRiskSignalDetectorAdapterTests {
                         "Ethereum", "0xfrom", "0xto", "synthetic-hash-" + suffix, "Synthetic Exchange"));
     }
 
+    /** Creates a non-cross-border, non-crypto control whose only fuzzy variable is completion status. */
     private Activity card(int suffix, String status) {
         return new Activity(
                 id(suffix),

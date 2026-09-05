@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-CUSTOMER-READ-001")
+/** Verifies the in-memory adapter matches bounded filter/page semantics without mutating snapshot reads. */
 final class SyntheticCustomerReviewQueryTests {
     private final SyntheticActivityAdapter adapter = new SyntheticActivityAdapter();
 

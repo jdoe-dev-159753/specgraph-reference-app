@@ -30,6 +30,7 @@ final class AnalysisResultStructuredOutputConverter implements StructuredOutputC
 
     private AnalysisResultStructuredOutputConverter() {}
 
+    /** Enforces live-output size bounds after schema conversion and before grounding or persistence. */
     @Override
     public AnalysisResult convert(String source) {
         AnalysisResult result = delegate.convert(source);

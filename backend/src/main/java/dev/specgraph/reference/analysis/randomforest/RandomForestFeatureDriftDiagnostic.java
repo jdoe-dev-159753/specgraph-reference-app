@@ -38,6 +38,7 @@ public final class RandomForestFeatureDriftDiagnostic {
         this(RandomForestFeatureDriftDiagnostic.class.getClassLoader());
     }
 
+    /** Loads and hash-verifies the packaged baseline before exposing any diagnostic operation. */
     RandomForestFeatureDriftDiagnostic(ClassLoader classLoader) {
         byte[] bytes = readRequiredResource(Objects.requireNonNull(classLoader, "classLoader"));
         if (!RandomForestRiskSignalDetectorRuntime.sha256(bytes).equals(EXPECTED_REFERENCE_SHA256)) {
@@ -69,6 +70,7 @@ public final class RandomForestFeatureDriftDiagnostic {
         return assessFeatures(projected);
     }
 
+    /** Compares each feature distribution and reports the maximum distance against review policy. */
     RandomForestFeatureDriftReport assessFeatures(List<RandomForestRiskFeatures> observationWindow) {
         List<RandomForestRiskFeatures> observations = List.copyOf(
                 Objects.requireNonNull(observationWindow, "observationWindow"));
@@ -103,6 +105,7 @@ public final class RandomForestFeatureDriftDiagnostic {
                 reference.semantics(), reference.limitation());
     }
 
+    /** Parses only canonical, complete, version-pinned baseline properties. */
     private static Reference parse(byte[] bytes) {
         String content = new String(bytes, StandardCharsets.UTF_8);
         if (!content.endsWith("\n") || content.indexOf('\r') >= 0
@@ -152,6 +155,7 @@ public final class RandomForestFeatureDriftDiagnostic {
         }
     }
 
+    /** Requires a finite normalized value for every expected baseline observation. */
     private static double[] parseColumn(String value, int size) {
         String[] encoded = Objects.requireNonNull(value, "feature column").split(",", -1);
         if (encoded.length != size) {
@@ -168,6 +172,7 @@ public final class RandomForestFeatureDriftDiagnostic {
         return column;
     }
 
+    /** Reorients projected observations into one sample array per ordered feature. */
     private static double[][] transpose(List<RandomForestRiskFeatures> rows) {
         double[][] columns = new double[RandomForestRiskFeatures.ORDERED_NAMES.size()][rows.size()];
         for (int row = 0; row < rows.size(); row++) {
@@ -179,6 +184,7 @@ public final class RandomForestFeatureDriftDiagnostic {
         return columns;
     }
 
+    /** Reads the trust-anchored resource with a strict size bound and no fallback. */
     private static byte[] readRequiredResource(ClassLoader classLoader) {
         try (InputStream input = classLoader.getResourceAsStream(REFERENCE_RESOURCE)) {
             if (input == null) {
@@ -202,6 +208,7 @@ public final class RandomForestFeatureDriftDiagnostic {
         return value;
     }
 
+    /** Parsed immutable baseline distribution and the provenance that pins it to the model. */
     private record Reference(
             String diagnosticVersion, String modelVersion, String featureSchemaVersion,
             String referenceDatasetIdentity, String referenceWindowIdentity, String metric, String metricLibrary,

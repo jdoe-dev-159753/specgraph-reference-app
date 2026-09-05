@@ -19,6 +19,7 @@ import org.springframework.core.env.Environment;
             "specgraph.analysis.backend=openai",
             "spring.ai.openai.api-key=synthetic-test-key-never-used"
         })
+/** Proves explicit OPENAI selection projects only the chat model family; network inference is mocked. */
 final class OpenAiModelSelectionIntegrationTests extends PostgresIntegrationTestSupport {
     @Autowired AnalysisModelPort analysisModel;
     @Autowired ApplicationContext context;

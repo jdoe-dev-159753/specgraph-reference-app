@@ -17,6 +17,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/**
+ * Characterizes deterministic evidence selection, truthful full-input totals and grounding safety
+ * when Stage-3 detail is bounded. Fixtures exercise selection logic without provider tokenization.
+ */
 final class AnalysisContextBuilderTests {
     private static final UUID CUSTOMER_ID = UUID.fromString("55555555-5555-5555-5555-555555555555");
     private static final Instant BASE_TIME = Instant.parse("2026-01-01T00:00:00Z");
@@ -172,6 +176,7 @@ final class AnalysisContextBuilderTests {
                 .hasMessageContaining(omittedOldestActivity.toString());
     }
 
+    /** Creates stable ordered activities so truncation assertions do not depend on random fixture data. */
     private Activity activity(int index) {
         return new Activity(
                 new UUID(0L, index + 1L),

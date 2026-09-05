@@ -50,6 +50,7 @@ final class SyntheticRandomForestModelTrainer {
 
     private SyntheticRandomForestModelTrainer() {}
 
+    /** Trains the reproducible fixture and returns bytes paired with their complete trust manifest. */
     static GeneratedModel train(List<TrainingRow> rows) {
         if (rows.size() < 4
                 || rows.stream().noneMatch(TrainingRow::reviewElevated)
@@ -102,6 +103,7 @@ final class SyntheticRandomForestModelTrainer {
         }
     }
 
+    /** Writes the generated model and manifest together so runtime fixtures cannot drift independently. */
     static void writePackagedResources(Path resourceRoot) {
         GeneratedModel generated = train(trainingPartition());
         Path packageDirectory = resourceRoot.resolve("dev/specgraph/reference/analysis/randomforest");
@@ -116,6 +118,7 @@ final class SyntheticRandomForestModelTrainer {
         }
     }
 
+    /** Removes serialization variability recursively from ensemble and member metadata. */
     private static ModelProto canonicalize(ModelProto model) throws IOException {
         WeightedEnsembleModelProto ensemble = model.getSerializedData().unpack(WeightedEnsembleModelProto.class);
         var ensembleBuilder = ensemble.toBuilder()
@@ -136,6 +139,7 @@ final class SyntheticRandomForestModelTrainer {
                 .build();
     }
 
+    /** Replaces generated model names and provenance with stable fixture identities. */
     private static ModelDataProto canonicalize(ModelDataProto metadata, String name) {
         return metadata.toBuilder()
                 .setName(name)
@@ -143,6 +147,7 @@ final class SyntheticRandomForestModelTrainer {
                 .build();
     }
 
+    /** Rewrites environment-dependent provenance while preserving trainer parameters under test. */
     private static RootProvenanceProto canonicalize(RootProvenanceProto provenance) {
         var builder = provenance.toBuilder().clearOmp().clearSmp();
         var canonicalNames = new HashMap<String, String>();
@@ -168,6 +173,7 @@ final class SyntheticRandomForestModelTrainer {
         return builder.build();
     }
 
+    /** Returns the fixed, balanced feature grid whose labels test mechanics rather than AML accuracy. */
     static List<TrainingRow> trainingPartition() {
         // Labels are hand-assigned for adapter mechanics, never derived from source risk_assessments.
         return List.of(
@@ -191,6 +197,7 @@ final class SyntheticRandomForestModelTrainer {
                 scenarioId, new RandomForestRiskFeatures(volume, crypto, crossBorder, incomplete), elevated);
     }
 
+    /** Hashes canonical identities, labels, and exact IEEE-754 feature values in row order. */
     private static String trainingPartitionHash(List<TrainingRow> rows) {
         StringBuilder canonical = new StringBuilder(DATASET_IDENTITY).append('|').append(SPLIT_IDENTITY);
         for (TrainingRow row : rows) {
@@ -210,6 +217,7 @@ final class SyntheticRandomForestModelTrainer {
         }
     }
 
+    /** One synthetic feature row and its handcrafted scenario label. */
     record TrainingRow(String scenarioId, RandomForestRiskFeatures features, boolean reviewElevated) {
         TrainingRow {
             if (scenarioId == null || scenarioId.isBlank()) {
@@ -218,6 +226,7 @@ final class SyntheticRandomForestModelTrainer {
         }
     }
 
+    /** Complete deterministic training output used to reproduce packaged runtime artifacts. */
     record GeneratedModel(byte[] protobuf, RandomForestModelManifest manifest) {
         GeneratedModel {
             protobuf = protobuf.clone();

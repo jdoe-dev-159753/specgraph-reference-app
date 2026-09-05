@@ -28,6 +28,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("VFY-CUSTOMER-READ-001")
 @Tag("port_contract")
+/**
+ * Relational port-contract evidence for timestamp interpretation, assessment identity, database-side
+ * paging and bounded statement counts. It detects N+1 regressions without benchmarking latency.
+ */
 final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPortContract {
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine")
             .withDatabaseName("specgraph")
@@ -54,6 +58,7 @@ final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPort
     private static final JpaCustomerActivityAdapter JPA_ADAPTER;
     private static final CustomerActivityPort ADAPTER;
 
+    /** Builds the real Flyway/JPA boundary once so contract tests share one controlled database. */
     static {
         POSTGRES.start();
 
@@ -238,6 +243,7 @@ final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPort
                 .isLessThanOrEqualTo(maximum);
     }
 
+    /** Inserts history larger than page bounds so statement-count assertions exercise real scale separation. */
     private void seedDenseCustomer() {
         JDBC.sql("INSERT INTO customers(customer_id) VALUES (:customerId)")
                 .param("customerId", DENSE_CUSTOMER_ID)
@@ -287,6 +293,7 @@ final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPort
                 .update();
     }
 
+    /** Removes only this suite's synthetic customer graph in foreign-key-safe order. */
     private void deleteDenseCustomer() {
         JDBC.sql("""
                         DELETE FROM risk_assessments

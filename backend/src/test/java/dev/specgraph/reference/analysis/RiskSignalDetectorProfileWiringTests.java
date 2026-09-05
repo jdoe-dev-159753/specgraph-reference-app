@@ -12,6 +12,10 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.core.env.MapPropertySource;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/**
+ * Proves typed detector configuration overrides legacy profile aliases and loads only selected leaves.
+ * Small Spring contexts isolate wiring policy from the full application runtime.
+ */
 final class RiskSignalDetectorProfileWiringTests {
 
     @Test
@@ -71,6 +75,7 @@ final class RiskSignalDetectorProfileWiringTests {
         }
     }
 
+    /** Applies profiles and typed properties before refresh so startup failures remain observable. */
     private AnnotationConfigApplicationContext unrefreshedContext(
             Map<String, Object> properties,
             String... profiles) {

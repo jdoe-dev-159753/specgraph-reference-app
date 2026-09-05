@@ -11,6 +11,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+/**
+ * Single application orchestrator for the staged analysis flow.
+ * It keeps source loading, detector inference, policy retrieval, bounded model synthesis,
+ * grounding validation and persistence ordered, translating failures without fabricating success.
+ */
 @Service
 final class AnalysisService implements AnalysisUseCase {
     private static final Logger LOGGER = LoggerFactory.getLogger(AnalysisService.class);
@@ -37,6 +42,10 @@ final class AnalysisService implements AnalysisUseCase {
         this.analysisHistory = analysisHistory;
     }
 
+    /**
+     * Executes the fail-closed pipeline and persists only a grounded, structurally valid model result.
+     * Stage failures retain distinct reasons so the HTTP boundary can report safe operational outcomes.
+     */
     @Override
     public AnalysisHistoryEntry analyze(UUID customerId, OperatorId operatorId) {
         CustomerSnapshot snapshot = customerActivity.loadSnapshot(customerId)

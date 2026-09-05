@@ -15,6 +15,7 @@ import org.springframework.core.env.Environment;
 
 @Tag("VFY-CONFIDENTIALITY-001")
 @SpringBootTest(classes = ReferenceApplication.class)
+/** Proves default startup creates no external chat-model family; it does not test provider credentials. */
 final class DefaultExternalAiOptOutTests extends PostgresIntegrationTestSupport {
     @Autowired Environment environment;
     @Autowired ApplicationContext applicationContext;

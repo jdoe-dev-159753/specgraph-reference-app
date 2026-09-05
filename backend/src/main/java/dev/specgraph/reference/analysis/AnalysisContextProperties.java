@@ -2,6 +2,11 @@ package dev.specgraph.reference.analysis;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Independent detail limits for each evidence family admitted to Stage 3.
+ * The activity limit cannot be smaller than the source-risk limit because every selected source
+ * risk fact must retain its backing transaction in the bounded envelope.
+ */
 @ConfigurationProperties("specgraph.analysis.context")
 record AnalysisContextProperties(
         int maxActivities,

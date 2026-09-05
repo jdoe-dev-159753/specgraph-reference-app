@@ -16,6 +16,7 @@ final class AnalysisBackendFactory {
         this.backends = Map.copyOf(copy);
     }
 
+    /** Resolves the selected backend lazily so unselected provider infrastructure need not exist. */
     AnalysisModelPort resolve(AnalysisBackendId backend) {
         Objects.requireNonNull(backend, "backend");
         Supplier<? extends AnalysisModelPort> supplier = backends.get(backend);

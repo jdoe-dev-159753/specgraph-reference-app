@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-CUSTOMER-READ-001")
+/** Verifies query normalization, bounded offsets and half-open date-window invariants before I/O. */
 final class CustomerReviewQueryTests {
 
     @Test

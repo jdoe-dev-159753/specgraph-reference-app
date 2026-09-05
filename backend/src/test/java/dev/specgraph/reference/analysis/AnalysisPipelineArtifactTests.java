@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
+/** Proves the sealed artifact family stays exhaustive and retains distinct authority semantics. */
 final class AnalysisPipelineArtifactTests {
 
     @Test
@@ -42,6 +43,7 @@ final class AnalysisPipelineArtifactTests {
                 .containsExactly("velocity-shift", "policy:chunk:42", "baseline-v1");
     }
 
+    /** Independently pattern-matches each variant to prove payload identity remains family-specific. */
     private String typedPayloadIdentity(AnalysisPipelineArtifact artifact) {
         return switch (artifact) {
             case RiskSignalEvidence detector -> detector.signalIdentity();

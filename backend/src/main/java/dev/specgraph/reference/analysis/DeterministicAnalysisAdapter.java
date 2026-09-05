@@ -5,12 +5,18 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
+/**
+ * Offline Stage-3 baseline that produces reproducible structured output from aggregate source-risk
+ * counts. It exercises the same grounding and provenance contract as live models while explicitly
+ * avoiding external transmission and institutional-policy claims.
+ */
 @Component
 class DeterministicAnalysisAdapter implements AnalysisModelPort {
     private static final String BACKEND_IDENTITY = "deterministic";
     private static final String MODEL_IDENTITY = "r3-offline-baseline-v1";
     private static final String PROMPT_IDENTITY = "grounded-analysis-v1";
 
+    /** Produces an offline comparison result while retaining the same evidence-reference contract. */
     @Override
     public AnalysisModelOutput analyze(AnalysisEvidenceEnvelope evidence) {
         int sourceRiskSignals = evidence.totalSourceRiskCount();
