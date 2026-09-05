@@ -1,2 +1,3 @@
 *.pb binary
+backend/src/main/resources/dev/specgraph/reference/analysis/randomforest/synthetic-review-random-forest-v1.pb linguist-detectable=false
 backend/src/main/resources/dev/specgraph/reference/analysis/randomforest/*.properties text eol=lf

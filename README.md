@@ -3,6 +3,21 @@
 [![application-ci](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
 [![demo-images](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
 [![work-graph-guard](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml)
+[![Java 21](https://img.shields.io/badge/Java-21-informational)](backend/pom.xml)
+[![Maven 3.9](https://img.shields.io/badge/Maven-3.9-informational)](docker/app.Dockerfile)
+[![Spring Boot 4.1.1](https://img.shields.io/badge/Spring_Boot-4.1.1-informational)](backend/pom.xml)
+[![Spring Modulith 2.1.1](https://img.shields.io/badge/Spring_Modulith-2.1.1-informational)](backend/pom.xml)
+[![Spring AI 2.0.1](https://img.shields.io/badge/Spring_AI-2.0.1-informational)](backend/pom.xml)
+[![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-informational)](compose.yaml)
+[![pgvector 0.8.6](https://img.shields.io/badge/pgvector-0.8.6-informational)](compose.r4.yaml)
+[![Node.js 24](https://img.shields.io/badge/Node.js-24_build--time-informational)](docker/app.Dockerfile)
+[![React 19.2.8](https://img.shields.io/badge/React-19.2.8-informational)](frontend/package.json)
+[![TypeScript 7.0.2](https://img.shields.io/badge/TypeScript-7.0.2-informational)](frontend/package.json)
+[![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0_build--time-informational)](frontend/package.json)
+[![Playwright 1.55.0](https://img.shields.io/badge/Playwright-1.55.0_test-informational)](e2e/package.json)
+<!-- repository-metrics-badge:start -->
+[![Authored LOC](https://img.shields.io/badge/authored_LOC-21%2C100-informational)](docs/reviewer/repository-metrics.md)
+<!-- repository-metrics-badge:end -->
 
 Customer Activity Analytics is a runnable customer-care application for reviewing customer activity, risk evidence, applicable policy and retained analysis history. It demonstrates how a specification-driven delivery can combine deterministic controls, statistical detectors, local retrieval and optional language-model adapters without letting generated text replace source evidence.
 
