@@ -1,9 +1,10 @@
 # J5 final controlled-artifact reconciliation
 
-This record captures the final catalogue and work-graph audit for issue
+This record captures the final controlled-catalogue reconciliation for issue
 [#146](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/146).
-It is a bounded reconciliation record, not a manually maintained replacement
-for executable test results or GitHub lifecycle state.
+It also bounds the Project evidence inspected during that reconciliation. It is
+not a manually maintained replacement for executable test results or current
+GitHub lifecycle state.
 
 ## Frozen implementation anchor
 
@@ -33,12 +34,21 @@ The machine-readable authorities were counted and cross-referenced directly:
 | Architecture decisions | 8 | `ADR-001` through `ADR-008` resolve from the design map to committed decision records. |
 
 This is catalogue coverage, not a claim that every declared evidence method is
-automated. Current pass/fail authority remains the executable checks. In
-particular, the declared `query_count` method for JPA customer reads remains an
-explicit follow-up in
-[#421](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/421);
-the existing functional, pagination and PostgreSQL integration evidence is not
-misrepresented as an N+1 bound.
+automated. Current pass/fail authority remains the executable checks. Two
+bounded evidence-reconciliation debts remain explicit:
+
+- [#421](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/421)
+  owns the declared `query_count` method for JPA customer reads; the existing
+  functional, pagination and PostgreSQL integration evidence is not
+  misrepresented as an N+1 bound;
+- [#426](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/426)
+  owns executable-marker reconciliation. Historical markers
+  `VFY-ANALYSIS-001` and `VFY-ANALYSIS-HISTORY-001` do not match the catalogue's
+  `VFY-ANALYSIS-CONTRACT-001` and `VFY-HISTORY-001`, while scanned markers are
+  absent for `VFY-REPRODUCIBILITY-001` and `VFY-DELIVERY-001`. The same
+  reconciliation must expose that the declared history `query_count` method is
+  not instrumented. These debts must be reconciled without manufacturing
+  automated PASS states for human methods.
 
 The R4 policy-retrieval and model-provider ambiguities are now resolved by
 committed adapters, selection contracts and verification evidence. Accordingly,
@@ -57,14 +67,18 @@ Two final obligations intentionally remain human-owned:
 
 Neither is converted into a synthetic automated PASS by this reconciliation.
 
-## Project and work-graph audit
+## Bounded Project evidence and remaining governance debt
 
 Scheduled Project reconciliation run
 [`33945213927`](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/runs/33945213927)
 completed successfully at `8ec6cebca7d583cf4281a4c74e206947f46efe8a`.
-It exercised the repository's whole-Project lifecycle, delivery-priority and
-discovery-disposition projection. Remaining Project-system debt is already
-owned by:
+This run predates the merges of #423 at `9533211de20dffaf8d041a5faca13712cf8ad003`
+and #417 at `00c7140576f817b7aa7257f45a44797fb430efbb`. It proves only that the
+whole-Project reconciler completed successfully at its recorded SHA; it is not
+presented as a final audit of Project state after those lifecycle changes or as
+merge evidence for this candidate.
+
+Remaining Project-system debt is non-product governance work already owned by:
 
 - [#193](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/193),
   which tracks serialization of whole-Project reconciliation without
@@ -72,7 +86,8 @@ owned by:
 - [#49](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/49),
   which tracks the remaining native Project UI, roadmap and auto-add polish.
 
-Those independently reviewable governance items do not invalidate the
+Those independently reviewable governance items are excluded from the J5
+product conclusion. They do not invalidate the controlled
 requirement-to-design-to-verification catalogue above and are not silently
 absorbed into #146.
 
@@ -82,6 +97,7 @@ At the exact #417 merge commit above, the controlled SRS, SDD/ADR and V&V
 catalogues form a complete structural chain:
 14 requirements, 6 invariants, 3 constraints, 17 acceptance criteria and 4
 delivery requirements resolve through 10 verification obligations to 35
-controlled design identities and 8 ADRs. The only known method-level evidence
-gap is explicitly owned by #421, while final communicative adequacy and demo
-rehearsal remain correctly owned by #229 and #148.
+identities and 8 ADRs. Customer-read query-count evidence remains owned by #421;
+history query-count and executable-marker reconciliation remain owned by #426.
+Final communicative adequacy and demo rehearsal remain correctly owned by #229
+and #148.
