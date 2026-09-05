@@ -58,6 +58,24 @@ final class AnalysisBackendConfigurationTests {
     }
 
     @Test
+    void localBackendRejectsAContextWindowThatCannotHoldItsFixedRequestEnvelope() {
+        contextRunner
+                .withPropertyValues(
+                        "specgraph.analysis.backend=local",
+                        "spring.ai.model.chat=local",
+                        "specgraph.analysis.local.base-url=http://127.0.0.1:1234/v1",
+                        "specgraph.analysis.local.model=ministral-test",
+                        "specgraph.analysis.local.budget.context-window-tokens=512",
+                        "specgraph.analysis.local.budget.max-output-tokens=256",
+                        "specgraph.analysis.local.budget.transport-margin-tokens=128")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasStackTraceContaining("fixed request envelope exceeds the configured context window");
+                });
+    }
+
+    @Test
     void localBackendAcceptsPrivateIpv6Literals() {
         assertThat(new LmStudioAnalysisProperties(
                                 "http://[::1]:1234/v1", "ministral-test", "", Duration.ofSeconds(60))
