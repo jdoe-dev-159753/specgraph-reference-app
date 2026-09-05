@@ -40,6 +40,10 @@ specgraph:
       model: ${SPECGRAPH_LOCAL_MODEL:ministral-3-8b-instruct-2512}
       api-key: ${SPECGRAPH_LOCAL_API_KEY:}
       timeout: ${SPECGRAPH_LOCAL_TIMEOUT:60s}
+      budget:
+        context-window-tokens: ${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:4096}
+        max-output-tokens: ${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:512}
+        transport-margin-tokens: ${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:256}
     context:
       max-activities: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_ACTIVITIES:25}
       max-source-risk-evidence: ${SPECGRAPH_ANALYSIS_CONTEXT_MAX_SOURCE_RISK_EVIDENCE:20}

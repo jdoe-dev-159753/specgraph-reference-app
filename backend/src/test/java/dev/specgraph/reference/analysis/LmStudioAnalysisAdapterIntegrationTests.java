@@ -4,10 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.specgraph.reference.customer.Activity;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterAll;
@@ -70,7 +76,7 @@ final class LmStudioAnalysisAdapterIntegrationTests {
         RESPONSE.set(chatCompletion("""
                 {"riskLevel":"MEDIUM","findingsSummary":"Synthetic activity matches the supplied review policy.","recommendations":["Route the activity for manual review."]}
                 """.trim()));
-        AnalysisEvidenceEnvelope evidence = SpringAiAnalysisAdapterTests.evidence();
+        AnalysisEvidenceEnvelope evidence = r5SizedEvidence();
 
         localContext().run(context -> {
             assertThat(context).hasNotFailed();
@@ -94,7 +100,20 @@ final class LmStudioAnalysisAdapterIntegrationTests {
                     .containsEntry("runtime", "lmstudio/llama.cpp")
                     .containsEntry("externalTransmission", "false")
                     .containsEntry("dataPolicy", "synthetic-demo-only")
-                    .containsEntry("structuredOutput", "provider-native+schema-validation");
+                    .containsEntry("structuredOutput", "provider-native+schema-validation")
+                    .containsEntry("request.contextWindowTokens", "4096")
+                    .containsEntry("request.maxOutputTokens", "512")
+                    .containsEntry("request.transportMarginTokens", "256")
+                    .containsEntry("request.tokenEstimator", "cl100k-plus-25-percent");
+            int estimatedTotal = Integer.parseInt(
+                    output.provenance().metadata().get("request.estimatedTotalTokens"));
+            assertThat(estimatedTotal).isLessThanOrEqualTo(4096);
+            assertThat(estimatedTotal).isEqualTo(
+                    Integer.parseInt(output.provenance().metadata().get("request.estimatedSystemTokens"))
+                            + Integer.parseInt(output.provenance().metadata().get("request.estimatedUserTokens"))
+                            + Integer.parseInt(output.provenance().metadata().get("request.estimatedSchemaTokens"))
+                            + 256
+                            + 512);
         });
 
         assertThat(REQUEST_PATH).hasValue("/v1/chat/completions");
@@ -103,6 +122,7 @@ final class LmStudioAnalysisAdapterIntegrationTests {
         assertThat(REQUEST.get())
                 .contains(
                         "\"model\":\"" + MODEL + "\"",
+                        "\"max_tokens\":512",
                         "Always respond in English",
                         "SOURCE ACTIVITIES",
                         "beta-binomial-review-elevation-v1:posterior-review-elevation-rate",
@@ -113,6 +133,32 @@ final class LmStudioAnalysisAdapterIntegrationTests {
                         "\"required\":[\"riskLevel\",\"findingsSummary\",\"recommendations\"]")
                 .doesNotContain("\"maxLength\"", "\"minItems\"", "\"maxItems\"")
                 .doesNotContain("4111111111111111", "AUTH-SECRET");
+    }
+
+    @Test
+    void rejectsAnOversizedEvidenceEnvelopeBeforeSendingAnyRequest() {
+        AnalysisEvidenceEnvelope source = SpringAiAnalysisAdapterTests.evidence();
+        AnalysisEvidenceEnvelope oversized = new AnalysisEvidenceEnvelope(
+                source.customerId(),
+                source.totalActivityCount(),
+                source.totalSourceRiskCount(),
+                source.totalDetectorEvidenceCount(),
+                source.totalPolicyEvidenceCount(),
+                source.activities(),
+                source.sourceRiskEvidence(),
+                source.detectorEvidence(),
+                List.of(new PolicyEvidence(
+                        "synthetic-policy:oversized",
+                        "oversized policy content ".repeat(2_000),
+                        source.policyEvidence().getFirst().retrievalMetadata())));
+
+        localContext().run(context -> assertThatThrownBy(() -> context.getBean(AnalysisModelPort.class)
+                        .analyze(oversized))
+                .isInstanceOf(InvalidAnalysisResultException.class)
+                .hasMessageContaining("LM Studio request exceeds the configured context window")
+                .hasMessageContaining("contextWindow=4096"));
+
+        assertThat(REQUEST_COUNT).hasValue(0);
     }
 
     @Test
@@ -149,6 +195,51 @@ final class LmStudioAnalysisAdapterIntegrationTests {
                 "specgraph.analysis.local.model=" + MODEL,
                 "specgraph.analysis.local.api-key=",
                 "specgraph.analysis.local.timeout=60s");
+    }
+
+    private static AnalysisEvidenceEnvelope r5SizedEvidence() {
+        AnalysisEvidenceEnvelope source = SpringAiAnalysisAdapterTests.evidence();
+        List<Activity> activities = new ArrayList<>(source.activities());
+        activities.add(new Activity(
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4"),
+                Activity.ActivityType.CARD,
+                new BigDecimal("4200.00"),
+                "USD",
+                "Declined",
+                source.activities().getFirst().createdAt(),
+                source.activities().getFirst().details()));
+        activities.add(new Activity(
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5"),
+                Activity.ActivityType.PAYMENT,
+                new BigDecimal("25000.00"),
+                "EUR",
+                "Completed",
+                source.activities().get(1).createdAt(),
+                source.activities().get(1).details()));
+        List<RiskSignalEvidence> detectors = List.of(
+                source.detectorEvidence().getFirst(),
+                new RiskSignalEvidence(
+                        "graded-review-fuzzy-v1", "fuzzy-review-elevation", 0.73, Map.of("scope", "synthetic")),
+                new RiskSignalEvidence(
+                        "random-forest-review-v1",
+                        "random-forest-review-elevation-vote",
+                        0.66,
+                        Map.of("scope", "synthetic")));
+        String policyContent = "Synthetic policy guidance for bounded human review only. ".repeat(18);
+        List<PolicyEvidence> policies = List.of(
+                source.policyEvidence().getFirst(),
+                new PolicyEvidence("synthetic-policy:payment", policyContent, Map.of("rank", "2")),
+                new PolicyEvidence("synthetic-policy:crypto", policyContent, Map.of("rank", "3")));
+        return new AnalysisEvidenceEnvelope(
+                source.customerId(),
+                5,
+                source.totalSourceRiskCount(),
+                3,
+                3,
+                activities,
+                source.sourceRiskEvidence(),
+                detectors,
+                policies);
     }
 
     private static String chatCompletion(String analysisJson) {
