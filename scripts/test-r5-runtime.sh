@@ -183,6 +183,15 @@ bash "${script_dir}/r5-runtime-up.sh" > "${temp_dir}/private-bind-stdout"
 grep -Fq 'url=http://192.168.1.44:8088/' "${temp_dir}/private-bind-stdout"
 grep -Fq 'bindAddress=192.168.1.44' "${temp_dir}/private-bind-stdout"
 
+PATH="${temp_dir}/bin:${PATH}" \
+R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \
+SPECGRAPH_LOCAL_BASE_URL=http://192.168.1.20:1234/v1 \
+SPECGRAPH_LOCAL_MODEL=test-model \
+R5_BIND_ADDRESS=0.0.0.0 \
+bash "${script_dir}/r5-runtime-up.sh" > "${temp_dir}/wildcard-bind-stdout"
+grep -Fq 'url=http://127.0.0.1:8088/' "${temp_dir}/wildcard-bind-stdout"
+grep -Fq 'bindAddress=0.0.0.0' "${temp_dir}/wildcard-bind-stdout"
+
 : > "${docker_log}"
 if PATH="${temp_dir}/bin:${PATH}" \
   R5_TEST_DOCKER_LOG="${docker_log}" R5_TEST_CURL_LOG="${curl_log}" \

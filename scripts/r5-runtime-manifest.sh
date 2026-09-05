@@ -43,6 +43,11 @@ if [[ -z "${publish_address}" || "${publish_address}" == *[[:space:]/]* ]]; then
   exit 2
 fi
 url_host="${publish_address}"
+if [[ "${url_host}" == "0.0.0.0" ]]; then
+  url_host="127.0.0.1"
+elif [[ "${url_host}" == "::" || "${url_host}" == "[::]" ]]; then
+  url_host="::1"
+fi
 if [[ "${url_host}" == *:* && "${url_host}" != \[*\] ]]; then
   url_host="[${url_host}]"
 fi
