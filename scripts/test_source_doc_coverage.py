@@ -1,3 +1,5 @@
+"""Proves the Java documentation ratchet inventories nested types and non-trivial executable intent."""
+
 import tempfile
 import unittest
 from pathlib import Path
