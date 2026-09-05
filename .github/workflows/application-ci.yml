@@ -15,8 +15,11 @@ on:
       - 'compose.yaml'
       - 'compose.oci.yaml'
       - 'compose.r4.yaml'
+      - 'compose.r5.yaml'
       - 'scripts/r4-*.sh'
+      - 'scripts/r5-*.sh'
       - 'scripts/test-r4-gallery.sh'
+      - 'scripts/test-r5-runtime.sh'
       - 'scripts/analyze_dataset_ceiling.py'
       - 'scripts/test_analyze_dataset_ceiling.py'
       - 'scripts/validate_design_map.py'
@@ -30,8 +33,11 @@ on:
       - 'compose.yaml'
       - 'compose.oci.yaml'
       - 'compose.r4.yaml'
+      - 'compose.r5.yaml'
       - 'scripts/r4-*.sh'
+      - 'scripts/r5-*.sh'
       - 'scripts/test-r4-gallery.sh'
+      - 'scripts/test-r5-runtime.sh'
       - 'scripts/analyze_dataset_ceiling.py'
       - 'scripts/test_analyze_dataset_ceiling.py'
       - 'scripts/validate_design_map.py'
@@ -111,6 +117,7 @@ jobs:
           docker compose config --quiet
           docker compose -f compose.oci.yaml config --quiet
           docker compose -f compose.r4.yaml config --quiet
+          docker compose -f compose.r5.yaml config --quiet
           if OPENAI_API_KEY=must-not-enter-deterministic-r4 \
               docker compose -f compose.r4.yaml config | grep -Fq must-not-enter-deterministic-r4; then
             echo 'Raw deterministic R4 Compose configuration leaked the ambient OpenAI credential.' >&2
@@ -119,6 +126,9 @@ jobs:
 
       - name: VFY-CONFIDENTIALITY-001 + VFY-FAILURE-PATHS-001 - Verify R4 gallery lifecycle scripts
         run: bash scripts/test-r4-gallery.sh
+
+      - name: Verify R5 runtime lifecycle scripts
+        run: bash scripts/test-r5-runtime.sh
 
   verify:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.compatibility == true }}
