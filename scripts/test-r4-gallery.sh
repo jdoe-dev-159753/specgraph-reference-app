@@ -25,10 +25,15 @@ local_credential_state=absent
 projected_local_credential_state=absent
 [[ -n "${SPECGRAPH_PROJECTED_LOCAL_API_KEY:-}" ]] && projected_local_credential_state=present
 session_cookie_name="${R4_SESSION_COOKIE_NAME:-absent}"
-printf 'ambient-credential=%s projected-credential=%s local-endpoint=%s local-credential=%s projected-local-credential=%s session-cookie=%s %s\n' \
+local_context_window="${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-absent}"
+local_max_output="${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:-absent}"
+local_transport_margin="${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:-absent}"
+printf 'ambient-credential=%s projected-credential=%s local-endpoint=%s local-credential=%s projected-local-credential=%s session-cookie=%s local-context-window=%s local-max-output=%s local-transport-margin=%s %s\n' \
   "${ambient_credential_state}" "${projected_credential_state}" \
   "${local_endpoint_state}" "${local_credential_state}" \
-  "${projected_local_credential_state}" "${session_cookie_name}" "$*" >> "${R4_TEST_DOCKER_LOG}"
+  "${projected_local_credential_state}" "${session_cookie_name}" \
+  "${local_context_window}" "${local_max_output}" "${local_transport_margin}" \
+  "$*" >> "${R4_TEST_DOCKER_LOG}"
 if [[ "$*" == *"compose -p specgraph-r4-baseline"* && "$*" == *" ps -q --all r4"* ]]; then
   printf '%s\n' "${R4_TEST_BASELINE_CONTAINER:-}"
   exit 0
@@ -55,10 +60,14 @@ if [[ "$*" == *"inspect --format {{if .State.Health}}{{.State.Health.Status}}{{e
 fi
 if [[ "$*" == *"inspect --format {{range .Config.Env}}{{println .}}{{end}} baseline-container"* ]]; then
   printf 'SPECGRAPH_ANALYSIS_BACKEND=%s\n' "${R4_TEST_BASELINE_BACKEND:-deterministic}"
+  printf 'SERVER_SERVLET_SESSION_COOKIE_NAME=%s\n' \
+    "${R4_TEST_BASELINE_COOKIE:-specgraph-r4-default_session}"
   exit 0
 fi
 if [[ "$*" == *"inspect --format {{range .Config.Env}}{{println .}}{{end}} external-container"* ]]; then
   printf 'SPECGRAPH_ANALYSIS_BACKEND=%s\n' "${R4_TEST_EXTERNAL_BACKEND:-openai}"
+  printf 'SERVER_SERVLET_SESSION_COOKIE_NAME=%s\n' \
+    "${R4_TEST_EXTERNAL_COOKIE:-reviewer_custom_session}"
   exit 0
 fi
 if [[ "$*" == *"port baseline-container 8080/tcp"* ]]; then
@@ -144,6 +153,9 @@ R4_TEST_DOCKER_LOG="${docker_log}" \
 SPECGRAPH_LOCAL_BASE_URL=http://192.168.1.20:1234/v1 \
 SPECGRAPH_LOCAL_MODEL=ministral-test \
 SPECGRAPH_LOCAL_API_KEY=test-only-local-key \
+SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS=8192 \
+SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS=1024 \
+SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS=384 \
 bash "${script_dir}/r4-variant-up.sh" local 8086 local \
   > "${temp_dir}/local-stdout" 2> "${temp_dir}/local-stderr"
 local_up="$(grep -F "specgraph-r4-local" "${docker_log}" | grep -F " up ")"
@@ -153,6 +165,10 @@ if [[ "${local_up}" != *"projected-credential=absent local-endpoint=present loca
 fi
 if [[ "${local_up}" != *"session-cookie=specgraph-r4-local_session"* ]]; then
   echo "local variant did not receive its distinct session cookie name" >&2
+  exit 1
+fi
+if [[ "${local_up}" != *"local-context-window=8192 local-max-output=1024 local-transport-margin=384"* ]]; then
+  echo "local variant did not receive its configured prompt-budget envelope" >&2
   exit 1
 fi
 
@@ -183,7 +199,8 @@ grep -Fq "externalTransmission=false" "${temp_dir}/local-stdout"
 grep -Fq "stage3Runtime=lmstudio/llama.cpp" "${temp_dir}/local-stdout"
 
 for variant in baseline bayesian local external; do
-  bash "${script_dir}/r4-variant-manifest.sh" "${variant}" 8084 deterministic \
+  bash "${script_dir}/r4-variant-manifest.sh" \
+    "${variant}" 8084 deterministic "specgraph-r4-${variant}_session" \
     > "${temp_dir}/${variant}-cookie-manifest"
   grep -Eq '^sessionCookieName=[a-zA-Z][a-zA-Z0-9_-]{0,63}$' \
     "${temp_dir}/${variant}-cookie-manifest"
@@ -237,10 +254,19 @@ grep -Fq "composeProject=specgraph-r4-baseline" "${temp_dir}/running-manifest"
 grep -Fq "composeProject=specgraph-r4-external" "${temp_dir}/running-manifest"
 grep -Fq "url=http://localhost:9097/" "${temp_dir}/running-manifest"
 grep -Fq "stage3Backend=openai" "${temp_dir}/running-manifest"
+grep -Fq "sessionCookieName=specgraph-r4-default_session" "${temp_dir}/running-manifest"
+grep -Fq "sessionCookieName=reviewer_custom_session" "${temp_dir}/running-manifest"
 if [[ "$(grep -Fc 'runtimeState=healthy' "${temp_dir}/running-manifest")" != "2" ]]; then
   echo "standalone manifest did not report both running variants from Compose state" >&2
   exit 1
 fi
+
+grep -Fq 'SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS: "${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-4096}"' \
+  "${script_dir}/../compose.r4.yaml"
+grep -Fq 'SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS: "${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:-512}"' \
+  "${script_dir}/../compose.r4.yaml"
+grep -Fq 'SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS: "${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:-256}"' \
+  "${script_dir}/../compose.r4.yaml"
 
 : > "${docker_log}"
 PATH="${temp_dir}/bin:${PATH}" \

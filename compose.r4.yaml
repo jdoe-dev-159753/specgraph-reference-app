@@ -37,6 +37,9 @@ services:
       # token cannot enter deterministic or OpenAI containers through raw Compose.
       SPECGRAPH_LOCAL_API_KEY: "${SPECGRAPH_PROJECTED_LOCAL_API_KEY:-}"
       SPECGRAPH_LOCAL_TIMEOUT: "${SPECGRAPH_LOCAL_TIMEOUT:-60s}"
+      SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS: "${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-4096}"
+      SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS: "${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:-512}"
+      SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS: "${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:-256}"
       SPECGRAPH_EMBEDDING_CACHE: /tmp/specgraph-embedding-model
       # Deliberately separate from the provider's conventional variable so an
       # ambient shell credential cannot enter a raw deterministic Compose run.

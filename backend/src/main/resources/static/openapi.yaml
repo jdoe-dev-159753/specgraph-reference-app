@@ -218,9 +218,13 @@ components:
   securitySchemes:
     SessionCookie:
       type: apiKey
-      in: cookie
-      name: JSESSIONID
-      description: Spring Security HTTP session used by the R4 application boundary.
+      in: header
+      name: Cookie
+      description: >-
+        Spring Security HTTP session used by the R4 application boundary. Send
+        the active deployment session as
+        <sessionCookieName>=<session-id>; source-built R4 manifests expose the
+        runtime-specific sessionCookieName.
   parameters:
     CustomerId:
       name: customerId

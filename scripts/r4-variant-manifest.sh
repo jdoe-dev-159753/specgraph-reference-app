@@ -23,10 +23,10 @@ if [[ ! "${port}" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
 fi
 
 project="specgraph-r4-${variant}"
-session_cookie_name="${project}_session"
+session_cookie_name="${4:-${project}_session}"
 
 if [[ ! "${session_cookie_name}" =~ ^[a-zA-Z][a-zA-Z0-9_-]{0,63}$ ]]; then
-  echo "derived session cookie name '${session_cookie_name}' is not a safe 1..64 character cookie name" >&2
+  echo "session cookie name '${session_cookie_name}' is not a safe 1..64 character cookie name" >&2
   exit 2
 fi
 
