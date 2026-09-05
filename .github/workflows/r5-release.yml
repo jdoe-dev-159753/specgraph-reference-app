@@ -54,6 +54,11 @@ jobs:
           docker ps -aq --filter 'name=specgraph-r5-release-' | xargs -r docker rm -f || true
           docker network ls --format '{{.Name}}' | grep '^specgraph-r5-release-' | xargs -r docker network rm || true
 
+      - name: Clean container-owned outputs before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams'
+
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.SOURCE_SHA }}
