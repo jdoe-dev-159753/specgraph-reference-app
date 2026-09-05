@@ -43,8 +43,8 @@ services:
       # token is cleared before Compose is invoked.
       SPECGRAPH_LOCAL_API_KEY: "${SPECGRAPH_R5_PROJECTED_LOCAL_API_KEY:-}"
       SPECGRAPH_LOCAL_TIMEOUT: "${SPECGRAPH_LOCAL_TIMEOUT:-60s}"
-      SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS: "${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-4096}"
-      SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS: "${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:-384}"
+      SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS: "${SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS:-8192}"
+      SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS: "${SPECGRAPH_LOCAL_MAX_OUTPUT_TOKENS:-512}"
       SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS: "${SPECGRAPH_LOCAL_TRANSPORT_MARGIN_TOKENS:-256}"
       SPECGRAPH_EMBEDDING_CACHE: /tmp/specgraph-embedding-model
       OPENAI_API_KEY: ""
@@ -56,7 +56,10 @@ services:
       r5-cache-init:
         condition: service_completed_successfully
     ports:
-      - "${R5_BIND_ADDRESS:-127.0.0.1}:${R5_PORT:-8088}:8080"
+      - target: 8080
+        published: "${R5_PORT:-8088}"
+        host_ip: "${R5_BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/actuator/health"]
       interval: 3s
