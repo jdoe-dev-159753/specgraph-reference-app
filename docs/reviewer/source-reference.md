@@ -4,13 +4,13 @@ The reviewer reference is a generated view of maintained source documentation. I
 
 ## Generate the reference
 
-From the repository root, run:
+From the repository root, generate the complete bundle:
 
 ```bash
-./scripts/render-openapi-reference.sh
+./scripts/generate-source-reference.sh
 ```
 
-The command writes the browsable HTTP reference to `backend/target/source-reference/http-api/index.html`. A different repository-relative output directory can be supplied as the first argument; the generated file inside it remains `index.html`.
+The bundle is written beneath `backend/target/source-reference/`. Its root index links to Java implementation documentation, the frontend/browser implementation reference, and the HTTP contract reference. The component renderers remain directly callable as `./scripts/render-frontend-reference.sh [output-directory]` and `./scripts/render-openapi-reference.sh [output-directory]`.
 
 The renderer is Redocly CLI pinned by version and multi-platform image digest. It runs without network access and reads only the repository-owned `backend/src/main/resources/static/openapi.yaml`. Generated HTML stays under the ignored `backend/target/` tree and is not committed.
 
@@ -20,19 +20,36 @@ The renderer is Redocly CLI pinned by version and multi-platform image digest. I
 | --- | --- | --- |
 | HTTP endpoints and schemas | `backend/src/main/resources/static/openapi.yaml` | `http-api/index.html` |
 | Java contracts and module boundaries | Javadoc and `package-info.java` in production sources | Maven Javadoc output |
+| Browser implementation and executable scenarios | TSDoc in `frontend/**/*.ts(x)` and `e2e/**/*.ts`, plus the complete source inventory | TypeDoc frontend reference |
 | Requirements and architecture | SRS, SDD, ADRs, and their controlled diagram sources | None; links remain links to the authorities |
 
 The `source-reference` workflow assembles the HTTP and Java views into one downloadable `source-reference-<source SHA>` artifact. A clean generation must preserve the existing OpenAPI contract checks; the renderer never derives or rewrites that contract.
 
-## Frontend TypeDoc applicability
+## Frontend and browser implementation reference
 
-TypeDoc is intentionally not part of this reference. The current frontend is an application, not a reusable TypeScript library:
+The frontend is an application rather than a reusable library, but its implementation intent remains reviewer-relevant. The generated TypeDoc site therefore uses expanded file entry points and documented exports to make application components, HTTP shapes, formatting/query functions, browser-test fixtures, and configuration factories navigable. Exporting a symbol for documentation does **not** declare it a stable external API; `openapi.yaml` remains the only HTTP authority.
 
-- `frontend/src/main.tsx` is the browser composition root and exports nothing;
-- `frontend/src/App.tsx` exports only the root React component used by that composition root;
-- `frontend/vite.config.ts` exports build-tool configuration rather than an application contract.
+The source commentary covers:
 
-Generating TypeDoc for those entry points would create an effectively empty reference and add a dependency without documenting a durable public surface. Revisit this decision if the frontend introduces reusable exported API clients, shared domain types, hooks, or component contracts consumed outside their defining module.
+- the session state machine, CSRF ownership, protected-content gate, and logout cache clearing;
+- draft-versus-submitted customer query state, activity/history pagination, and duplicate-submission guards;
+- separation of source risk, detector artifacts, policy grounding, and model execution provenance;
+- every Playwright scenario's measured behavior and explicit evidence limits;
+- the single application mount point, shared query cache, visual evidence policy, Vite same-origin proxy, compiler configurations, and browser-tool dependencies.
+
+`docs/reviewer/frontend-source-inventory.json` inventories 17 maintained browser files: 12 TypeScript/TSX sources and five HTML/JSON configuration authorities. `python3 scripts/check-frontend-source-reference.py` fails when a file is added or removed without reconciliation, when a TypeScript module lacks module intent, or when a type, function, exported variable, hook/state declaration, named arrow function, or Playwright scenario lacks a preceding documentation comment.
+
+Configuration files that cannot carry TSDoc remain intentional:
+
+| File | Decision represented |
+| --- | --- |
+| `frontend/index.html` | Owns one stateless application mount point; session and business state stay in React/server boundaries. |
+| `frontend/package.json` | Declares the ADR-004 React/MUI/TanStack/Vite assembly; it is an application package, not a published library. |
+| `frontend/tsconfig.json` | Enforces strict, no-emit, bundler-resolved browser compilation; Vite alone owns asset emission. |
+| `frontend/tsconfig.node.json` | Isolates the composite build-tool configuration from browser DOM compilation. |
+| `e2e/package.json` | Pins Playwright exactly so recorded browser evidence does not silently adopt a newer test runtime. |
+
+TypeDoc 0.28.20 currently consumes the TypeScript compiler API through 6.x, while the application build uses TypeScript 7. The documentation toolchain is consequently isolated under `docs/tooling/frontend-reference/` with its own locked TypeScript 6.0.2 parser and `skipErrorChecking`; the normal frontend `tsc --noEmit` build remains the type-correctness authority. TypeDoc produces navigation and renders comments, while the source inventory ratchet owns completeness.
 
 ## Reviewer use
 

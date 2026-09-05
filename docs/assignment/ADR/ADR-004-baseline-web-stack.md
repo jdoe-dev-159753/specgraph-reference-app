@@ -49,6 +49,7 @@ The following map makes the service rendered by the browser/application stack ex
 | TanStack Query | Supplies server-state fetch, cache, mutation and invalidation semantics instead of custom request/cache coordination. | Client runtime adapter between React workflows and same-origin REST endpoints. | Replace query/mutation orchestration while preserving endpoint schemas and domain semantics. |
 | Node.js | Executes npm, TypeScript and Vite in development and the container build stage. | Build/development tool runtime; absent from the final Java runtime image. | Rehost the frontend toolchain and update CI/container build recipes; the executable JAR contract is unchanged. |
 | Vite | Builds browser assets and supplies the development server plus `/api` proxy instead of project-owned bundling/dev-server code. The delivered demo image consumes only its static build output. | Build/development tooling, not a durable deployed service. | Replace package scripts, build configuration and development proxy; Spring Boot's same-origin runtime topology remains unchanged. |
+| TypeDoc | Renders documented browser application modules, named implementation surfaces and Playwright scenario modules into a searchable reviewer reference. | Isolated build-only documentation tool; documented exports improve navigation but do not define a supported frontend library API. | A replacement must preserve the complete frontend/browser inventory ratchet and render non-library application entry points. |
 | OpenAPI + Redocly CLI | Keeps endpoint and schema semantics in one maintained contract and renders an offline browsable reviewer view without project-owned documentation rendering code. | `openapi.yaml` is authoritative; the pinned Redocly container is build-only tooling and generated HTML is non-authoritative. | A replacement renderer must consume the same OpenAPI file without generating or competing for contract ownership. |
 
 Framework types stay outside durable domain/application contracts. The selected libraries supply commodity capability; project-owned code focuses on domain composition, ports and assignment-specific behaviour.
@@ -62,6 +63,7 @@ Remote-demo ingress, TLS termination, reverse proxies, load balancers, hosting p
 - the implementation follows the assignment's preferred ecosystem without pretending those preferences are functional requirements;
 - common security, relational access, HTTP, UI, API-documentation and container concerns are reused rather than reimplemented;
 - the deployed `openapi.yaml` remains the single HTTP-contract authority, while generated API-reference HTML is a disposable reviewer view;
+- browser implementation intent and executable-scenario limits are navigable even though the frontend is an application rather than a published library;
 - the relational stack reuses Jakarta Persistence with Hibernate ORM behind project-owned ports while Flyway alone owns the schema;
 - Spring AI pgvector retrieval remains separate from the Hibernate/JPA business-persistence adapters;
 - Java 21 remains within the source's Java 17+ preference;
@@ -69,6 +71,8 @@ Remote-demo ingress, TLS termination, reverse proxies, load balancers, hosting p
 - no edge component becomes an architectural dependency before a remote deployment target exists.
 
 The trade-off is a moderately broad dependency surface, controlled by requiring every non-trivial dependency to render a concrete durable service. A framework is not kept merely because it appeared in the initial baseline or assignment preference list.
+
+TypeDoc 0.28.20 supports the TypeScript compiler API through 6.x, while the application build uses TypeScript 7. Documentation generation therefore uses an isolated locked TypeScript 6.0.2 parser with semantic error checking disabled. The application build's `tsc --noEmit` remains the type-correctness authority; TypeDoc renders comments and navigation, and a repository-owned inventory/comment ratchet enforces coverage across application and Playwright sources.
 
 ## Alternatives not selected
 

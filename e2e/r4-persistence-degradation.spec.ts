@@ -1,19 +1,36 @@
+/**
+ * Browser failure-path evidence for customer reads and every analysis-stage terminal failure.
+ *
+ * @remarks
+ * The workflow injects one backend failure per run and proves the UI neither keeps
+ * stale customer evidence nor fabricates completed/grounded/history state. Recovery
+ * is measured immediately after each failure. The suite verifies presentation and
+ * public failure contracts, while backend tests own transaction rollback semantics.
+ *
+ * @module
+ */
 import { expect, Page, test } from '@playwright/test'
 
+/** Stable secured customer keeps injected infrastructure failure as the only varying dimension. */
 const seededCustomer = '11111111-1111-1111-1111-111111111111'
+/** Customer endpoint targeted by both the failure injection and recovery oracle. */
 const customerPath = `/api/customers/${seededCustomer}`
+/** Nested analysis/history endpoint targeted without intercepting customer reads. */
 const analysisPath = `${customerPath}/analyses`
 
-type Analysis = {
+/** Minimal completed result used only to identify newly retained history entries. */
+export type Analysis = {
   analysisId: string
 }
 
-type AnalysisFailure = {
+/** Public failure oracle pairing HTTP status, operator-safe detail, and bounded reason code. */
+export type AnalysisFailure = {
   status: number
   detail: string
   reason: string
 }
 
+/** Complete public failure catalogue that must remain failed, ungrounded, and unretained in the UI. */
 const analysisFailures: AnalysisFailure[] = [
   {
     status: 502,
@@ -47,14 +64,16 @@ const analysisFailures: AnalysisFailure[] = [
   },
 ]
 
-async function signIn(page: Page) {
+/** Establishes the secured reviewer state required by every degradation scenario. */
+export async function signIn(page: Page) {
   await page.getByLabel('Operator ID').fill('operator-alpha')
   await page.getByLabel('Password').fill('alpha-demo-2026')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.getByTestId('operator-session')).toContainText('operator-alpha')
 }
 
-async function loadCustomer(page: Page) {
+/** Reloads source evidence and waits for both activity and risk surfaces before analysis. */
+export async function loadCustomer(page: Page) {
   const responsePromise = page.waitForResponse(response =>
     response.url().endsWith(customerPath) && response.request().method() === 'GET')
   await page.getByLabel('Customer ID').fill(seededCustomer)
@@ -64,16 +83,19 @@ async function loadCustomer(page: Page) {
   await expect(page.getByTestId('risk-evidence')).toBeVisible()
 }
 
-async function historyIds(page: Page) {
+/** Reads retained identities directly so a failure cannot masquerade as an unchanged rendered list. */
+export async function historyIds(page: Page) {
   const response = await page.request.get(analysisPath)
   expect(response.status()).toBe(200)
   return (await response.json() as Analysis[]).map(entry => entry.analysisId)
 }
 
-function canonicalVisibleText(value: string) {
+/** Normalizes layout whitespace while preserving the source-risk content used as the stale-state oracle. */
+export function canonicalVisibleText(value: string) {
   return value.replace(/\s+/g, ' ').trim()
 }
 
+/** Proves a failed customer query clears prior evidence and releases its duplicate-click guard for recovery. */
 test('VFY-FAILURE-PATHS-001 database query failure is recoverable without stale customer evidence', async ({ page }) => {
   await page.goto('/')
   await signIn(page)
@@ -102,6 +124,7 @@ test('VFY-FAILURE-PATHS-001 database query failure is recoverable without stale 
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
+/** Proves every bounded analysis failure remains visibly failed, unretained, and recoverable. */
 test('VFY-FAILURE-PATHS-001 analysis failures never appear completed, grounded or retained and the UI recovers', async ({ page }) => {
   await page.goto('/')
   await signIn(page)
