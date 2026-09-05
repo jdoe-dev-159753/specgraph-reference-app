@@ -23,7 +23,8 @@ on:
       - 'scripts/validate_verification_markers.py'
       - 'scripts/test_validate_verification_markers.py'
       - 'docs/assignment/VV/verification.yaml'
-      - 'e2e/**/*.spec.ts'
+      - 'e2e/playwright.config.ts'
+      - 'e2e/**/*.ts'
       - 'docs/analysis/dataset-ceiling.md'
       - '.github/workflows/application-ci.yml'
   push:
@@ -42,7 +43,8 @@ on:
       - 'scripts/validate_verification_markers.py'
       - 'scripts/test_validate_verification_markers.py'
       - 'docs/assignment/VV/verification.yaml'
-      - 'e2e/**/*.spec.ts'
+      - 'e2e/playwright.config.ts'
+      - 'e2e/**/*.ts'
       - 'docs/analysis/dataset-ceiling.md'
       - '.github/workflows/application-ci.yml'
 

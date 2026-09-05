@@ -76,7 +76,9 @@ class VerificationMarkerTests(unittest.TestCase):
             root = Path(directory)
             java = root / "Evidence.java"
             java.write_text(
-                '// VFY-NOT-A-TAG-001\n@Tag("VFY-HISTORY-001")\n',
+                '// VFY-NOT-A-TAG-001\n'
+                '@Tag("VFY-HISTORY-001")\n'
+                'class Evidence { @Test void executes() {} }\n',
                 encoding="utf-8",
             )
             playwright = root / "evidence.spec.ts"
@@ -96,8 +98,11 @@ class VerificationMarkerTests(unittest.TestCase):
                 '// @Tag("VFY-COMMENTED-LINE-001")\n'
                 '/* @Tag("VFY-COMMENTED-BLOCK-001") */\n'
                 '@Tag("VFY-HISTORY-001")\n'
-                'String annotation = "@Disabled";\n'
-                'String endpoint = "https://example.test/*";\n',
+                'class Evidence {\n'
+                '  String annotation = "@Disabled";\n'
+                '  String endpoint = "https://example.test/*";\n'
+                '  @Test void executes() {}\n'
+                '}\n',
                 encoding="utf-8",
             )
 
@@ -114,9 +119,11 @@ class VerificationMarkerTests(unittest.TestCase):
                 '      """;\n'
                 '}\n'
                 '@Tag("VFY-HISTORY-001")\n'
-                'class RealEvidence {}\n'
-                '@org.junit.jupiter.api.Tag("VFY-DELIVERY-001")\n'
-                'class QualifiedRealEvidence {}\n',
+                'class RealEvidence { @Test void executes() {} }\n'
+                'class QualifiedRealEvidence {\n'
+                '  @org.junit.jupiter.api.Tag("VFY-DELIVERY-001")\n'
+                '  @org.junit.jupiter.api.Test void executes() {}\n'
+                '}\n',
                 encoding="utf-8",
             )
 
@@ -124,6 +131,18 @@ class VerificationMarkerTests(unittest.TestCase):
                 frozenset({"VFY-HISTORY-001", "VFY-DELIVERY-001"}),
                 evidence_markers(java),
             )
+
+    def test_tagged_class_without_discoverable_tests_is_not_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            java = Path(directory) / "Evidence.java"
+            java.write_text(
+                '@Tag("VFY-HISTORY-001")\n'
+                'class EmptyTaggedClass {}\n'
+                'class ExecutedButUntaggedClass { @Test void executes() {} }\n',
+                encoding="utf-8",
+            )
+
+            self.assertEqual(frozenset(), evidence_markers(java))
 
     def test_commented_out_playwright_tests_are_not_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -166,6 +185,10 @@ class VerificationMarkerTests(unittest.TestCase):
             )
             e2e = root / "e2e"
             e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                "export default { testMatch: /.*\\.spec\\.ts/ };\n",
+                encoding="utf-8",
+            )
             (e2e / "executed.spec.ts").write_text(
                 "test('VFY-DELIVERY-001 executable slice', async () => {});\n",
                 encoding="utf-8",
@@ -182,6 +205,74 @@ class VerificationMarkerTests(unittest.TestCase):
             self.assertEqual(
                 (Path("e2e/executed.spec.ts"),),
                 result.sources["VFY-DELIVERY-001"],
+            )
+
+    def test_inventory_uses_playwright_configured_test_match(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-DELIVERY-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                "export default { testMatch: /.*\\.evidence\\.ts/ };\n",
+                encoding="utf-8",
+            )
+            (e2e / "executed.evidence.ts").write_text(
+                "test('VFY-DELIVERY-001 configured evidence', async () => {});\n",
+                encoding="utf-8",
+            )
+            (e2e / "ignored.spec.ts").write_text(
+                "test('VFY-NOT-CONTROLLED-001 stale convention', async () => {});\n",
+                encoding="utf-8",
+            )
+
+            result = inventory(root)
+
+            self.assertFalse(result.unknown)
+            self.assertFalse(result.missing)
+            self.assertEqual(
+                (Path("e2e/executed.evidence.ts"),),
+                result.sources["VFY-DELIVERY-001"],
+            )
+
+    def test_inherited_contract_tests_make_concrete_subclass_discoverable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-CUSTOMER-READ-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            tests = root / "backend/src/test"
+            tests.mkdir(parents=True)
+            (tests / "CustomerPortContract.java").write_text(
+                "abstract class CustomerPortContract { @Test void inheritedTest() {} }\n",
+                encoding="utf-8",
+            )
+            (tests / "ConcreteCustomerPortTests.java").write_text(
+                '@Tag("VFY-CUSTOMER-READ-001")\n'
+                "final class ConcreteCustomerPortTests extends CustomerPortContract {}\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                "export default { testMatch: /.*\\.spec\\.ts/ };\n",
+                encoding="utf-8",
+            )
+
+            result = inventory(root)
+
+            self.assertFalse(result.missing)
+            self.assertEqual(
+                (Path("backend/src/test/ConcreteCustomerPortTests.java"),),
+                result.sources["VFY-CUSTOMER-READ-001"],
             )
 
     def test_disabled_junit_source_cannot_certify_colocated_active_marker(self):
@@ -244,7 +335,14 @@ class VerificationMarkerTests(unittest.TestCase):
             test = root / "backend/src/test/Evidence.java"
             test.parent.mkdir(parents=True)
             test.write_text(
-                "\n".join(f'@Tag("{marker}")' for marker in self.discovered),
+                "\n".join(f'@Tag("{marker}")' for marker in self.discovered)
+                + "\nclass Evidence { @Test void executes() {} }\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                "export default { testMatch: /.*\\.spec\\.ts/ };\n",
                 encoding="utf-8",
             )
             return root
