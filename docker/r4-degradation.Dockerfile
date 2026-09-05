@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1.7
+# Layers the test-only degradation fixture onto the exact application image under test.
 ARG APP_R4_IMAGE
 
 FROM ${APP_R4_IMAGE} AS exact-head

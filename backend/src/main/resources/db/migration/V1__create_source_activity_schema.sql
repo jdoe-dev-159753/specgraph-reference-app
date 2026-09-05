@@ -1,3 +1,4 @@
+-- Owns the immutable source-shaped customer/activity/risk facts; later analysis remains advisory.
 CREATE TYPE activity_type_enum AS ENUM ('CARD', 'PAYMENT', 'CRYPTO');
 CREATE TYPE risk_applies_to_enum AS ENUM ('CARD', 'PAYMENT', 'CRYPTO', 'ALL');
 CREATE TABLE customers (

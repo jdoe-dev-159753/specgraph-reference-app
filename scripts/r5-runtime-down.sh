@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Stops R5 while retaining the costly embedding cache unless destructive purge is explicitly requested.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

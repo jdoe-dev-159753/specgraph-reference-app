@@ -1,3 +1,4 @@
+# CI overlay reuses only the content-addressed embedding cache created under an external host lock.
 services:
   r4:
     volumes:
