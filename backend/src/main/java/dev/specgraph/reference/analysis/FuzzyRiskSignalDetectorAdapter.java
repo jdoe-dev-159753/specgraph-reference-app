@@ -112,6 +112,11 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
         return new FeatureInference(rawRatio, effectiveRatio, membership, degree);
     }
 
+    /**
+     * Projects one prior-adjusted ratio onto an overlapping low/medium/high partition whose
+     * degrees sum to one. The overlap keeps transitions inspectable and avoids the discontinuous
+     * score jumps produced by independent right-shoulder memberships.
+     */
     private static Membership partition(double value) {
         if (value <= LOW_SHOULDER_END) {
             return new Membership(1.0, 0.0, 0.0);
@@ -165,8 +170,13 @@ final class FuzzyRiskSignalDetectorAdapter implements RiskSignalDetectorPort {
         return String.format(Locale.ROOT, "%.6f", value);
     }
 
+    /** Retains the three linguistic degrees so provenance can expose the complete partition. */
     private record Membership(double low, double medium, double high) {}
 
+    /**
+     * Keeps source-observed and prior-adjusted ratios beside their fuzzy interpretation, allowing
+     * reviewers to distinguish fixture facts from the detector's small-sample heuristic.
+     */
     private record FeatureInference(
             double rawRatio, double effectiveRatio, Membership membership, double degree) {}
 }

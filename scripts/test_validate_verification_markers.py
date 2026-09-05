@@ -1,3 +1,5 @@
+"""Exercises fail-closed discovery of controlled V&V markers in executable Java and Playwright tests."""
+
 import tempfile
 import unittest
 from pathlib import Path
