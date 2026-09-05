@@ -87,6 +87,24 @@ class VerificationMarkerTests(unittest.TestCase):
 
             self.assertEqual(frozenset({"VFY-DELIVERY-001"}), evidence_markers(playwright))
 
+    def test_playwright_scanner_ignores_marker_shaped_strings_and_member_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            playwright = Path(directory) / "evidence.spec.ts"
+            playwright.write_text(
+                'const quoted = "test(\'VFY-NOT-CONTROLLED-001 quoted\')";\n'
+                "const templated = `test('VFY-NOT-CONTROLLED-002 templated')`;\n"
+                "matcher.test('VFY-NOT-CONTROLLED-003 member call');\n"
+                "test('VFY-HISTORY-001 real single-quoted test', async () => {});\n"
+                'test /* retained comment */ ("VFY-DELIVERY-001 real double-quoted test.skip( title", '
+                "async () => {});\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                frozenset({"VFY-HISTORY-001", "VFY-DELIVERY-001"}),
+                evidence_markers(playwright),
+            )
+
     def test_non_spec_typescript_helper_is_not_executable_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -140,6 +158,8 @@ class VerificationMarkerTests(unittest.TestCase):
         disabled_calls = (
             "test.skip('VFY-HISTORY-001 disabled test', async () => {});",
             "test.fixme('VFY-HISTORY-001 disabled test', async () => {});",
+            "testInfo.skip(true, 'disabled dynamically');",
+            "testInfo.fixme(true, 'disabled dynamically');",
             "describe.skip('disabled suite', () => {});",
             "describe.fixme('disabled suite', () => {});",
             "test.describe.skip('disabled suite', () => {});",

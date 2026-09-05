@@ -18,8 +18,7 @@ CATALOGUE = Path("docs/assignment/VV/verification.yaml")
 MARKER = re.compile(r"VFY-[A-Z0-9]+(?:-[A-Z0-9]+)*")
 JAVA_TAG = re.compile(r'@Tag\(\s*"(VFY-[A-Z0-9]+(?:-[A-Z0-9]+)*)"\s*\)')
 JAVA_DISABLED = re.compile(r"@(?:org\.junit\.jupiter\.api\.)?Disabled\b")
-PLAYWRIGHT_TITLE = re.compile(r"\btest\s*\(\s*(['\"])(.*?)\1", re.DOTALL)
-PLAYWRIGHT_DISABLED = re.compile(r"\b(?:test|describe)\s*\.\s*(?:skip|fixme)\s*\(")
+PLAYWRIGHT_DISABLED = re.compile(r"\.\s*(?:skip|fixme)\s*\(")
 
 EVIDENCE_GLOBS = (
     "backend/src/test/**/*.java",
@@ -143,6 +142,74 @@ def source_without_quoted_text(text: str) -> str:
     return "".join(masked)
 
 
+def quoted_literal(text: str, start: int) -> tuple[str | None, int]:
+    """Read one single- or double-quoted literal without evaluating escapes."""
+    quote = text[start]
+    content: list[str] = []
+    index = start + 1
+    while index < len(text):
+        character = text[index]
+        if character == "\\" and index + 1 < len(text):
+            content.extend((character, text[index + 1]))
+            index += 2
+            continue
+        if character == quote:
+            return "".join(content), index + 1
+        content.append(character)
+        index += 1
+    return None, len(text)
+
+
+def playwright_test_titles(text: str) -> tuple[str, ...]:
+    """Extract static titles from global ``test(...)`` calls in executable source."""
+    titles: list[str] = []
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if character in ('"', "'", "`"):
+            _, index = quoted_literal(text, index)
+            continue
+
+        if not text.startswith("test", index):
+            index += 1
+            continue
+
+        before = text[index - 1] if index else ""
+        after_index = index + len("test")
+        after = text[after_index] if after_index < len(text) else ""
+        if (before and (before.isalnum() or before in "_$")) or (
+            after and (after.isalnum() or after in "_$")
+        ):
+            index = after_index
+            continue
+
+        previous = index - 1
+        while previous >= 0 and text[previous].isspace():
+            previous -= 1
+        if previous >= 0 and text[previous] == ".":
+            index = after_index
+            continue
+
+        cursor = after_index
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        if cursor >= len(text) or text[cursor] != "(":
+            index = after_index
+            continue
+        cursor += 1
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        if cursor >= len(text) or text[cursor] not in ('"', "'"):
+            index = after_index
+            continue
+
+        title, index = quoted_literal(text, cursor)
+        if title is not None:
+            titles.append(title)
+
+    return tuple(titles)
+
+
 def evidence_markers(path: Path) -> frozenset[str]:
     text = source_without_comments(path.read_text(encoding="utf-8"))
     structure = source_without_quoted_text(text)
@@ -153,12 +220,13 @@ def evidence_markers(path: Path) -> frozenset[str]:
             return frozenset()
         return frozenset(JAVA_TAG.findall(text))
     if path.suffix == ".ts":
-        # Playwright modifiers can disable a test or an enclosing suite. A file that
-        # mixes one with V&V titles supplies no evidence until the sources are split.
+        # Any member skip/fixme call can disable a test dynamically or an enclosing
+        # suite. A file that mixes one with V&V titles supplies no evidence until split.
         if PLAYWRIGHT_DISABLED.search(structure):
             return frozenset()
-        titles = (match.group(2) for match in PLAYWRIGHT_TITLE.finditer(text))
-        return frozenset(marker for title in titles for marker in MARKER.findall(title))
+        return frozenset(
+            marker for title in playwright_test_titles(text) for marker in MARKER.findall(title)
+        )
     return frozenset()
 
 
