@@ -1,0 +1,238 @@
+name: r5-release
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker/**'
+      - 'compose.r5.yaml'
+      - 'compose.r5.ci.yaml'
+      - 'e2e/r4-complete-flow.spec.ts'
+      - 'scripts/r5-*.sh'
+      - 'scripts/test-r5-runtime.sh'
+      - 'scripts/ci/lm-studio-contract-stub.py'
+      - 'scripts/ci/run-playwright.sh'
+      - '.github/workflows/r5-release.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker/**'
+      - 'compose.r5.yaml'
+      - 'compose.r5.ci.yaml'
+      - 'e2e/r4-complete-flow.spec.ts'
+      - 'scripts/r5-*.sh'
+      - 'scripts/test-r5-runtime.sh'
+      - 'scripts/ci/lm-studio-contract-stub.py'
+      - 'scripts/ci/run-playwright.sh'
+      - '.github/workflows/r5-release.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: r5-release-publication
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prove-and-publish:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    env:
+      APP_PACKAGE: ghcr.io/${{ github.repository_owner }}/specgraph-reference-app
+      COMPOSE_PACKAGE: ghcr.io/${{ github.repository_owner }}/specgraph-reference-app-compose
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      R5_MODEL: ministral-3-8b-instruct-2512
+
+    steps:
+      - name: Reclaim this workflow's stale runtime
+        run: |
+          docker ps -aq --filter 'name=specgraph-r5-release-' | xargs -r docker rm -f || true
+          docker network ls --format '{{.Name}}' | grep '^specgraph-r5-release-' | xargs -r docker network rm || true
+
+      - name: Clean container-owned outputs before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams'
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: Assert exact source and runtime contracts
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          bash -n scripts/r5-runtime-up.sh scripts/r5-runtime-status.sh scripts/r5-runtime-down.sh
+          bash scripts/test-r5-runtime.sh
+          docker compose -f compose.r5.yaml config --quiet
+
+      - name: Build exact-head R5 and browser dependency images
+        run: |
+          local_image="specgraph-reference-app:r5-${SOURCE_SHA}"
+          docker build -f docker/app.Dockerfile \
+            --label "org.opencontainers.image.revision=$SOURCE_SHA" \
+            --label "dev.specgraph.delivery-ring=R5" \
+            -t "$local_image" .
+          echo "LOCAL_R5_IMAGE=$local_image" >> "$GITHUB_ENV"
+          e2e_image="$(bash scripts/ci/ensure-e2e-image.sh)"
+          echo "E2E_IMAGE=$e2e_image" >> "$GITHUB_ENV"
+
+      - name: Start isolated OpenAI-compatible contract endpoint
+        run: |
+          network_name="specgraph-r5-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          stub_name="specgraph-r5-release-stub-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          app_port=$((30000 + GITHUB_RUN_ID % 10000))
+          stub_port=$((41000 + GITHUB_RUN_ID % 10000))
+          docker network create "$network_name"
+          docker volume create specgraph-r5-ci-embedding-cache >/dev/null
+          mkdir -p e2e/test-results
+          docker run -d --name "$stub_name" --network "$network_name" \
+            -v "$PWD/scripts/ci/lm-studio-contract-stub.py:/stub.py:ro" \
+            -v "$PWD/e2e/test-results:/evidence" \
+            python:3.13-alpine \
+            python /stub.py --port "$stub_port" --model "$R5_MODEL" \
+              --request-log /evidence/r5-lm-studio-requests.jsonl
+          stub_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$stub_name")"
+          for attempt in $(seq 1 30); do
+            docker exec "$stub_name" wget -q -O /dev/null "http://127.0.0.1:${stub_port}/v1/models" && break
+            [ "$attempt" -lt 30 ] || exit 1
+            sleep 1
+          done
+          {
+            echo "R5_NETWORK_NAME=$network_name"
+            echo "R5_STUB_NAME=$stub_name"
+            echo "R5_PORT=$app_port"
+            echo "R5_STUB_PORT=$stub_port"
+            echo "R5_STUB_IP=$stub_ip"
+            echo "COMPOSE_PROJECT_NAME=specgraph-r5-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          } >> "$GITHUB_ENV"
+
+      - name: Start the exact R5 topology
+        run: |
+          export APP_R5_IMAGE="$LOCAL_R5_IMAGE"
+          export R5_BIND_ADDRESS=127.0.0.1
+          export SPECGRAPH_LOCAL_MODEL="$R5_MODEL"
+          export SPECGRAPH_LOCAL_BASE_URL="http://${R5_STUB_IP}:${R5_STUB_PORT}/v1"
+          docker compose -f compose.r5.yaml -f compose.r5.ci.yaml \
+            up -d --no-build --pull missing --wait
+          curl -fsS "http://127.0.0.1:${R5_PORT}/actuator/health" | grep -F '"status":"UP"'
+
+      - name: Prove the authenticated composite and capture the browser
+        env:
+          EVIDENCE_NAME: r5-lmstudio-ensemble
+          EXPECT_DETECTORS: beta-binomial-review-elevation-v1,graded-review-fuzzy-v1,random-forest-review-v1
+          EXPECT_MODEL_BACKEND: local
+          EXPECT_MODEL_IDENTITY: ministral-3-8b-instruct-2512
+          EXPECT_PROMPT_IDENTITY: grounded-analysis-v2
+          EXPECT_EXTERNAL_TRANSMISSION: 'false'
+        run: |
+          export BASE_URL="http://127.0.0.1:${R5_PORT}"
+          bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
+
+      - name: Diagnose a failed browser proof
+        if: failure()
+        run: |
+          docker compose -f compose.r5.yaml -f compose.r5.ci.yaml logs --no-color r5 || true
+          docker logs "$R5_STUB_NAME" || true
+          if [ -f e2e/test-results/r5-lm-studio-requests.jsonl ]; then
+            echo 'LM Studio contract requests received:'
+            sed -n '1,3p' e2e/test-results/r5-lm-studio-requests.jsonl
+          else
+            echo 'No LM Studio contract request reached the endpoint.'
+          fi
+
+      - name: Assert and collect R5 evidence
+        run: |
+          request_log=e2e/test-results/r5-lm-studio-requests.jsonl
+          test -s "$request_log"
+          grep -Fq 'beta-binomial-review-elevation-v1:posterior-review-elevation-rate' "$request_log"
+          grep -Fq 'graded-review-fuzzy-v1:fuzzy-review-elevation' "$request_log"
+          grep -Fq 'random-forest-review-v1:random-forest-review-elevation-vote' "$request_log"
+          grep -Fq '"response_format"' "$request_log"
+          mkdir -p e2e/reviewer-evidence/r5
+          find e2e/test-results -type f -name 'r5-lmstudio-ensemble-customer-444.png' \
+            -exec cp -v {} e2e/reviewer-evidence/r5/ \;
+          test -s e2e/reviewer-evidence/r5/r5-lmstudio-ensemble-customer-444.png
+          find e2e/test-results -type f -name 'detector-scenario-scores.json' \
+            -exec cp -v {} e2e/reviewer-evidence/r5/ \;
+          test -s e2e/reviewer-evidence/r5/detector-scenario-scores.json
+          printf '%s\n' \
+            "sourceSha=$SOURCE_SHA" \
+            "applicationImage=$LOCAL_R5_IMAGE" \
+            'stage1=BAYESIAN,FUZZY,RANDOM_FOREST' \
+            'stage2=pgvector+all-MiniLM-L6-v2' \
+            "stage3Backend=local" \
+            "stage3Model=$R5_MODEL" \
+            'stage3Transport=OpenAI-compatible contract endpoint' \
+            'externalTransmission=false' \
+            > e2e/reviewer-evidence/r5/provenance.txt
+
+      - name: Upload R5 browser and model-boundary evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-lmstudio-ensemble-${{ env.SOURCE_SHA }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: |
+            e2e/reviewer-evidence/r5/**
+            e2e/test-results/r5-lm-studio-requests.jsonl
+            e2e/test-results/r5-lmstudio-ensemble.xml
+            e2e/playwright-report/r5-lmstudio-ensemble/**
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish immutable R5 image and Compose candidate
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          remote_image="$APP_PACKAGE:r5-$SOURCE_SHA"
+          docker tag "$LOCAL_R5_IMAGE" "$remote_image"
+          docker push "$remote_image"
+          inspect="$(docker buildx imagetools inspect "$remote_image")"
+          printf '%s\n' "$inspect"
+          digest="$(printf '%s\n' "$inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
+          printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          export APP_R5_IMAGE="$APP_PACKAGE@$digest"
+          candidate="r5-$SOURCE_SHA"
+          docker compose -f compose.r5.yaml publish -y --resolve-image-digests \
+            "$COMPOSE_PACKAGE:$candidate"
+          docker buildx imagetools inspect "$COMPOSE_PACKAGE:$candidate"
+          {
+            echo "R5_DIGEST=$digest"
+            echo "R5_COMPOSE_CANDIDATE=$candidate"
+          } >> "$GITHUB_ENV"
+
+      - name: Promote the accepted main-branch R5 tags
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker buildx imagetools create -t "$APP_PACKAGE:r5" "$APP_PACKAGE@$R5_DIGEST"
+          export APP_R5_IMAGE="$APP_PACKAGE@$R5_DIGEST"
+          docker compose -f compose.r5.yaml publish -y --resolve-image-digests \
+            "$COMPOSE_PACKAGE:r5"
+          docker buildx imagetools inspect "$APP_PACKAGE:r5"
+          docker buildx imagetools inspect "$COMPOSE_PACKAGE:r5"
+
+      - name: Summarize the reviewer candidate
+        run: |
+          {
+            echo '## R5 reviewer candidate'
+            echo
+            printf -- '- source: `%s`\n' "$SOURCE_SHA"
+            printf -- '- application: `%s@%s`\n' "$APP_PACKAGE" "$R5_DIGEST"
+            printf -- '- Compose: `oci://%s:%s`\n' "$COMPOSE_PACKAGE" "$R5_COMPOSE_CANDIDATE"
+            echo '- executable evidence: authenticated browser flow, three Stage-1 artifacts, pgvector grounding, local/OpenAI-compatible Stage 3, retained result, and model-boundary request log'
+            echo '- the CI endpoint is a contract double; final LM Studio hardware evidence is performed on WatchInfra against the same immutable candidate'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Reclaim isolated proof runtime
+        if: always()
+        run: |
+          if [ -n "${COMPOSE_PROJECT_NAME:-}" ]; then
+            docker compose -f compose.r5.yaml -f compose.r5.ci.yaml down -v --remove-orphans || true
+          fi
+          [ -z "${R5_STUB_NAME:-}" ] || docker rm -f "$R5_STUB_NAME" || true
+          [ -z "${R5_NETWORK_NAME:-}" ] || docker network rm "$R5_NETWORK_NAME" || true
+          [ -z "${LOCAL_R5_IMAGE:-}" ] || docker image rm -f "$LOCAL_R5_IMAGE" || true
+          docker logout ghcr.io || true

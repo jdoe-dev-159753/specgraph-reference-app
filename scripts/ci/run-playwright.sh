@@ -19,6 +19,12 @@ args=(
 if [ -n "${EXPECT_DETECTOR:-}" ]; then
   args+=( -e EXPECT_DETECTOR )
 fi
+for variable in EXPECT_DETECTORS EXPECT_MODEL_BACKEND EXPECT_MODEL_IDENTITY \
+    EXPECT_PROMPT_IDENTITY EXPECT_EXTERNAL_TRANSMISSION; do
+  if [ -n "${!variable:-}" ]; then
+    args+=( -e "${variable}" )
+  fi
+done
 
 "${args[@]}" "$E2E_IMAGE" bash -lc '
   set -euo pipefail
