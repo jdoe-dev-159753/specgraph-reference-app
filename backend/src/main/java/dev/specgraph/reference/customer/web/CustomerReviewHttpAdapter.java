@@ -7,6 +7,7 @@ import dev.specgraph.reference.customer.CustomerReviewUseCase;
 import dev.specgraph.reference.risk.RiskEvidence;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -44,13 +45,20 @@ final class CustomerReviewHttpAdapter {
             return ResponseEntity.badRequest().build();
         }
 
-        return customerReview.findCustomer(customerId, query)
+        Optional<CustomerReviewPage> reviewPage;
+        try {
+            reviewPage = customerReview.findCustomer(customerId, query);
+        } catch (RuntimeException exception) {
+            throw new CustomerDataFailureException(exception);
+        }
+
+        return reviewPage
                 .map(CustomerSnapshotResponse::from)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @ExceptionHandler(RuntimeException.class)
+    @ExceptionHandler(CustomerDataFailureException.class)
     ResponseEntity<ProblemDetail> customerDataFailure() {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.INTERNAL_SERVER_ERROR,
@@ -58,6 +66,12 @@ final class CustomerReviewHttpAdapter {
         problem.setTitle("Customer data unavailable");
         problem.setProperty("reason", "CUSTOMER_DATA_FAILURE");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problem);
+    }
+
+    private static final class CustomerDataFailureException extends RuntimeException {
+        private CustomerDataFailureException(RuntimeException cause) {
+            super("Customer data could not be loaded", cause);
+        }
     }
 
     record CustomerSnapshotResponse(
