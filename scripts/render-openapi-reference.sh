@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Renders the canonical OpenAPI contract without committing generated HTML artifacts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
