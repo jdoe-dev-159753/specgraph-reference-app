@@ -48,11 +48,13 @@ export SPECGRAPH_LOCAL_MODEL=ministral-3-8b-instruct-2512
 export R5_BIND_ADDRESS=10.77.0.31
 export R5_PORT=8088
 docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5 \
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-883ada763d6b6427df7709dd8295f8672c4a4dd4 \
   up -d --wait --no-build --pull always
 docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5 ps
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-883ada763d6b6427df7709dd8295f8672c4a4dd4 ps
 ```
+
+This immutable candidate was proven and published by the successful R5 workflow. The shorter `:r5` tag is promoted only after merge to `main`.
 
 If the VPS cannot route `10.77.0.1`, retry the route check with the LM Studio address reported by Windows, currently `169.254.123.79`, and use that same address in `SPECGRAPH_LOCAL_BASE_URL`. Do not continue until `/v1/models` returns the Ministral model.
 
@@ -69,7 +71,7 @@ Stop and reset the R5 demo with the same OCI Compose package:
 
 ```bash
 docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5 \
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-883ada763d6b6427df7709dd8295f8672c4a4dd4 \
   down -v
 ```
 
@@ -79,6 +81,12 @@ From a repository checkout, `./scripts/r5-runtime-up.sh` is the stricter alterna
 
 These unedited screenshots were promoted from successful browser-validation artifacts. They keep the interface and evidence story reviewable if the live model or network is unavailable during the interview.
 
+### R5 full composite with local-model provenance
+
+![Authenticated R5 full composite with three detector artifacts, pgvector grounding and local model provenance](docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png)
+
+This unedited capture comes from the exact workflow that published the immutable WatchInfra candidate above. Its Stage-3 endpoint is the deterministic LM Studio contract double; the manual WatchInfra rehearsal proves the same candidate against the real LM Studio process and Developer Logs.
+
 ### R4 deterministic baseline
 
 ![Authenticated R4 baseline with pgvector grounding and retained analysis](docs/reviewer/screenshots/R4_baseline_customer_444.png)
@@ -86,8 +94,6 @@ These unedited screenshots were promoted from successful browser-validation arti
 ### R4 Bayesian detector
 
 ![Authenticated R4 Bayesian variant with pgvector grounding and retained analysis](docs/reviewer/screenshots/R4_bayesian_customer_444.png)
-
-The R5 workflow publishes the equivalent full composite + LM Studio-compatible screenshot artifact; its exact image is promoted here unchanged after that run succeeds.
 
 ## What the reviewer is seeing
 
