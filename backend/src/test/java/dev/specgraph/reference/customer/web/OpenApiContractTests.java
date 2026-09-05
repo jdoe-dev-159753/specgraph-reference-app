@@ -55,8 +55,9 @@ class OpenApiContractTests {
 
         assertThat(api.getComponents().getSecuritySchemes()).containsKey("SessionCookie");
         var sessionCookie = api.getComponents().getSecuritySchemes().get("SessionCookie");
-        assertThat(sessionCookie.getName()).isEqualTo("JSESSIONID");
-        assertThat(String.valueOf(sessionCookie.getIn())).containsIgnoringCase("cookie");
+        assertThat(sessionCookie.getName()).isEqualTo("Cookie");
+        assertThat(String.valueOf(sessionCookie.getIn())).containsIgnoringCase("header");
+        assertThat(sessionCookie.getDescription()).contains("sessionCookieName");
 
         Schema<?> sessionResponse = api.getComponents().getSchemas().get("SessionResponse");
         assertThat(sessionResponse.getOneOf()).extracting(Schema::get$ref).containsExactlyInAnyOrder(
