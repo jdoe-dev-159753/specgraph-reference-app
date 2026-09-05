@@ -130,7 +130,7 @@ The runtime is one modular monolith with hexagonal boundaries. HTTP/UI, relation
 - [Architecture decisions](docs/assignment/ADR/), including the [public product identity and final-freeze boundary](docs/assignment/ADR/ADR-008-customer-activity-analytics-identity.md)
 - [V&V — verification strategy and evidence model](docs/assignment/VV/VV.md)
 - [OpenAPI — deployed HTTP contract](backend/src/main/resources/static/openapi.yaml)
-- [Source-derived Java and HTTP reference](docs/reviewer/source-reference.md) — run `./scripts/render-openapi-reference.sh`, or download the `source-reference-<source SHA>` artifact from the `source-reference` workflow
+- [Source-derived Java, frontend and HTTP reference](docs/reviewer/source-reference.md) — run `./scripts/generate-source-reference.sh`, or download the `source-reference-<source SHA>` artifact from the `source-reference` workflow
 - [Proprietary evaluation license](LICENSE)
 
 PlantUML sources beside the rendered SVGs are authoritative. GitHub issues, pull requests, checks and exact-SHA artifacts own delivery state; this README stays a concise entry point rather than duplicating those records.

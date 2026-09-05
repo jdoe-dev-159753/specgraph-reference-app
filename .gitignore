@@ -4,7 +4,9 @@ frontend/dist/
 e2e/node_modules/
 e2e/playwright-report/
 e2e/test-results/
+docs/tooling/frontend-reference/node_modules/
 .env.demo
 .idea/
 .vscode/
 .DS_Store
+__pycache__/

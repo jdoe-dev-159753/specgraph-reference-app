@@ -1,0 +1,9 @@
+{
+  "name": "specgraph-frontend-source-reference-tooling",
+  "private": true,
+  "version": "1.0.0",
+  "devDependencies": {
+    "typedoc": "0.28.20",
+    "typescript": "6.0.2"
+  }
+}

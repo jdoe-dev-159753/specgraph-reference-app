@@ -1,16 +1,35 @@
+/**
+ * Reusable dense-browser scenario for bounded customer review and duplicate-action recovery.
+ *
+ * @remarks
+ * The in-browser routes deliberately model 250 activities while releasing selected
+ * responses through gates. This proves that repeated clicks create one request,
+ * paging remains bounded, failures clear stale evidence, and analysis guards recover.
+ * It is a deterministic UI concurrency fixture, not persistence or performance proof.
+ *
+ * @module
+ */
 import { expect, Page } from '@playwright/test'
 
+/** Dedicated fixture identity keeps route interception away from repository seed scenarios. */
 const denseCustomer = '55555555-5555-5555-5555-555555555555'
+/** Stable absent identity used to distinguish not-found from malformed input. */
 const unknownCustomer = '99999999-9999-9999-9999-999999999999'
+/** Deliberately malformed identity owns the public bad-request path. */
 const invalidCustomer = 'invalid-customer'
+/** Fixed seed makes the repeated filter sequence replayable across runs. */
 const interactionSeed = 0x125
+/** Route boundary covers customer paging/filter variants but excludes nested analysis traffic. */
 const denseCustomerReviewUrl = new RegExp(`/api/customers/${denseCustomer}(?:\\?.*)?$`)
+/** Separate nested route retains analysis request counts and history independently from customer reads. */
 const denseAnalysisUrl = new RegExp(`/api/customers/${denseCustomer}/analyses(?:\\?.*)?$`)
+/** Expected client-error route is limited to the two explicit invalid identities. */
 const invalidCustomerReviewUrl = new RegExp(
   `/api/customers/(?:${unknownCustomer}|${invalidCustomer})?(?:\\?.*)?$`,
 )
 
-type StoredAnalysis = {
+/** Minimal retained-analysis contract required by the dense browser fixture. */
+export type StoredAnalysis = {
   analysisId: string
   customerId: string
   operatorId: string
@@ -37,7 +56,8 @@ type StoredAnalysis = {
   }
 }
 
-function activity(index: number, status = index % 2 === 0 ? 'Completed' : 'Declined') {
+/** Creates stable high-volume rows whose ordering, identities, and decimal strings are assertion-friendly. */
+export function activity(index: number, status = index % 2 === 0 ? 'Completed' : 'Declined') {
   const suffix = String(index).padStart(12, '0')
   return {
     transactionId: `55555555-5555-5555-5556-${suffix}`,
@@ -58,7 +78,8 @@ function activity(index: number, status = index % 2 === 0 ? 'Completed' : 'Decli
   }
 }
 
-function seededStatuses(seed: number, count: number) {
+/** Generates reproducible filter choices so repeated-interaction coverage is not a flaky random walk. */
+export function seededStatuses(seed: number, count: number) {
   let state = seed >>> 0
   return Array.from({ length: count }, () => {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0
@@ -66,6 +87,10 @@ function seededStatuses(seed: number, count: number) {
   })
 }
 
+/**
+ * Exercises paging, filtering, expected 400/404 recovery, request de-duplication,
+ * retained analysis, and a mobile viewport through the browser boundary.
+ */
 export async function runHighVolumeReviewScenario(page: Page) {
   const browserErrors: string[] = []
   const pageErrors: string[] = []
