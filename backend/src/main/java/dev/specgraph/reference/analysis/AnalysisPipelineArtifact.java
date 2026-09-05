@@ -12,6 +12,7 @@ import java.util.Map;
 public sealed interface AnalysisPipelineArtifact
         permits RiskSignalEvidence, PolicyEvidence, AnalysisModelProvenance {
 
+    /** Closed discriminator for the supported derived-artifact families. */
     enum Kind {
         DETECTOR_EVIDENCE,
         POLICY_RETRIEVAL_EVIDENCE,
