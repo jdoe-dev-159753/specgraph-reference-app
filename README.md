@@ -36,7 +36,7 @@ R5 is the one full interview configuration: authenticated customer review, Bayes
 
 ## Docker quickstart
 
-Prerequisites: LM Studio on Windows, Docker Compose 2.34+ on `watch-infra-01`, and read access to the repository's private GHCR packages. In LM Studio, load `ministral-3-8b-instruct-2512`, enable **Serve on Local Network**, and open **Developer > Logs**.
+Prerequisites: LM Studio on Windows, Docker Compose 2.34+ on `watch-infra-01`, and read access to the repository's private GHCR packages. In LM Studio, load `ministral-3-8b-instruct-2512` with its current 4,096-token context, enable **Serve on Local Network**, and open **Developer > Logs**. The R5 profile reserves 384 output tokens so the full customer `444` evidence remains inside that loaded context.
 
 From `watch-infra-01`, copy and run this block. The first command proves the VPS-to-LM-Studio route before Docker starts anything:
 
