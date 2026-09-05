@@ -20,6 +20,8 @@ on:
       - 'scripts/analyze_dataset_ceiling.py'
       - 'scripts/test_analyze_dataset_ceiling.py'
       - 'scripts/validate_design_map.py'
+      - 'scripts/validate_verification_markers.py'
+      - 'scripts/test_validate_verification_markers.py'
       - 'docs/analysis/dataset-ceiling.md'
       - '.github/workflows/application-ci.yml'
   push:
@@ -35,6 +37,8 @@ on:
       - 'scripts/analyze_dataset_ceiling.py'
       - 'scripts/test_analyze_dataset_ceiling.py'
       - 'scripts/validate_design_map.py'
+      - 'scripts/validate_verification_markers.py'
+      - 'scripts/test_validate_verification_markers.py'
       - 'docs/analysis/dataset-ceiling.md'
       - '.github/workflows/application-ci.yml'
 
@@ -70,6 +74,11 @@ jobs:
 
       - name: Ratchet normative SRS to design-map coverage
         run: python3 scripts/validate_design_map.py
+
+      - name: Verify executable V&V marker inventory
+        run: |
+          python3 -B -m unittest scripts/test_validate_verification_markers.py
+          python3 -B scripts/validate_verification_markers.py
 
       - name: Verify synthetic dataset ceiling report
         run: |

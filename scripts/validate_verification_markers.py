@@ -58,8 +58,64 @@ def catalogue_ids(text: str) -> frozenset[str]:
     return ids
 
 
+def source_without_comments(text: str) -> str:
+    """Mask line and block comments while preserving quoted source text."""
+    masked: list[str] = []
+    index = 0
+    state = "code"
+    quote = ""
+    while index < len(text):
+        character = text[index]
+        following = text[index + 1] if index + 1 < len(text) else ""
+
+        if state == "code":
+            if character == "/" and following == "/":
+                masked.extend((" ", " "))
+                index += 2
+                state = "line-comment"
+                continue
+            if character == "/" and following == "*":
+                masked.extend((" ", " "))
+                index += 2
+                state = "block-comment"
+                continue
+            masked.append(character)
+            if character in ('"', "'", "`"):
+                quote = character
+                state = "quoted"
+            index += 1
+            continue
+
+        if state == "line-comment":
+            masked.append(character if character in "\r\n" else " ")
+            index += 1
+            if character in "\r\n":
+                state = "code"
+            continue
+
+        if state == "block-comment":
+            if character == "*" and following == "/":
+                masked.extend((" ", " "))
+                index += 2
+                state = "code"
+                continue
+            masked.append(character if character in "\r\n" else " ")
+            index += 1
+            continue
+
+        masked.append(character)
+        index += 1
+        if character == "\\" and index < len(text):
+            masked.append(text[index])
+            index += 1
+        elif character == quote:
+            state = "code"
+
+    return "".join(masked)
+
+
 def evidence_markers(path: Path) -> frozenset[str]:
-    text = path.read_text(encoding="utf-8")
+    text = source_without_comments(path.read_text(encoding="utf-8"))
     if path.suffix == ".java":
         return frozenset(JAVA_TAG.findall(text))
     if path.suffix == ".ts":

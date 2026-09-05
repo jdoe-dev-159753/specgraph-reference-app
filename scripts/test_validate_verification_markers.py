@@ -61,6 +61,31 @@ class VerificationMarkerTests(unittest.TestCase):
             self.assertEqual(frozenset({"VFY-HISTORY-001"}), evidence_markers(java))
             self.assertEqual(frozenset({"VFY-DELIVERY-001"}), evidence_markers(playwright))
 
+    def test_commented_out_junit_tags_are_not_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            java = Path(directory) / "Evidence.java"
+            java.write_text(
+                '// @Tag("VFY-COMMENTED-LINE-001")\n'
+                '/* @Tag("VFY-COMMENTED-BLOCK-001") */\n'
+                '@Tag("VFY-HISTORY-001")\n'
+                'String endpoint = "https://example.test/*";\n',
+                encoding="utf-8",
+            )
+
+            self.assertEqual(frozenset({"VFY-HISTORY-001"}), evidence_markers(java))
+
+    def test_commented_out_playwright_tests_are_not_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            playwright = Path(directory) / "evidence.spec.ts"
+            playwright.write_text(
+                "// test('VFY-COMMENTED-LINE-001 disabled', async () => {});\n"
+                "/* test('VFY-COMMENTED-BLOCK-001 disabled', async () => {}); */\n"
+                "test('VFY-DELIVERY-001 preserves https:// and /* in a title', async () => {});\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(frozenset({"VFY-DELIVERY-001"}), evidence_markers(playwright))
+
     class fixture:
         def __init__(self, controlled, discovered):
             self.controlled = controlled
