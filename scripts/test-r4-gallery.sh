@@ -24,10 +24,11 @@ local_credential_state=absent
 [[ -n "${SPECGRAPH_LOCAL_API_KEY:-}" ]] && local_credential_state=present
 projected_local_credential_state=absent
 [[ -n "${SPECGRAPH_PROJECTED_LOCAL_API_KEY:-}" ]] && projected_local_credential_state=present
-printf 'ambient-credential=%s projected-credential=%s local-endpoint=%s local-credential=%s projected-local-credential=%s %s\n' \
+session_cookie_name="${R4_SESSION_COOKIE_NAME:-absent}"
+printf 'ambient-credential=%s projected-credential=%s local-endpoint=%s local-credential=%s projected-local-credential=%s session-cookie=%s %s\n' \
   "${ambient_credential_state}" "${projected_credential_state}" \
   "${local_endpoint_state}" "${local_credential_state}" \
-  "${projected_local_credential_state}" "$*" >> "${R4_TEST_DOCKER_LOG}"
+  "${projected_local_credential_state}" "${session_cookie_name}" "$*" >> "${R4_TEST_DOCKER_LOG}"
 if [[ "$*" == *"compose -p specgraph-r4-baseline"* && "$*" == *" ps -q --all r4"* ]]; then
   printf '%s\n' "${R4_TEST_BASELINE_CONTAINER:-}"
   exit 0
@@ -124,8 +125,16 @@ if [[ "${baseline_up}" != "ambient-credential=absent projected-credential=absent
   echo "deterministic baseline inherited the OpenAI credential" >&2
   exit 1
 fi
+if [[ "${baseline_up}" != *"session-cookie=specgraph-r4-baseline_session"* ]]; then
+  echo "baseline did not receive its project-derived session cookie name" >&2
+  exit 1
+fi
 if [[ "${external_up}" != "ambient-credential=absent projected-credential=present"* ]]; then
   echo "OpenAI variant did not receive its deliberate credential" >&2
+  exit 1
+fi
+if [[ "${external_up}" != *"session-cookie=specgraph-r4-external_session"* ]]; then
+  echo "external variant did not receive its distinct session cookie name" >&2
   exit 1
 fi
 
@@ -140,6 +149,21 @@ bash "${script_dir}/r4-variant-up.sh" local 8086 local \
 local_up="$(grep -F "specgraph-r4-local" "${docker_log}" | grep -F " up ")"
 if [[ "${local_up}" != *"projected-credential=absent local-endpoint=present local-credential=absent projected-local-credential=present"* ]]; then
   echo "local variant did not isolate its endpoint/token from the OpenAI credential path" >&2
+  exit 1
+fi
+if [[ "${local_up}" != *"session-cookie=specgraph-r4-local_session"* ]]; then
+  echo "local variant did not receive its distinct session cookie name" >&2
+  exit 1
+fi
+
+: > "${docker_log}"
+PATH="${temp_dir}/bin:${PATH}" \
+R4_TEST_DOCKER_LOG="${docker_log}" \
+bash "${script_dir}/r4-variant-up.sh" bayesian 8085 deterministic \
+  > "${temp_dir}/bayesian-stdout" 2> "${temp_dir}/bayesian-stderr"
+bayesian_up="$(grep -F "specgraph-r4-bayesian" "${docker_log}" | grep -F " up ")"
+if [[ "${bayesian_up}" != *"session-cookie=specgraph-r4-bayesian_session"* ]]; then
+  echo "Bayesian variant did not receive its distinct session cookie name" >&2
   exit 1
 fi
 
@@ -157,6 +181,43 @@ fi
 grep -Fq "stage3Backend=local" "${temp_dir}/local-stdout"
 grep -Fq "externalTransmission=false" "${temp_dir}/local-stdout"
 grep -Fq "stage3Runtime=lmstudio/llama.cpp" "${temp_dir}/local-stdout"
+
+for variant in baseline bayesian local external; do
+  bash "${script_dir}/r4-variant-manifest.sh" "${variant}" 8084 deterministic \
+    > "${temp_dir}/${variant}-cookie-manifest"
+  grep -Eq '^sessionCookieName=[a-zA-Z][a-zA-Z0-9_-]{0,63}$' \
+    "${temp_dir}/${variant}-cookie-manifest"
+done
+cookie_name_count="$(cat "${temp_dir}"/*-cookie-manifest \
+  | sed -n 's/^sessionCookieName=//p' | sort -u | wc -l | tr -d '[:space:]')"
+if [[ "${cookie_name_count}" != "4" ]]; then
+  echo "baseline, Bayesian, local and external manifests did not expose four distinct cookie names" >&2
+  exit 1
+fi
+
+unsafe_variant="$(printf 'a%.0s' {1..44})"
+if bash "${script_dir}/r4-variant-manifest.sh" "${unsafe_variant}" 8084 deterministic \
+  > "${temp_dir}/unsafe-cookie-stdout" 2> "${temp_dir}/unsafe-cookie-stderr"; then
+  echo "an overlong session cookie name unexpectedly passed validation" >&2
+  exit 1
+fi
+grep -Fq "is not a safe 1..64 character cookie name" "${temp_dir}/unsafe-cookie-stderr"
+
+: > "${docker_log}"
+if PATH="${temp_dir}/bin:${PATH}" R4_TEST_DOCKER_LOG="${docker_log}" \
+  bash "${script_dir}/r4-variant-up.sh" "${unsafe_variant}" 8084 deterministic \
+  > "${temp_dir}/unsafe-up-stdout" 2> "${temp_dir}/unsafe-up-stderr"; then
+  echo "launcher accepted an overlong session cookie name" >&2
+  exit 1
+fi
+grep -Fq "is not a safe 1..64 character cookie name" "${temp_dir}/unsafe-up-stderr"
+if [[ -s "${docker_log}" ]]; then
+  echo "launcher contacted Docker before rejecting the unsafe session cookie name" >&2
+  exit 1
+fi
+
+grep -Fq 'SERVER_SERVLET_SESSION_COOKIE_NAME: "${R4_SESSION_COOKIE_NAME:-specgraph-r4-default_session}"' \
+  "${script_dir}/../compose.r4.yaml"
 
 if PATH="${temp_dir}/bin:${PATH}" R4_TEST_DOCKER_LOG="${docker_log}" \
   env -u SPECGRAPH_LOCAL_BASE_URL bash "${script_dir}/r4-variant-up.sh" local 8086 local; then

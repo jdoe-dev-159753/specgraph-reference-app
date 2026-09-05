@@ -26,6 +26,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/specgraph
       SPRING_DATASOURCE_USERNAME: specgraph
       SPRING_DATASOURCE_PASSWORD: specgraph
+      # The variant launcher supplies a project-derived name so concurrently
+      # published R4 variants never share the browser's default JSESSIONID.
+      SERVER_SERVLET_SESSION_COOKIE_NAME: "${R4_SESSION_COOKIE_NAME:-specgraph-r4-default_session}"
       SPECGRAPH_SOURCE_TIME_ZONE: "${SPECGRAPH_SOURCE_TIME_ZONE:-UTC}"
       SPECGRAPH_ANALYSIS_BACKEND: "${SPECGRAPH_ANALYSIS_BACKEND:-deterministic}"
       SPECGRAPH_LOCAL_BASE_URL: "${SPECGRAPH_LOCAL_BASE_URL:-}"
