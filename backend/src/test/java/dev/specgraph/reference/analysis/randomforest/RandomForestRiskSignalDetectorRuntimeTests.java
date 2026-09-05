@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/** Proves packaged model/manifest integrity and fail-closed loading; inference behavior is tested separately. */
 final class RandomForestRiskSignalDetectorRuntimeTests {
     @Test
     void packagedResourcesMatchTheReproducibleGeneratorAndLoadSuccessfully() throws IOException {
@@ -72,6 +73,7 @@ final class RandomForestRiskSignalDetectorRuntimeTests {
         }
     }
 
+    /** Supplies controlled missing or altered model resources without mutating packaged fixtures. */
     private static final class ResourceClassLoader extends ClassLoader {
         private final Map<String, byte[]> resources;
 

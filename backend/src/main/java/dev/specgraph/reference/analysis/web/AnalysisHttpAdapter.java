@@ -24,6 +24,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * HTTP adapter for authenticated analysis creation and customer-scoped history review.
+ * It exposes stable pagination headers and maps the application failure taxonomy to bounded problem
+ * responses without returning adapter exceptions or failed results as successful analyses.
+ */
 @RestController
 @RequestMapping("/api/customers/{customerId}/analyses")
 final class AnalysisHttpAdapter {
@@ -41,6 +46,7 @@ final class AnalysisHttpAdapter {
         return ResponseEntity.status(HttpStatus.CREATED).body(AnalysisResponse.from(completed));
     }
 
+    /** Exposes bounded history metadata in headers while retaining the existing list-shaped body. */
     @GetMapping
     ResponseEntity<List<AnalysisResponse>> history(
             @PathVariable UUID customerId,
@@ -73,6 +79,7 @@ final class AnalysisHttpAdapter {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /** Maps application reasons to stable HTTP classes without disclosing underlying exceptions. */
     @ExceptionHandler(AnalysisFailureException.class)
     ResponseEntity<ProblemDetail> analysisFailure(AnalysisFailureException exception) {
         HttpStatus status = switch (exception.reason()) {
@@ -87,6 +94,7 @@ final class AnalysisHttpAdapter {
         return ResponseEntity.status(status).body(problem);
     }
 
+    /** Transport projection retaining structured output and all persisted provenance families. */
     record AnalysisResponse(
             UUID analysisId,
             UUID customerId,
@@ -98,6 +106,7 @@ final class AnalysisHttpAdapter {
             List<PolicyEvidence> evidenceProvenance,
             List<RiskSignalEvidence> detectorProvenance,
             AnalysisModelProvenance modelProvenance) {
+        /** Projects the persisted record without recomputing or dropping any provenance family. */
         static AnalysisResponse from(AnalysisHistoryEntry entry) {
             return new AnalysisResponse(
                     entry.analysisId(),

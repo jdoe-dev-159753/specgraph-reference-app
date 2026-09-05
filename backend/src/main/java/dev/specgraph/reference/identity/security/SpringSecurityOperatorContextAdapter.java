@@ -9,6 +9,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+/**
+ * Translates Spring Security authentication into the application-owned operator context.
+ * Anonymous tokens are explicitly treated as unauthenticated even when a framework object exists.
+ */
 @Component
 @Profile("r4 | r4-auth")
 final class SpringSecurityOperatorContextAdapter implements OperatorContextPort {

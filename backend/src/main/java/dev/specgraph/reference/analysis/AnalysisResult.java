@@ -10,6 +10,7 @@ import java.util.List;
  * decision, and its recommendations are defensively copied.
  */
 public record AnalysisResult(RiskLevel riskLevel, String findingsSummary, List<String> recommendations) {
+    /** Enforces the bounded structured-output shape independently of any model provider. */
     public AnalysisResult {
         if (riskLevel == null) {
             throw new InvalidAnalysisResultException("risk level must not be null");

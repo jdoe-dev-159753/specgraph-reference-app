@@ -14,6 +14,7 @@ import org.springframework.core.env.Environment;
 @Tag("VFY-CONFIDENTIALITY-001")
 @Tag("VFY-ANALYSIS-CONTRACT-001")
 @SpringBootTest(classes = ReferenceApplication.class)
+/** Proves the default Spring context stays offline and does not instantiate the OpenAI adapter. */
 final class AnalysisBackendSelectionIntegrationTests extends PostgresIntegrationTestSupport {
     @Autowired AnalysisModelPort analysisModel;
     @Autowired ApplicationContext context;

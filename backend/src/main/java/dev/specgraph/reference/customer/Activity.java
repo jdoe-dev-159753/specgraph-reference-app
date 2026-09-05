@@ -20,6 +20,7 @@ public record Activity(
         String status,
         Instant createdAt,
         ActivityDetails details) {
+    /** Enforces the discriminator/detail invariant before an activity enters any downstream stage. */
     public Activity {
         Objects.requireNonNull(transactionId, "transactionId");
         Objects.requireNonNull(type, "type");

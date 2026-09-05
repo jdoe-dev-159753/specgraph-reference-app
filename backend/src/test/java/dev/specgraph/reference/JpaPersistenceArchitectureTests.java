@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("architecture")
+/** Proves the selected runtime has no parallel JDBC adapter and confines JPA/Hibernate types to adapters. */
 final class JpaPersistenceArchitectureTests {
     private static final Path MAIN_SOURCE = Path.of("src/main/java/dev/specgraph/reference");
 

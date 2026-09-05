@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-CUSTOMER-READ-001")
+/** Proves customer page-navigation metadata remains overflow-safe at maximum page indices. */
 final class CustomerReviewPageTests {
 
     @Test

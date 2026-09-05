@@ -2,6 +2,10 @@ package dev.specgraph.reference.analysis;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Operator-configurable LM Studio limits used to reject prompts that cannot fit the loaded model.
+ * These provider/runtime limits remain separate from the application-owned evidence-count bounds.
+ */
 @ConfigurationProperties("specgraph.analysis.local.budget")
 record LmStudioPromptBudgetProperties(
         Integer contextWindowTokens,
@@ -17,6 +21,7 @@ record LmStudioPromptBudgetProperties(
         transportMarginTokens = defaulted(transportMarginTokens, DEFAULT_TRANSPORT_MARGIN_TOKENS);
     }
 
+    /** Rejects non-positive operator limits before constructing the conservative request budget. */
     LmStudioPromptBudget validatedBudget() {
         if (contextWindowTokens <= 0) {
             throw new IllegalStateException("SPECGRAPH_LOCAL_CONTEXT_WINDOW_TOKENS must be positive");

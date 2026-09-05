@@ -12,6 +12,7 @@ import java.util.Objects;
  */
 public record PolicyEvidence(String sourceIdentity, String content, Map<String, String> retrievalMetadata)
         implements AnalysisPipelineArtifact {
+    /** Freezes retrieval metadata and rejects evidence that cannot be cited meaningfully. */
     public PolicyEvidence {
         Objects.requireNonNull(sourceIdentity, "sourceIdentity");
         Objects.requireNonNull(content, "content");

@@ -19,6 +19,7 @@ public record AnalysisModelProvenance(
         Map<String, String> metadata) implements AnalysisPipelineArtifact {
     private static final String LEGACY_PROMPT_IDENTITY = "r3-legacy-unversioned";
 
+    /** Requires a usable provider/model identity and an immutable evidence-reference snapshot. */
     public AnalysisModelProvenance {
         backendIdentity = requireText(backendIdentity, "backendIdentity");
         modelIdentity = requireText(modelIdentity, "modelIdentity");

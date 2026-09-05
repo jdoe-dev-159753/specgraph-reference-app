@@ -20,6 +20,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
 @Tag("VFY-CONFIDENTIALITY-001")
+/** Verifies provider response conversion and submitted-envelope provenance with a mocked chat model. */
 final class SpringAiAnalysisAdapterTests {
     @Test
     void convertsStructuredResponseAndBuildsProvenanceFromTheSubmittedEnvelope() {
@@ -77,6 +78,7 @@ final class SpringAiAnalysisAdapterTests {
                 .contains("Always respond in English", "Missing evidence is not evidence");
     }
 
+    /** Shared fully grounded envelope used to inspect the exact provider request and provenance. */
     static AnalysisEvidenceEnvelope evidence() {
         UUID customerId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID cardId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");

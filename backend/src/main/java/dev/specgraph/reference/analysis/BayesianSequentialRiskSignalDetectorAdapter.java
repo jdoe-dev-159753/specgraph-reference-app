@@ -21,6 +21,7 @@ final class BayesianSequentialRiskSignalDetectorAdapter implements RiskSignalDet
     static final double PRIOR_BETA = 4.0;
     static final double REFERENCE_RATE = 0.40;
 
+    /** Computes a repeatable posterior signal from the complete selected customer snapshot. */
     @Override
     public List<RiskSignalEvidence> detect(CustomerSnapshot snapshot) {
         int observations = snapshot.activities().size();
@@ -53,6 +54,7 @@ final class BayesianSequentialRiskSignalDetectorAdapter implements RiskSignalDet
                         Map.entry("demoLimitation", "synthetic heuristic; not production AML calibration"))));
     }
 
+    /** Defines the synthetic observation counted as elevated; it is not a production AML rule. */
     private static boolean isReviewElevated(Activity activity) {
         if (!"completed".equals(activity.status().trim().toLowerCase(Locale.ROOT))) {
             return true;
