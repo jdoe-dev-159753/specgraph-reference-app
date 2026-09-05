@@ -83,6 +83,12 @@ paths:
           description: R4 requires an authenticated operator session.
         '404':
           description: Customer ID is unknown; no customer is fabricated.
+        '500':
+          description: Customer data could not be loaded; internal failure details are not exposed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AnalysisProblem'
   /api/customers/{customerId}/analyses:
     post:
       operationId: runCustomerAnalysis
@@ -599,4 +605,4 @@ components:
           type: string
         reason:
           type: string
-          enum: [CUSTOMER_NOT_FOUND, DETECTOR_FAILURE, INSUFFICIENT_GROUNDING, GROUNDING_FAILURE, MODEL_FAILURE, INVALID_RESULT, PERSISTENCE_FAILURE]
+          enum: [CUSTOMER_NOT_FOUND, CUSTOMER_DATA_FAILURE, DETECTOR_FAILURE, INSUFFICIENT_GROUNDING, GROUNDING_FAILURE, MODEL_FAILURE, INVALID_RESULT, PERSISTENCE_FAILURE]

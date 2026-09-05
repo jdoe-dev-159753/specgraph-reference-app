@@ -80,7 +80,7 @@ class OpenApiContractTests {
                 "#/components/parameters/CustomerReviewStatus",
                 "#/components/parameters/CustomerReviewCreatedFrom",
                 "#/components/parameters/CustomerReviewCreatedTo");
-        assertThat(customerOperation.getResponses()).containsKeys("200", "400", "401", "404");
+        assertThat(customerOperation.getResponses()).containsKeys("200", "400", "401", "404", "500");
         assertThat(customerOperation.getResponses().get("200").getContent().get("application/json").getSchema().get$ref())
                 .isEqualTo("#/components/schemas/CustomerReviewPage");
 

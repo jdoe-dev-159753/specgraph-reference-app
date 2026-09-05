@@ -10,6 +10,7 @@ on:
       - 'scripts/ci/**'
       - 'compose.r4.yaml'
       - 'compose.r4.ci-cache.yaml'
+      - 'compose.r4.degradation.yaml'
       - '.dockerignore'
       - '.github/workflows/r4-acceptance-ci.yml'
   workflow_dispatch:
@@ -148,6 +149,50 @@ jobs:
           BASE_URL: http://127.0.0.1:${{ env.R4_PORT }}
           EVIDENCE_NAME: r4-complete-flow
         run: bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
+
+      - name: Restart exact-head R4 with isolated degradation adapters
+        run: |
+          set -euo pipefail
+          degradation_image="${APP_R4_IMAGE}-degradation"
+          DOCKER_BUILDKIT=1 docker build \
+            -f docker/r4-degradation.Dockerfile \
+            --build-arg "APP_R4_IMAGE=${APP_R4_IMAGE}" \
+            -t "$degradation_image" \
+            .
+          echo "APP_R4_DEGRADATION_IMAGE=$degradation_image" >> "$GITHUB_ENV"
+
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml stop r4
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml rm -f r4
+          APP_R4_DEGRADATION_IMAGE="$degradation_image" R4_PORT=0 docker compose \
+            -f compose.r4.yaml \
+            -f compose.r4.ci-cache.yaml \
+            -f compose.r4.degradation.yaml \
+            up -d --no-build r4
+
+          application="$(APP_R4_DEGRADATION_IMAGE="$degradation_image" docker compose \
+            -f compose.r4.yaml \
+            -f compose.r4.ci-cache.yaml \
+            -f compose.r4.degradation.yaml \
+            ps -q r4)"
+          endpoint="$(docker port "$application" 8080/tcp | head -n 1)"
+          R4_PORT="${endpoint##*:}"
+          case "$R4_PORT" in
+            ''|*[!0-9]*)
+              echo "Docker did not return a numeric degradation-test port: $endpoint" >&2
+              exit 1
+              ;;
+          esac
+          echo "R4_PORT=$R4_PORT" >> "$GITHUB_ENV"
+
+          for attempt in $(seq 1 120); do
+            if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null 2>&1; then
+              echo "R4 degradation topology healthy after ${attempt} attempts"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml logs --no-color postgres r4
+          exit 1
 
       - name: VFY-FAILURE-PATHS-001 - Verify recoverable R4 degradation matrix
         env:
