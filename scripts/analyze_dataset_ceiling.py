@@ -49,6 +49,24 @@ def wilson_interval(positive: int, total: int, z: float = 1.959963984540054) -> 
 def grouped_fold_audit(labels_by_customer: dict[str, list[bool]]) -> dict[str, object]:
     """Describe leave-one-customer-out class coverage without fitting a model."""
     customers = sorted(labels_by_customer)
+    class_masks = [
+        (1 if True in labels_by_customer[customer] else 0)
+        | (2 if False in labels_by_customer[customer] else 0)
+        for customer in customers
+    ]
+    mixed_groups = sum(mask == 3 for mask in class_masks)
+    positive_only_groups = sum(mask == 1 for mask in class_masks)
+    negative_only_groups = sum(mask == 2 for mask in class_masks)
+    remaining_after_mixed = 0
+    if mixed_groups:
+        for mask in class_masks:
+            if mask != 3:
+                remaining_after_mixed |= mask
+    grouped_holdout_with_both_classes_possible = (
+        mixed_groups >= 2
+        or (mixed_groups >= 1 and remaining_after_mixed == 3)
+        or (positive_only_groups >= 2 and negative_only_groups >= 2)
+    )
     folds_with_both_training_classes = 0
     folds_with_both_test_classes = 0
     folds_with_both_training_and_test_classes = 0
@@ -76,7 +94,7 @@ def grouped_fold_audit(labels_by_customer: dict[str, list[bool]]) -> dict[str, o
             folds_with_both_training_and_test_classes
         ),
         "grouped_holdout_with_both_classes_possible": (
-            folds_with_both_training_and_test_classes > 0
+            grouped_holdout_with_both_classes_possible
         ),
         "independent_test_groups_per_fold": 1,
     }

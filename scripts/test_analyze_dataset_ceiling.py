@@ -84,6 +84,19 @@ class DatasetCeilingTests(unittest.TestCase):
         self.assertIn("four synthetic customers and no AML ground truth", report)
         self.assertIn("an honest performance benchmark is impossible", report)
 
+    def test_grouped_holdout_feasibility_is_not_limited_to_loo_folds(self):
+        audit = ceiling.grouped_fold_audit(
+            {
+                "positive-a": [True],
+                "positive-b": [True],
+                "negative-a": [False],
+                "negative-b": [False],
+            }
+        )
+
+        self.assertEqual(0, audit["folds_with_both_test_classes"])
+        self.assertTrue(audit["grouped_holdout_with_both_classes_possible"])
+
     def test_unknown_assessment_transaction_fails_closed(self):
         source = ceiling.DEFAULT_SQL.read_text(encoding="utf-8")
         changed = source.replace(
