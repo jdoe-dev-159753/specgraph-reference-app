@@ -86,6 +86,35 @@ class VerificationMarkerTests(unittest.TestCase):
 
             self.assertEqual(frozenset({"VFY-DELIVERY-001"}), evidence_markers(playwright))
 
+    def test_non_spec_typescript_helper_is_not_executable_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-DELIVERY-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "executed.spec.ts").write_text(
+                "test('VFY-DELIVERY-001 executable slice', async () => {});\n",
+                encoding="utf-8",
+            )
+            (e2e / "helper.ts").write_text(
+                "test('VFY-NOT-CONTROLLED-001 helper text', async () => {});\n",
+                encoding="utf-8",
+            )
+
+            result = inventory(root)
+
+            self.assertFalse(result.unknown)
+            self.assertFalse(result.missing)
+            self.assertEqual(
+                (Path("e2e/executed.spec.ts"),),
+                result.sources["VFY-DELIVERY-001"],
+            )
+
     class fixture:
         def __init__(self, controlled, discovered):
             self.controlled = controlled

@@ -21,7 +21,7 @@ PLAYWRIGHT_TITLE = re.compile(r"\btest\s*\(\s*(['\"])(.*?)\1", re.DOTALL)
 
 EVIDENCE_GLOBS = (
     "backend/src/test/**/*.java",
-    "e2e/**/*.ts",
+    "e2e/**/*.spec.ts",
 )
 
 # These qualifications are part of the ratchet output so marker presence cannot
