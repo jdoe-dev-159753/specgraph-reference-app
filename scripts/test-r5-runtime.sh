@@ -380,6 +380,10 @@ grep -Fq -- '- "${R5_BIND_ADDRESS:-127.0.0.1}:${R5_PORT:-8088}:8080"' \
   "${repo_root}/compose.r5.yaml"
 grep -Fq -- '- r5-embedding-cache:/tmp/specgraph-embedding-model' \
   "${repo_root}/compose.r5.yaml"
+grep -Fq 'r5-cache-init:' "${repo_root}/compose.r5.yaml"
+grep -Fq 'command: ["sh", "-c", "chown -R 10001:10001 /cache"]' \
+  "${repo_root}/compose.r5.yaml"
+grep -Fq 'condition: service_completed_successfully' "${repo_root}/compose.r5.yaml"
 grep -Fq 'r5-embedding-cache:' "${repo_root}/compose.r5.yaml"
 grep -Fq 'response_model="$(json_string_value modelIdentity)"' "${script_dir}/r5-runtime-up.sh"
 grep -Fq 'response_prompt="$(json_string_value promptIdentity)"' "${script_dir}/r5-runtime-up.sh"

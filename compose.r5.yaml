@@ -12,6 +12,13 @@ services:
       retries: 45
       start_period: 5s
 
+  r5-cache-init:
+    image: alpine:3.22
+    command: ["sh", "-c", "chown -R 10001:10001 /cache"]
+    volumes:
+      - r5-embedding-cache:/cache
+    restart: "no"
+
   r5:
     image: "${APP_R5_IMAGE:-specgraph-reference-app:r5}"
     build:
@@ -46,6 +53,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      r5-cache-init:
+        condition: service_completed_successfully
     ports:
       - "${R5_BIND_ADDRESS:-127.0.0.1}:${R5_PORT:-8088}:8080"
     healthcheck:
