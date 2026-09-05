@@ -1,3 +1,5 @@
+"""Prove fixture inventory, split ceilings, and deterministic report output without model evaluation."""
+
 import tempfile
 import unittest
 from pathlib import Path

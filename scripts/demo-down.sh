@@ -1,4 +1,5 @@
 #!/bin/sh
+# Stops only the selected archived demonstrator topology, mirroring demo-up.sh ownership boundaries.
 set -eu
 
 mode="${1:-both}"

@@ -1,3 +1,4 @@
+# Rejects drift between controlled diagram sources and their generated reviewer-facing views.
 name: plantuml-diagrams
 
 on:

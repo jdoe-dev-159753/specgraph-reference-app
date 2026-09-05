@@ -1,4 +1,5 @@
 #!/bin/sh
+# Launches the archived R0/R1 demonstrators with explicit mode selection and optional local overrides.
 set -eu
 
 mode="${1:-both}"

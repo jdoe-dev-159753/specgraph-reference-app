@@ -1,3 +1,4 @@
+# Rehearses the pgvector retrieval boundary independently from the broader browser acceptance path.
 name: r4-retrieval-ci
 
 on:

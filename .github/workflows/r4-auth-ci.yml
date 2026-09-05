@@ -1,3 +1,4 @@
+# Exercises the authenticated reviewer shell and its security boundary on the private Docker runner.
 name: r4-auth-ci
 
 on:

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Builds or reuses the exact Playwright dependency image derived from its declared build inputs.
 set -euo pipefail
 
 command -v docker >/dev/null

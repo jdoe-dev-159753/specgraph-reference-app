@@ -1,3 +1,4 @@
+-- Adds the replaceable R4 policy-retrieval store; vector contents ground analysis but are not source truth.
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS hstore;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1.7
+# Pins browser dependencies separately from product code so E2E runs remain repeatable and cacheable.
 FROM mcr.microsoft.com/playwright:v1.55.0-noble
 
 ARG E2E_INPUTS_SHA256=unknown

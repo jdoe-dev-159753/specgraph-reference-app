@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Builds or reuses an application image only when its recipe and requested source revision agree.
 set -euo pipefail
 
 requested_tag="${1:?usage: ensure-app-image.sh IMAGE_TAG SOURCE_ROOT SOURCE_REVISION}"

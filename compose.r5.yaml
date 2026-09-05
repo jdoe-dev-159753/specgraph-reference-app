@@ -1,3 +1,4 @@
+# R5 reviewer topology composes all three Stage-1 detectors, pgvector grounding, and local LM Studio.
 services:
   postgres:
     image: "${PGVECTOR_IMAGE:-pgvector/pgvector:0.8.6-pg17}"

@@ -1,4 +1,5 @@
--- Deterministic synthetic R2 scenarios. Red flags support review; they do not assert criminal conduct.
+-- Deterministic synthetic R2 scenarios exercise reviewer paths without asserting criminal conduct.
+-- Rule weights are source-fixture contributions displayed as facts, not scores computed by this app.
 INSERT INTO customers(customer_id) VALUES
 ('11111111-1111-1111-1111-111111111111'),
 ('22222222-2222-2222-2222-222222222222'),

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Stops exactly one named R4 Compose project so parallel demo variants cannot tear down each other.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

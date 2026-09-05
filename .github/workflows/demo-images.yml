@@ -1,3 +1,4 @@
+# Publishes immutable and stable OCI demo images only after runtime and provenance verification.
 name: demo-images
 
 on:
