@@ -138,6 +138,7 @@ jobs:
         if: failure()
         run: |
           docker compose -f compose.r5.yaml -f compose.r5.ci.yaml logs --no-color r5 || true
+          docker logs "$R5_STUB_NAME" || true
           if [ -f e2e/test-results/r5-lm-studio-requests.jsonl ]; then
             echo 'LM Studio contract requests received:'
             sed -n '1,3p' e2e/test-results/r5-lm-studio-requests.jsonl

@@ -170,8 +170,9 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-DET
     response.request().method() === 'POST')
   await page.getByRole('button', { name: 'Run analysis' }).click()
   const analysisResponse = await analysisResponsePromise
-  expect(analysisResponse.status()).toBe(201)
-  const completed = await analysisResponse.json() as Analysis
+  const analysisBody = await analysisResponse.text()
+  expect(analysisResponse.status(), analysisBody).toBe(201)
+  const completed = JSON.parse(analysisBody) as Analysis
 
   expect(completed.customerId).toBe(seededCustomer)
   expect(completed.operatorId).toBe('operator-alpha')
@@ -287,8 +288,9 @@ test('records the full-composite detector scores against the crafted scenario or
     const response = await page.request.post(`/api/customers/${scenario.customerId}/analyses`, {
       headers: { 'X-CSRF-TOKEN': session.csrf.token },
     })
-    expect(response.status()).toBe(201)
-    const analysis = await response.json() as Analysis
+    const responseBody = await response.text()
+    expect(response.status(), responseBody).toBe(201)
+    const analysis = JSON.parse(responseBody) as Analysis
     expect(analysis.detectorProvenance.map(item => item.detectorIdentity)).toEqual(expectedDetectors)
     comparison.push({
       oracleRank,
