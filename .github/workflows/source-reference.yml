@@ -1,27 +1,50 @@
 name: source-reference
+# Builds one exact-head, navigable artifact from maintained intent comments and contracts.
 
 on:
   pull_request:
     paths:
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
       - 'backend/pom.xml'
       - 'backend/src/main/java/**'
+      - 'backend/src/test/java/**'
+      - 'backend/src/main/resources/application*.yml'
+      - 'backend/src/main/resources/db/**/*.sql'
+      - 'backend/src/main/resources/**/*.properties'
       - 'backend/src/main/resources/static/openapi.yaml'
-      - 'scripts/generate-source-reference.sh'
-      - 'scripts/render-openapi-reference.sh'
-      - 'scripts/source_doc_coverage.py'
-      - 'scripts/test_source_doc_coverage.py'
-      - '.github/workflows/source-reference.yml'
+      - 'compose*.yaml'
+      - 'docker/*Dockerfile'
+      - 'docs/reviewer/frontend-source-inventory.json'
+      - 'docs/tooling/frontend-reference/**'
+      - 'e2e/**'
+      - 'frontend/**'
+      - 'scripts/**/*.py'
+      - 'scripts/**/*.sh'
+      - 'scripts/ci/*.tsv'
+      - 'scripts/ci/*.txt'
   push:
     branches: [main]
     paths:
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
       - 'backend/pom.xml'
       - 'backend/src/main/java/**'
+      - 'backend/src/test/java/**'
+      - 'backend/src/main/resources/application*.yml'
+      - 'backend/src/main/resources/db/**/*.sql'
+      - 'backend/src/main/resources/**/*.properties'
       - 'backend/src/main/resources/static/openapi.yaml'
-      - 'scripts/generate-source-reference.sh'
-      - 'scripts/render-openapi-reference.sh'
-      - 'scripts/source_doc_coverage.py'
-      - 'scripts/test_source_doc_coverage.py'
-      - '.github/workflows/source-reference.yml'
+      - 'compose*.yaml'
+      - 'docker/*Dockerfile'
+      - 'docs/reviewer/frontend-source-inventory.json'
+      - 'docs/tooling/frontend-reference/**'
+      - 'e2e/**'
+      - 'frontend/**'
+      - 'scripts/**/*.py'
+      - 'scripts/**/*.sh'
+      - 'scripts/ci/*.tsv'
+      - 'scripts/ci/*.txt'
   workflow_dispatch:
 
 concurrency:
@@ -50,6 +73,11 @@ jobs:
 
       - name: Assert exact source revision
         run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
 
       - name: Generate implementation and HTTP API reference
         run: bash scripts/generate-source-reference.sh

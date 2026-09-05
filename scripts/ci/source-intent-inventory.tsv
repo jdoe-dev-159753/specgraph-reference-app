@@ -1,0 +1,13 @@
+# Non-commentable configs and protected sources whose inline bytes cannot move. Keep paths sorted.
+.github/workflows/work-graph-guard-tests.yml	Verifies the protected work-graph policy boundary before repository enforcement changes.
+.github/workflows/work-graph-guard.yml	Enforces durable workflow ownership and exact-head review evidence at the GitHub boundary.
+backend/pom.xml	Owns the backend build contract and the source-reference generation boundaries.
+docs/reviewer/frontend-source-inventory.json	Defines the exact browser and end-to-end source boundary audited before reference generation.
+docs/tooling/frontend-reference/package.json	Pins the isolated TypeDoc toolchain without changing application runtime dependencies.
+docs/tooling/frontend-reference/tsconfig.json	Defines the strict compilation boundary used only to interpret frontend source documentation.
+docs/tooling/frontend-reference/typedoc.json	Defines deterministic entry points and warning policy for the navigable frontend reference.
+e2e/package.json	Pins the browser verification runtime used to measure end-to-end behavior.
+frontend/package.json	Owns browser runtime dependencies and the application build workflow.
+frontend/tsconfig.json	Enforces the strict browser compilation boundary without emitting duplicate assets.
+frontend/tsconfig.node.json	Constrains the Vite configuration build boundary and Node runtime assumptions.
+scripts/test_work_graph_guard.py	Measures protected workflow inventory and exact-head review policy without network execution.
