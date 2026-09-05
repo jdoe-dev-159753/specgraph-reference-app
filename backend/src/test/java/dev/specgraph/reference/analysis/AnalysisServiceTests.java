@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-@Tag("VFY-ANALYSIS-001")
+@Tag("VFY-ANALYSIS-CONTRACT-001")
 @Tag("VFY-FAILURE-PATHS-001")
 final class AnalysisServiceTests {
     private static final UUID CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");

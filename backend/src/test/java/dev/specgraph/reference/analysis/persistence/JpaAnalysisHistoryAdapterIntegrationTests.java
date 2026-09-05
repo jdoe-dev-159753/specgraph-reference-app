@@ -13,10 +13,12 @@ import dev.specgraph.reference.analysis.AnalysisResult;
 import dev.specgraph.reference.analysis.PolicyEvidence;
 import dev.specgraph.reference.analysis.RiskSignalEvidence;
 import dev.specgraph.reference.identity.OperatorId;
+import jakarta.persistence.EntityManagerFactory;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -25,7 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-@Tag("VFY-ANALYSIS-HISTORY-001")
+@Tag("VFY-HISTORY-001")
 @SpringBootTest(classes = ReferenceApplication.class)
 final class JpaAnalysisHistoryAdapterIntegrationTests extends PostgresIntegrationTestSupport {
     private static final UUID FIRST_CUSTOMER =
@@ -36,6 +38,7 @@ final class JpaAnalysisHistoryAdapterIntegrationTests extends PostgresIntegratio
 
     @Autowired AnalysisHistoryPort history;
     @Autowired JdbcTemplate jdbc;
+    @Autowired EntityManagerFactory entityManagerFactory;
 
     @BeforeEach
     @AfterEach
@@ -76,6 +79,31 @@ final class JpaAnalysisHistoryAdapterIntegrationTests extends PostgresIntegratio
         assertThat(secondPage.entries()).extracting(AnalysisHistoryEntry::analysisId)
                 .containsExactly(expectedIds.get(1));
         assertThat(expectedIds).containsExactlyInAnyOrder(first.analysisId(), second.analysisId());
+    }
+
+    @Test
+    @Tag("query_count")
+    void pagesHistoryWithTwoStatementsRegardlessOfRetainedEntryCount() {
+        for (int index = 0; index < 25; index++) {
+            history.persist(command(FIRST_CUSTOMER, "operator-" + index));
+        }
+
+        var statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean statisticsWereEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        try {
+            var page = history.pageByCustomer(FIRST_CUSTOMER, new AnalysisHistoryQuery(1, 10));
+
+            assertThat(page.totalEntries()).isEqualTo(25);
+            assertThat(page.entries()).hasSize(10);
+            assertThat(statistics.getPrepareStatementCount())
+                    .as("one count query plus one bounded page query")
+                    .isEqualTo(2);
+        } finally {
+            statistics.clear();
+            statistics.setStatisticsEnabled(statisticsWereEnabled);
+        }
     }
 
     private AnalysisHistoryCreateCommand command(UUID customerId, String operatorId) {

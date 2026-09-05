@@ -10,6 +10,9 @@ from pathlib import Path
 import re
 import sys
 
+from validate_verification_markers import BOUNDED_METHOD_NOTES
+from validate_verification_markers import validate as validate_verification_markers
+
 ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = ROOT / "docs/assignment/SRS/requirements.yaml"
 DESIGN_MAP = ROOT / "docs/assignment/SDD/design-map.yaml"
@@ -58,3 +61,8 @@ print(
     f"Design coverage ratchet OK: {len(normative_requirements)} requirements, "
     f"{len(invariants)} invariants, CON-AI-002 explicit."
 )
+
+marker_inventory = validate_verification_markers(ROOT)
+print(f"Verification marker ratchet OK: {len(marker_inventory.catalogue_ids)}/10 obligations discoverable.")
+for marker, note in sorted(BOUNDED_METHOD_NOTES.items()):
+    print(f"  NOTE {marker}: {note}")
