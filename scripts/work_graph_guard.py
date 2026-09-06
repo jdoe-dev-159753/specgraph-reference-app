@@ -27,18 +27,19 @@ PROTECTED_ASSET_SHA256 = {
     ".github/workflows/work-graph-guard.yml": frozenset(
         {
             "e3cf5195153dfcc30b207bab34f88c649b0b8b21987adf5d0178fac96558fcb0",
-            "1521ac0eb866edc5f8f3736b7f331f827c42c107b31ef7d9906e91f9fbe94650",
+            "dce4bdafcc8183eccf80c43c51cad5004d626472252e0b1e1f1eec30aa5b9751",
         }
     ),
     ".github/workflows/work-graph-guard-tests.yml": frozenset(
         {
             "a7b76378be9f809f69185785b29e9d4ab134ddd0f8a2f446b74804133dca9f80",
-            "4847d6d7a3a379f8536524f50476583786542782b9a7ca9c11865fc9e27b524b",
+            "22fe48af6a8ee4418643ea1f68dad53c8d5c589af0e1dedbe7573ae88e91f30c",
         }
     ),
     "scripts/test_work_graph_guard.py": frozenset(
         {
             "8c124185297b34b067f27e9168e910f16143ca003f0ffa191b68f6b00344b7fb",
+            "18b210b94a8597c65e84ba45a9fe045f46dd406db3e659c6fae1c14e5c8bec8d",
         }
     ),
 }
