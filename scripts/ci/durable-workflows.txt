@@ -8,6 +8,7 @@ r4-auth-ci.yml
 r4-gallery-ci.yml
 r4-retrieval-ci.yml
 r5-release.yml
+runner-host-attestation.yml
 source-reference.yml
 work-graph-guard-tests.yml
 work-graph-guard.yml

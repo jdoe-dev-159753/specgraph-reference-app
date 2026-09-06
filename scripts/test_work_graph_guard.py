@@ -9,6 +9,7 @@ from scripts import work_graph_guard as guard
 
 
 REQUIRED_PROTECTED_ASSETS = {
+    ".github/workflows/project-v2-reconcile.yml",
     ".github/workflows/work-graph-guard.yml",
     ".github/workflows/work-graph-guard-tests.yml",
     "scripts/test_work_graph_guard.py",
@@ -240,6 +241,7 @@ class MainIntegrationTests(unittest.TestCase):
         pull_request = {
             "state": "open",
             "draft": False,
+            "base": {"ref": "main"},
             "head": {"sha": "b" * 40},
         }
         manifest_payload = {
@@ -253,8 +255,8 @@ class MainIntegrationTests(unittest.TestCase):
                 return pull_request
             if "/contents/scripts/ci/durable-workflows.txt?" in path:
                 return manifest_payload
-            if "/contents/.github/workflows?" in path:
-                return []
+            if "/git/trees/" in path:
+                return {"truncated": False, "tree": []}
             if "/contents/scripts/test_work_graph_guard.py?" in path:
                 return {
                     "type": "file",
@@ -263,13 +265,15 @@ class MainIntegrationTests(unittest.TestCase):
                         Path(__file__).read_bytes() + b"\n"
                     ).decode("ascii"),
                 }
+            if "/contents/scripts/work_graph_guard.py?" in path:
+                return {
+                    "type": "file",
+                    "encoding": "base64",
+                    "content": base64.b64encode(Path(guard.__file__).read_bytes()).decode("ascii"),
+                }
             raise AssertionError(f"unexpected API path: {path}")
 
-        changed = iter(([{"filename": guard.DURABLE_WORKFLOW_MANIFEST}],))
-        with (
-            patch.object(guard, "api", side_effect=fake_api),
-            patch.object(guard, "pages", side_effect=changed),
-        ):
+        with patch.object(guard, "api", side_effect=fake_api):
             failures = []
             guard.require_durable_workflow_surface(308, failures)
 
@@ -283,8 +287,83 @@ class MainIntegrationTests(unittest.TestCase):
             any("scripts/test_work_graph_guard.py: protected asset changed" in item for item in failures)
         )
 
+    def test_truncated_recursive_tree_fails_closed_without_files_listing(self):
+        pull_request = {
+            "state": "open", "draft": False, "base": {"ref": "main"},
+            "head": {"sha": "c" * 40},
+        }
+        manifest = {
+            "type": "file", "encoding": "base64",
+            "content": base64.b64encode(b"proof.yml\n").decode("ascii"),
+        }
+
+        def fake_api(path):
+            self.assertNotIn("/files", path)
+            if path.endswith("/pulls/309"):
+                return pull_request
+            if "/contents/scripts/ci/durable-workflows.txt?" in path:
+                return manifest
+            if "/git/trees/" in path:
+                return {"truncated": True, "tree": []}
+            raise AssertionError(path)
+
+        with patch.object(guard, "api", side_effect=fake_api):
+            failures = []
+            guard.require_durable_workflow_surface(309, failures)
+        self.assertEqual(["pull request #309: recursive Git tree is missing or truncated"], failures)
+
+    def test_every_open_main_pr_gets_full_tree_and_guard_source_audit(self):
+        pull_request = {
+            "state": "open", "draft": False, "base": {"ref": "main"},
+            "head": {"sha": "d" * 40},
+        }
+        payload = {
+            "type": "file", "encoding": "base64",
+            "content": base64.b64encode(b"placeholder").decode("ascii"),
+        }
+        calls = []
+
+        def fake_api(path):
+            calls.append(path)
+            self.assertNotIn("/files", path)
+            if path.endswith("/pulls/310"):
+                return pull_request
+            if "/git/trees/" in path:
+                return {"truncated": False, "tree": [
+                    {"type": "blob", "path": ".github/workflows/proof.yml"}
+                ]}
+            return payload
+
+        with (
+            patch.object(guard, "api", side_effect=fake_api),
+            patch.object(guard, "workflow_inventory_violations", return_value=[]),
+            patch.object(guard, "protected_guard_source_violations", return_value=[]),
+            patch.dict(guard.PROTECTED_ASSET_SHA256, {}, clear=True),
+        ):
+            failures = []
+            guard.require_durable_workflow_surface(310, failures)
+        self.assertEqual([], failures)
+        self.assertTrue(any("/git/trees/" in call for call in calls))
+        self.assertTrue(any(f"/contents/{guard.GUARD_SOURCE}?" in call for call in calls))
+
 
 class DurableWorkflowTests(unittest.TestCase):
+    @staticmethod
+    def valid_workflow(name="proof", trigger="workflow_dispatch"):
+        condition = " && ".join((*guard.REQUIRED_JOB_CLAUSES, "github.event_name == 'workflow_dispatch'"))
+        return (
+            f"name: {name}\n\n"
+            f"on:\n  {trigger}:\n\n"
+            "permissions:\n  contents: read\n\n"
+            "concurrency:\n"
+            f"{guard.CANONICAL_QUEUE_GROUP}\n"
+            "  cancel-in-progress: false\n  queue: max\n\n"
+            "jobs:\n  verify:\n"
+            f"    if: ${{{{ {condition} }}}}\n"
+            f"{guard.PRIVATE_RUNNER}\n"
+            "    steps:\n      - run: 'true'\n"
+        )
+
     def test_parse_manifest_ignores_comments_and_blank_lines(self):
         manifest = "# durable\napplication-ci.yml\n\n r4-acceptance-ci.yml \n"
         self.assertEqual(
@@ -294,8 +373,8 @@ class DurableWorkflowTests(unittest.TestCase):
 
     def test_exact_canonical_inventory_is_accepted(self):
         workflows = {
-            "application-ci.yml": "name: application-ci\non:\n  workflow_dispatch:\n",
-            "r4-acceptance-ci.yml": "name: r4-acceptance-ci\non:\n  workflow_dispatch:\n",
+            "application-ci.yml": self.valid_workflow("application-ci"),
+            "r4-acceptance-ci.yml": self.valid_workflow("r4-acceptance-ci"),
         }
         manifest = "application-ci.yml\nr4-acceptance-ci.yml\n"
         self.assertEqual([], guard.workflow_inventory_violations(workflows, manifest))
@@ -427,20 +506,20 @@ class DurableWorkflowTests(unittest.TestCase):
                 )
 
     def test_complex_yaml_content_after_canonical_name_is_irrelevant(self):
-        workflow = (
-            "name: proof\n"
+        workflow = self.valid_workflow().replace(
+            "on:\n",
             "env:\n"
             "  DISPLAY: &identity issue-42-proof\n"
             "  NOTES: |\n"
             "    - &identity durable-name\n"
-            "jobs: {}\n"
+            "on:\n",
         )
         self.assertEqual(
             [], guard.workflow_inventory_violations({"proof.yml": workflow}, "proof.yml\n")
         )
 
     def test_unrelated_fix_word_without_number_is_allowed(self):
-        workflows = {"fix-cache.yml": "name: fix-cache\n"}
+        workflows = {"fix-cache.yml": self.valid_workflow("fix-cache")}
         self.assertEqual(
             [], guard.workflow_inventory_violations(workflows, "fix-cache.yml\n")
         )
@@ -448,7 +527,117 @@ class DurableWorkflowTests(unittest.TestCase):
     def test_workflow_contract_change_detection(self):
         self.assertTrue(guard.pr_changes_workflow_contract([".github/workflows/new.yml"]))
         self.assertTrue(guard.pr_changes_workflow_contract([guard.DURABLE_WORKFLOW_MANIFEST]))
+        self.assertTrue(guard.pr_changes_workflow_contract([guard.GUARD_SOURCE]))
         self.assertFalse(guard.pr_changes_workflow_contract(["backend/pom.xml"]))
+
+    def test_repository_durable_workflows_satisfy_structural_policy(self):
+        root = Path(__file__).resolve().parents[1]
+        names = guard.parse_durable_workflow_manifest(
+            (root / guard.DURABLE_WORKFLOW_MANIFEST).read_text(encoding="utf-8")
+        )
+        for name in sorted(names):
+            with self.subTest(name=name):
+                text = (root / guard.WORKFLOW_DIR / name).read_text(encoding="utf-8")
+                self.assertEqual([], guard.durable_workflow_policy_violations(name, text))
+
+    def test_untrusted_and_obfuscated_triggers_are_rejected(self):
+        forms = (
+            "  pull_request:",
+            "  pull_request_review:",
+            "  pull_request_review_comment:",
+            "  issue_comment:",
+            '  "issue\\u005fcomment":',
+            "  pull_request_target :",
+            "on: [workflow_dispatch]",
+        )
+        for trigger in forms:
+            with self.subTest(trigger=trigger):
+                workflow = self.valid_workflow().replace("  workflow_dispatch:", trigger)
+                findings = guard.durable_workflow_policy_violations("proof.yml", workflow)
+                self.assertTrue(findings)
+
+    def test_runner_and_condition_bypasses_are_rejected(self):
+        workflow = self.valid_workflow()
+        mutations = (
+            workflow.replace(guard.PRIVATE_RUNNER, "    runs-on: ubuntu-latest"),
+            workflow.replace(guard.PRIVATE_RUNNER, "      runs-on: [self-hosted]"),
+            workflow.replace("    if:", '    "if":'),
+            workflow.replace(" }}\n", " || true }}\n", 1),
+            workflow.replace(guard.PRIVATE_RUNNER, f"{guard.PRIVATE_RUNNER}\n{guard.PRIVATE_RUNNER}"),
+            workflow.replace("    steps:", "    if: ${{ true }}\n    steps:"),
+        )
+        for candidate in mutations:
+            with self.subTest(candidate=candidate):
+                self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", candidate))
+
+    def test_job_id_grammar_accepts_underscore_and_rejects_numeric_start(self):
+        valid = self.valid_workflow().replace("  verify:", "  _verify:")
+        self.assertEqual([], guard.durable_workflow_policy_violations("proof.yml", valid))
+        invalid = self.valid_workflow().replace("  verify:", "  1verify:")
+        self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", invalid))
+
+    def test_concurrency_dag_and_matrix_are_fail_closed(self):
+        workflow = self.valid_workflow()
+        for candidate in (
+            workflow.replace("  queue: max\n", ""),
+            workflow.replace("'specgraph-repository-queue'", "'other-queue'"),
+            workflow.replace(
+                "    steps:\n", "    strategy:\n      matrix:\n        value: [a, b]\n    steps:\n"
+            ),
+            workflow.replace(
+                "    steps:\n", "    strategy:\n      max-parallel: 2\n      matrix:\n        value: [a, b]\n    steps:\n"
+            ),
+            workflow + "  parallel:\n" + workflow.split("  verify:\n", 1)[1],
+        ):
+            with self.subTest(candidate=candidate):
+                self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", candidate))
+
+    def test_external_actions_must_use_exact_commit(self):
+        workflow = self.valid_workflow()
+        tagged = workflow.replace("      - run: 'true'", "      - uses: actions/checkout@v7")
+        quoted = workflow.replace("      - run: 'true'", '      - "uses": actions/checkout@' + "a" * 40)
+        self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", tagged))
+        self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", quoted))
+        pinned = workflow.replace("      - run: 'true'", "      - uses: actions/checkout@" + "a" * 40)
+        self.assertEqual([], guard.durable_workflow_policy_violations("proof.yml", pinned))
+
+    def test_status_writers_and_projects_token_are_reserved(self):
+        workflow = self.valid_workflow()
+        status_spoof = workflow.replace("  contents: read", "  contents: read\n  statuses: write")
+        checks_spoof = workflow.replace("  contents: read", "  contents: read\n  checks: write")
+        flow_spoof = workflow.replace("permissions:\n  contents: read", "permissions: {statuses: write}")
+        token_spoof = workflow.replace("      - run: 'true'", "      - run: echo ${{ secrets.PROJECTS_TOKEN }}")
+        for candidate in (status_spoof, checks_spoof, flow_spoof, token_spoof):
+            with self.subTest(candidate=candidate):
+                self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", candidate))
+
+        no_boundary = workflow.replace("permissions:\n  contents: read\n\n", "")
+        self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", no_boundary))
+
+    def test_one_shot_references_in_trigger_or_if_are_rejected(self):
+        workflow = self.valid_workflow()
+        trigger_ref = workflow.replace("  workflow_dispatch:", "  workflow_dispatch:\n    # issue #42")
+        condition_ref = workflow.replace("github.event_name == 'workflow_dispatch'", "github.event_name == 'workflow_dispatch' && github.event.issue.number != 42")
+        self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", trigger_ref))
+        self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", condition_ref))
+
+    def test_guard_source_allows_only_self_or_digest_rotation(self):
+        source = Path(guard.__file__).read_text(encoding="utf-8")
+        self.assertEqual([], guard.protected_guard_source_violations(source))
+        self.assertTrue(guard.protected_guard_source_violations(source + "\n# bypass\n"))
+        deployed = next(iter(guard.PROTECTED_ASSET_SHA256[".github/workflows/work-graph-guard.yml"]))
+        rotation = source.replace(deployed, "f" * 64, 1)
+        self.assertEqual([], guard.protected_guard_source_violations(rotation))
+
+    def test_runner_attestation_avoids_secret_and_process_disclosure(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / guard.WORKFLOW_DIR / "runner-host-attestation.yml").read_text(encoding="utf-8")
+        self.assertIn('(\"agentId\", \"agentName\", \"workFolder\")', text)
+        self.assertIn("pgrep -x Runner.Listener", text)
+        self.assertIn("stat -c 'docker-socket=", text)
+        self.assertNotIn("/cmdline", text)
+        self.assertNotIn("printenv", text)
+        self.assertNotIn("cat $runner_root/.credentials", text)
 
     def test_renamed_previous_paths_are_detected(self):
         changed = guard.changed_file_paths([

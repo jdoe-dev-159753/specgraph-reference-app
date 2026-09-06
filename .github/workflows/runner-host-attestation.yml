@@ -1,0 +1,61 @@
+name: runner-host-attestation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ (!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422)) && 'specgraph-repository-queue' || format('specgraph-bypassed-{0}', github.run_id) }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  attest:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && github.event_name == 'workflow_dispatch' }}
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - name: Attest local service and work-root isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t listeners < <(pgrep -x Runner.Listener || true)
+          test "${#listeners[@]}" -eq 1
+          echo "listener-count=${#listeners[@]}"
+          runner_root="$(readlink -f "/proc/${listeners[0]}/cwd")"
+          work_root="$(readlink -f "$(dirname "$GITHUB_WORKSPACE")/..")"
+          workspace="$(readlink -f "$GITHUB_WORKSPACE")"
+          runner_temp="$(readlink -f "$RUNNER_TEMP")"
+          test "$workspace" != "$runner_temp"
+          test -f "$runner_root/.runner"
+          echo "runner=$RUNNER_NAME"
+          id
+          printf 'paths runner=%s work=%s workspace=%s temp=%s\n' "$runner_root" "$work_root" "$workspace" "$runner_temp"
+          python3 -B - "$runner_root/.runner" "$runner_root" "$work_root" "$RUNNER_NAME" <<'PY'
+          import json, os, sys
+          data = json.load(open(sys.argv[1], encoding="utf-8"))
+          print("registration " + " ".join(f"{key}={data.get(key)!r}" for key in ("agentId", "agentName", "workFolder")))
+          if (not isinstance(data.get("agentId"), int)
+                  or data.get("agentName") != sys.argv[4]
+                  or os.path.realpath(os.path.join(sys.argv[2], data.get("workFolder", ""))) != sys.argv[3]):
+              raise SystemExit("registration identity or workFolder does not match this service")
+          PY
+          for path in "$runner_root" "$work_root" "$runner_root/.runner"; do
+            stat -c 'path=%n owner=%U:%G mode=%a' "$path"
+            mode="$(stat -c '%a' "$path")"
+            test "$(stat -c '%u' "$path")" -eq "$(id -u)"
+            test $((8#$mode & 0022)) -eq 0
+          done
+          shopt -s nullglob
+          credentials=("$runner_root"/.credentials*)
+          test "${#credentials[@]}" -ge 1
+          for path in "${credentials[@]}"; do
+            stat -c 'credential=%n owner=%U:%G mode=%a' "$path"
+            mode="$(stat -c '%a' "$path")"
+            test "$(stat -c '%u' "$path")" -eq "$(id -u)"
+            test $((8#$mode & 0077)) -eq 0
+          done
+          socket="$(docker context inspect --format '{{ (index .Endpoints "docker").Host }}' | sed 's#^unix://##')"
+          test -S "$socket"
+          stat -c 'docker-socket=%n owner=%U:%G mode=%a' "$socket"
