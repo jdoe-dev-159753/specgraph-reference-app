@@ -1,5 +1,5 @@
-# Runs the stable R4 browser acceptance suite and retains reviewer-readable evidence artifacts.
 name: r4-acceptance-ci
+# Runs the stable R4 browser acceptance suite and retains reviewer-readable evidence artifacts.
 
 on:
   pull_request:

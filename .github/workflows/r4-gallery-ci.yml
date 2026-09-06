@@ -1,5 +1,5 @@
-# Proves deterministic and credential-gated external R4 variants remain isolated and inspectable.
 name: r4-gallery-ci
+# Proves deterministic and credential-gated external R4 variants remain isolated and inspectable.
 
 on:
   workflow_dispatch:

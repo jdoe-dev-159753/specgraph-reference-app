@@ -1,5 +1,5 @@
-# Proves and publishes the one supported R5 composite/pgvector/LM-Studio deployment candidate.
 name: r5-release
+# Proves and publishes the one supported R5 composite/pgvector/LM-Studio deployment candidate.
 
 on:
   pull_request:

@@ -1,5 +1,5 @@
-# Projects native issue/PR lifecycle and ownership facts into the repository's GitHub Project fields.
 name: project-v2-reconcile
+# Projects native issue/PR lifecycle and ownership facts into the repository's GitHub Project fields.
 
 on:
   issues:
