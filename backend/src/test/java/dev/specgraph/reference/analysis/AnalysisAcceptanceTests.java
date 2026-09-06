@@ -20,8 +20,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
-@Tag("VFY-ANALYSIS-001")
-@Tag("VFY-ANALYSIS-HISTORY-001")
+@Tag("VFY-ANALYSIS-CONTRACT-001")
+@Tag("VFY-HISTORY-001")
 @SpringBootTest(classes = ReferenceApplication.class)
 @AutoConfigureMockMvc
 class AnalysisAcceptanceTests extends PostgresIntegrationTestSupport {

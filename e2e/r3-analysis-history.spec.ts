@@ -18,7 +18,7 @@ type Analysis = {
   }>
 }
 
-test('VFY-ANALYSIS-001 R3 deterministic analysis is retained and reviewable after reload', async ({ page }, testInfo) => {
+test('VFY-ANALYSIS-CONTRACT-001 VFY-HISTORY-001 R3 deterministic analysis is retained and reviewable after reload', async ({ page }, testInfo) => {
   await page.goto('/')
   await expect(page.getByText('Customer Care · R3')).toBeVisible()
 
