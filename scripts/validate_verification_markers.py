@@ -101,6 +101,12 @@ PLAYWRIGHT_COMPUTED_FOCUSED = re.compile(
 PLAYWRIGHT_DYNAMIC_COMPUTED_CALL = re.compile(
     r"\[\s*(?!['\"`])[^\]\r\n]+\]\s*\("
 )
+PLAYWRIGHT_DYNAMIC_COMPUTED_ALIAS = re.compile(
+    r"\b(?:const|let|var)\s+(?P<alias>[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*"
+    r"[A-Za-z_$][A-Za-z0-9_$]*\s*(?:\?\.)?\s*"
+    r"\[\s*(?!['\"`])[^\]\r\n]+\]"
+)
+PLAYWRIGHT_REFLECT_GET = re.compile(r"\bReflect\s*\.\s*get\s*\(")
 PLAYWRIGHT_DESTRUCTURED_CONTROL = re.compile(
     r"\b(?:const|let|var)\s*\{(?P<bindings>[^{}]*)\}\s*=\s*"
     r"(?P<receiver>[A-Za-z_$][A-Za-z0-9_$]*)"
@@ -1499,6 +1505,33 @@ def playwright_has_destructured_control(
     return False
 
 
+def playwright_has_dynamic_destructuring(
+    structure: str,
+    receivers: frozenset[str] | None = None,
+) -> bool:
+    """Detect computed property destructuring whose selected member is unknowable."""
+    return any(
+        "[" in declaration.group("bindings")
+        and (
+            receivers is None
+            or declaration.group("receiver") in receivers
+        )
+        for declaration in PLAYWRIGHT_DESTRUCTURED_CONTROL.finditer(structure)
+    )
+
+
+def playwright_invokes_dynamic_computed_alias(structure: str) -> bool:
+    """Reject a computed member captured in a local alias and later invoked."""
+    return any(
+        re.search(
+            rf"(?<![A-Za-z0-9_$]){re.escape(match.group('alias'))}"
+            r"(?![A-Za-z0-9_$])\s*\(",
+            structure[match.end():],
+        )
+        for match in PLAYWRIGHT_DYNAMIC_COMPUTED_ALIAS.finditer(structure)
+    )
+
+
 def playwright_describe_callback_brace(
     structure: str,
     brace: int,
@@ -1756,6 +1789,8 @@ def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
                 test_identifiers,
             )
             or playwright_has_ambiguous_test_member(text, structure)
+            or playwright_has_dynamic_destructuring(structure, test_identifiers)
+            or PLAYWRIGHT_REFLECT_GET.search(structure)
         ):
             raise ValueError(
                 "focused Playwright .only call prevents complete evidence discovery"
@@ -1825,10 +1860,13 @@ def evidence_markers(
                 PLAYWRIGHT_COMPUTED_NON_PASSING,
             )
             or PLAYWRIGHT_DYNAMIC_COMPUTED_CALL.search(structure)
+            or playwright_invokes_dynamic_computed_alias(structure)
             or playwright_has_destructured_control(
                 structure,
                 frozenset({"skip", "fixme", "fail"}),
             )
+            or playwright_has_dynamic_destructuring(structure)
+            or PLAYWRIGHT_REFLECT_GET.search(structure)
             or playwright_has_ambiguous_test_member(text, structure)
         ):
             return frozenset()

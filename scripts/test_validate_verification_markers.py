@@ -1422,7 +1422,12 @@ class VerificationMarkerTests(unittest.TestCase):
             "test['fail'](true);",
             "const stop = testInfo['skip']; stop();",
             "const member = 'skip'; testInfo[member]();",
+            "const member = 'skip'; const stop = testInfo[member]; stop();",
+            "const member = 'fixme'; const stop = testInfo[member]; stop();",
+            "const member = 'fail'; const stop = testInfo[member]; stop();",
             "const { skip: stop } = testInfo; stop();",
+            "const member = 'skip'; const { [member]: stop } = testInfo; stop();",
+            "const member = 'skip'; const stop = Reflect.get(testInfo, member); stop();",
         )
         for control in controls:
             with self.subTest(control=control), tempfile.TemporaryDirectory() as directory:
@@ -1472,6 +1477,10 @@ class VerificationMarkerTests(unittest.TestCase):
                 "const member = 'only'; test[member]('focused', async () => {});",
                 "test[`only`]('focused', async () => {});",
                 "const { only: focused } = test; focused('focused', async () => {});",
+                "const member = 'only'; const { [member]: focused } = test; "
+                "focused('focused', async () => {});",
+                "const focused = Reflect.get(test, 'only'); "
+                "focused('focused', async () => {});",
             ):
                 focused.write_text(PLAYWRIGHT_TEST_IMPORT + computed + "\n", encoding="utf-8")
                 with self.subTest(computed=computed), self.assertRaisesRegex(
