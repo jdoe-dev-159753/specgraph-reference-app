@@ -5,14 +5,16 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: r4-auth-ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: specgraph-repository-queue
+  cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
 
 jobs:
   verify-r4-auth:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

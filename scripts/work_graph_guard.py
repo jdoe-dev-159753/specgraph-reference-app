@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject competing prose work-state, stale Codex review evidence, and one-shot workflows."""
+"""Enforce canonical work state, workflow placement, and exact-head review status."""
 
 from __future__ import annotations
 
@@ -68,12 +68,24 @@ ONE_SHOT_WORKFLOW = re.compile(
     r"[^A-Za-z0-9]+(?:(?:no|number|id)(?=[^A-Za-z0-9])[^A-Za-z0-9]*)?\d+(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
+CANONICAL_JOB_KEY = re.compile(r"^  ([A-Za-z0-9][A-Za-z0-9_-]*):(?:\s+#.*)?$")
+PRIVATE_RUNNER = "    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]"
+REPOSITORY_QUEUE = "specgraph-repository-queue"
+REVIEW_STATUS_CONTEXT = "codex-review-freshness"
+INTEGRITY_STATUS_CONTEXT = "work-graph-integrity"
+TRUSTED_PR_CONDITION = (
+    "github.event_name != 'pull_request' || "
+    "github.event.pull_request.head.repo.full_name == github.repository"
+)
 
 
-def api(path: str):
-    req = request.Request(f"{API}{path}")
+def api_request(path: str, method: str = "GET", payload: dict | None = None):
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    req = request.Request(f"{API}{path}", data=data, method=method)
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("X-GitHub-Api-Version", "2026-03-10")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
     if TOKEN:
         req.add_header("Authorization", f"Bearer {TOKEN}")
     try:
@@ -81,7 +93,11 @@ def api(path: str):
             return json.loads(response.read())
     except error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")
-        raise RuntimeError(f"GitHub API GET {path} failed: {exc.code} {detail}") from exc
+        raise RuntimeError(f"GitHub API {method} {path} failed: {exc.code} {detail}") from exc
+
+
+def api(path: str):
+    return api_request(path)
 
 
 def pages(path: str):
@@ -233,6 +249,73 @@ def require_current_head_codex_review(pr_number: int, failures: list[str]) -> No
     )
 
 
+def current_head_review_status(pr_number: int) -> tuple[str, str, str] | None:
+    """Return exact-head commit status without making an unreviewed PR synthetically fail."""
+    pr = api(f"/repos/{REPO}/pulls/{pr_number}")
+    if pr.get("state") != "open" or pr.get("draft"):
+        return None
+    if (pr.get("base") or {}).get("ref") != "main":
+        return None
+
+    head_sha = pr["head"]["sha"]
+    reviews = pages(f"/repos/{REPO}/pulls/{pr_number}/reviews")
+    if has_current_head_codex_review(reviews, head_sha):
+        return head_sha, "success", "Codex review covers the exact current head"
+
+    comments = list(pages(f"/repos/{REPO}/issues/{pr_number}/comments"))
+    if has_current_head_clean_codex_result(comments, head_sha):
+        return head_sha, "success", "Clean Codex result covers the exact current head"
+
+    reactions = pages(f"/repos/{REPO}/issues/{pr_number}/reactions")
+    if has_current_head_clean_codex_summary(comments, reactions, head_sha):
+        return head_sha, "success", "Clean Codex summary covers the exact current head"
+
+    return head_sha, "pending", "Awaiting Codex review of the exact current head"
+
+
+def publish_commit_status(head_sha: str, state: str, context: str, description: str) -> None:
+    run_url = (
+        f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+        f"{REPO}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"
+    )
+    api_request(
+        f"/repos/{REPO}/statuses/{head_sha}",
+        method="POST",
+        payload={
+            "state": state,
+            "context": context,
+            "description": description,
+            "target_url": run_url,
+        },
+    )
+    print(f"{context} -> {state} on {head_sha[:12]}")
+
+
+def publish_current_head_review_status(pr_number: int) -> None:
+    status = current_head_review_status(pr_number)
+    if status is None:
+        return
+    head_sha, state, description = status
+    publish_commit_status(head_sha, state, REVIEW_STATUS_CONTEXT, description)
+
+
+def publish_current_head_integrity_status(
+    pr_number: int, failures: list[str]
+) -> None:
+    pr = api(f"/repos/{REPO}/pulls/{pr_number}")
+    if pr.get("state") != "open" or pr.get("draft"):
+        return
+    if (pr.get("base") or {}).get("ref") != "main":
+        return
+    state = "failure" if failures else "success"
+    description = (
+        "Deterministic WorkGraph or workflow policy failed"
+        if failures
+        else "Deterministic WorkGraph and workflow policy passed"
+    )
+    publish_commit_status(pr["head"]["sha"], state, INTEGRITY_STATUS_CONTEXT, description)
+
+
 def decode_contents_payload(payload: dict, path: str) -> str:
     if payload.get("type") != "file" or payload.get("encoding") != "base64":
         raise RuntimeError(f"GitHub contents response for {path} is not a base64 file")
@@ -288,6 +371,78 @@ def canonical_workflow_name_violations(filename: str, text: str) -> list[str]:
             return [f"{filename}: duplicate top-level YAML key is forbidden: {key}"]
         seen_root_keys.add(key)
     return []
+
+
+def runner_placement_violations(filename: str, text: str) -> list[str]:
+    """Reject runner or queue syntax that could evade the private-pool contract."""
+    failures: list[str] = []
+    lines = text.splitlines()
+
+    concurrency_indexes = [index for index, line in enumerate(lines) if line == "concurrency:"]
+    if len(concurrency_indexes) != 1:
+        failures.append(f"{filename}: expected exactly one canonical root concurrency block")
+    else:
+        index = concurrency_indexes[0]
+        block: list[str] = []
+        for line in lines[index + 1 :]:
+            if line and not line[0].isspace():
+                break
+            if line.strip() and not line.lstrip().startswith("#"):
+                block.append(line)
+        expected = [
+            f"  group: {REPOSITORY_QUEUE}",
+            "  cancel-in-progress: false",
+            "  queue: max",
+        ]
+        if block != expected:
+            failures.append(
+                f"{filename}: concurrency must be the single repository queue "
+                f"{REPOSITORY_QUEUE!r} with cancel-in-progress false and queue max"
+            )
+
+    jobs_indexes = [index for index, line in enumerate(lines) if line == "jobs:"]
+    if len(jobs_indexes) != 1:
+        failures.append(f"{filename}: expected exactly one canonical jobs block")
+        return failures
+
+    jobs_index = jobs_indexes[0]
+    job_starts: list[tuple[int, str]] = []
+    for index, line in enumerate(lines[jobs_index + 1 :], jobs_index + 1):
+        if line and not line[0].isspace():
+            break
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith("  ") and not line.startswith("    "):
+            match = CANONICAL_JOB_KEY.fullmatch(line)
+            if not match:
+                failures.append(
+                    f"{filename}: non-canonical indentation-two job entry is forbidden: {line!r}"
+                )
+            else:
+                job_starts.append((index, match.group(1)))
+
+    if not job_starts:
+        failures.append(f"{filename}: jobs block contains no canonical bare job key")
+        return failures
+
+    for position, (start, job_name) in enumerate(job_starts):
+        end = job_starts[position + 1][0] if position + 1 < len(job_starts) else len(lines)
+        job_lines = lines[start + 1 : end]
+        runner_lines = [line for line in job_lines if "runs-on:" in line]
+        if runner_lines != [PRIVATE_RUNNER]:
+            failures.append(
+                f"{filename}: job {job_name!r} must declare exactly {PRIVATE_RUNNER.strip()!r}"
+            )
+        if not any(TRUSTED_PR_CONDITION in line for line in job_lines):
+            failures.append(
+                f"{filename}: job {job_name!r} must reject fork heads before executing "
+                "on the Docker-capable private pool"
+            )
+
+    for line in lines:
+        if "runs-on:" in line and line != PRIVATE_RUNNER:
+            failures.append(f"{filename}: non-canonical runner placement is forbidden: {line!r}")
+    return failures
 
 
 
@@ -348,6 +503,7 @@ def workflow_inventory_violations(
 
     for filename, text in sorted(workflow_texts.items()):
         failures.extend(canonical_workflow_name_violations(filename, text))
+        failures.extend(runner_placement_violations(filename, text))
         workflow_name = extract_workflow_name(text)
         if ONE_SHOT_WORKFLOW.search(filename) or (
             workflow_name != UNRESOLVED_WORKFLOW_NAME
@@ -443,11 +599,12 @@ def main() -> int:
     pr_number = event_pr_number()
     if pr_number is not None:
         require_durable_workflow_surface(pr_number, failures)
-        require_current_head_codex_review(pr_number, failures)
+        publish_current_head_review_status(pr_number)
+        publish_current_head_integrity_status(pr_number, failures)
     elif EVENT_NAME in {"schedule", "workflow_dispatch"}:
         for item in open_items:
             if "pull_request" in item:
-                require_current_head_codex_review(item["number"], failures)
+                publish_current_head_review_status(item["number"])
 
     if failures:
         print("Work-graph/review guard failed:", file=sys.stderr)
@@ -455,7 +612,7 @@ def main() -> int:
             print(f"- {finding}", file=sys.stderr)
         return 1
 
-    print("controlled GitHub work descriptions, durable workflows, and current-head Codex review evidence are clean")
+    print("controlled GitHub work descriptions and durable workflow placement are clean; exact-head review status is published separately")
     return 0
 
 

@@ -26,12 +26,13 @@ on:
         type: boolean
 
 concurrency:
-  group: plantuml-diagrams-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: specgraph-repository-queue
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   verify:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.regenerate_artifact != true }}
+    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'workflow_dispatch' || inputs.regenerate_artifact != true) }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     permissions:
       contents: read
@@ -62,7 +63,7 @@ jobs:
           fi
 
   regenerate:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.regenerate_artifact == true }}
+    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.event_name == 'workflow_dispatch' && inputs.regenerate_artifact == true }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     permissions:
       contents: read

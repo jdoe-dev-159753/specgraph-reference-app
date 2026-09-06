@@ -191,31 +191,62 @@ class MainIntegrationTests(unittest.TestCase):
 
         self.assertEqual([], failures)
 
-    def test_main_runs_both_pr_guards_and_propagates_each_failure(self):
-        injectors = (
-            "require_durable_workflow_surface",
-            "require_current_head_codex_review",
-        )
-        for failing_guard in injectors:
-            with self.subTest(failing_guard=failing_guard):
-                def inject_failure(pr_number, failures):
-                    self.assertEqual(308, pr_number)
-                    failures.append(f"{failing_guard} injected failure")
+    def test_main_keeps_deterministic_failure_separate_from_review_status(self):
+        def inject_failure(pr_number, failures):
+            self.assertEqual(308, pr_number)
+            failures.append("durable workflow failure")
 
-                with (
-                    patch.object(guard, "pages", return_value=iter(())),
-                    patch.object(guard, "event_pr_number", return_value=308),
-                    patch.object(guard, "require_durable_workflow_surface") as durable,
-                    patch.object(guard, "require_current_head_codex_review") as review,
-                ):
-                    selected = {
-                        "require_durable_workflow_surface": durable,
-                        "require_current_head_codex_review": review,
-                    }
-                    selected[failing_guard].side_effect = inject_failure
-                    self.assertEqual(1, guard.main())
-                    durable.assert_called_once()
-                    review.assert_called_once()
+        with (
+            patch.object(guard, "pages", return_value=iter(())),
+            patch.object(guard, "event_pr_number", return_value=308),
+            patch.object(
+                guard, "require_durable_workflow_surface", side_effect=inject_failure
+            ) as durable,
+            patch.object(guard, "publish_current_head_review_status") as review_status,
+            patch.object(guard, "publish_current_head_integrity_status") as integrity_status,
+        ):
+            self.assertEqual(1, guard.main())
+            durable.assert_called_once()
+            review_status.assert_called_once_with(308)
+            integrity_status.assert_called_once_with(308, ["durable workflow failure"])
+
+    def test_missing_review_publishes_pending_exact_head_status(self):
+        with (
+            patch.object(
+                guard,
+                "current_head_review_status",
+                return_value=("a" * 40, "pending", "Awaiting exact-head review"),
+            ),
+            patch.object(guard, "publish_commit_status") as publish,
+            patch.dict(guard.os.environ, {"GITHUB_RUN_ID": "123"}),
+        ):
+            guard.publish_current_head_review_status(308)
+
+        publish.assert_called_once_with(
+            "a" * 40,
+            "pending",
+            guard.REVIEW_STATUS_CONTEXT,
+            "Awaiting exact-head review",
+        )
+
+    def test_integrity_status_is_independent_from_review_status(self):
+        pull_request = {
+            "state": "open",
+            "draft": False,
+            "base": {"ref": "main"},
+            "head": {"sha": "b" * 40},
+        }
+        with (
+            patch.object(guard, "api", return_value=pull_request),
+            patch.object(guard, "publish_commit_status") as publish,
+        ):
+            guard.publish_current_head_integrity_status(308, [])
+        publish.assert_called_once_with(
+            "b" * 40,
+            "success",
+            guard.INTEGRITY_STATUS_CONTEXT,
+            "Deterministic WorkGraph and workflow policy passed",
+        )
 
 
     def test_real_review_guard_rejects_missing_exact_head_review(self):
@@ -285,6 +316,23 @@ class MainIntegrationTests(unittest.TestCase):
 
 
 class DurableWorkflowTests(unittest.TestCase):
+    @staticmethod
+    def workflow(name="proof", body=""):
+        return (
+            f"name: {name}\n"
+            "on:\n"
+            "  workflow_dispatch:\n"
+            "concurrency:\n"
+            f"  group: {guard.REPOSITORY_QUEUE}\n"
+            "  cancel-in-progress: false\n"
+            "  queue: max\n"
+            "jobs:\n"
+            "  verify:\n"
+            f"    if: ${{{{ {guard.TRUSTED_PR_CONDITION} }}}}\n"
+            f"{guard.PRIVATE_RUNNER}\n"
+            f"{body}"
+        )
+
     def test_parse_manifest_ignores_comments_and_blank_lines(self):
         manifest = "# durable\napplication-ci.yml\n\n r4-acceptance-ci.yml \n"
         self.assertEqual(
@@ -294,8 +342,8 @@ class DurableWorkflowTests(unittest.TestCase):
 
     def test_exact_canonical_inventory_is_accepted(self):
         workflows = {
-            "application-ci.yml": "name: application-ci\non:\n  workflow_dispatch:\n",
-            "r4-acceptance-ci.yml": "name: r4-acceptance-ci\non:\n  workflow_dispatch:\n",
+            "application-ci.yml": self.workflow("application-ci"),
+            "r4-acceptance-ci.yml": self.workflow("r4-acceptance-ci"),
         }
         manifest = "application-ci.yml\nr4-acceptance-ci.yml\n"
         self.assertEqual([], guard.workflow_inventory_violations(workflows, manifest))
@@ -433,17 +481,67 @@ class DurableWorkflowTests(unittest.TestCase):
             "  DISPLAY: &identity issue-42-proof\n"
             "  NOTES: |\n"
             "    - &identity durable-name\n"
-            "jobs: {}\n"
+            "concurrency:\n"
+            f"  group: {guard.REPOSITORY_QUEUE}\n"
+            "  cancel-in-progress: false\n"
+            "  queue: max\n"
+            "jobs:\n"
+            "  verify:\n"
+            f"    if: ${{{{ {guard.TRUSTED_PR_CONDITION} }}}}\n"
+            f"{guard.PRIVATE_RUNNER}\n"
         )
         self.assertEqual(
             [], guard.workflow_inventory_violations({"proof.yml": workflow}, "proof.yml\n")
         )
 
     def test_unrelated_fix_word_without_number_is_allowed(self):
-        workflows = {"fix-cache.yml": "name: fix-cache\n"}
+        workflows = {"fix-cache.yml": self.workflow("fix-cache")}
         self.assertEqual(
             [], guard.workflow_inventory_violations(workflows, "fix-cache.yml\n")
         )
+
+    def test_private_pool_and_global_queue_are_required(self):
+        workflow = self.workflow()
+        self.assertEqual([], guard.runner_placement_violations("proof.yml", workflow))
+        for unsafe in (
+            workflow.replace(guard.PRIVATE_RUNNER, "    runs-on: ubuntu-latest"),
+            workflow.replace(guard.REPOSITORY_QUEUE, "proof-${{ github.ref }}"),
+            workflow.replace("cancel-in-progress: false", "cancel-in-progress: true"),
+            workflow.replace("queue: max", "queue: single"),
+        ):
+            with self.subTest(unsafe=unsafe):
+                self.assertTrue(guard.runner_placement_violations("proof.yml", unsafe))
+
+    def test_quoted_or_complex_job_before_safe_job_is_rejected(self):
+        safe = self.workflow()
+        variants = (
+            safe.replace("  verify:\n", '  "unsafe":\n    runs-on: ubuntu-latest\n  verify:\n'),
+            safe.replace("  verify:\n", "  ? unsafe\n  :\n    runs-on: ubuntu-latest\n  verify:\n"),
+        )
+        for workflow in variants:
+            with self.subTest(workflow=workflow):
+                findings = guard.runner_placement_violations("proof.yml", workflow)
+                self.assertTrue(
+                    any("non-canonical indentation-two job entry" in item for item in findings)
+                )
+                self.assertTrue(any("non-canonical runner placement" in item for item in findings))
+
+    def test_every_job_must_reject_fork_heads_regardless_of_trigger_syntax(self):
+        trusted = self.workflow()
+        unsafe = trusted.replace(
+            f"    if: ${{{{ {guard.TRUSTED_PR_CONDITION} }}}}\n", ""
+        )
+        for trigger in (
+            "on:\n  workflow_dispatch:",
+            "on: [pull_request]",
+            "'on':\n  pull_request:",
+        ):
+            workflow = unsafe.replace("on:\n  workflow_dispatch:", trigger)
+            with self.subTest(trigger=trigger):
+                findings = guard.runner_placement_violations("proof.yml", workflow)
+                self.assertTrue(any("must reject fork heads" in item for item in findings))
+
+        self.assertEqual([], guard.runner_placement_violations("proof.yml", trusted))
 
     def test_workflow_contract_change_detection(self):
         self.assertTrue(guard.pr_changes_workflow_contract([".github/workflows/new.yml"]))
