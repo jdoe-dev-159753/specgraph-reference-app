@@ -10,6 +10,7 @@ const expectedModelBackend = process.env.EXPECT_MODEL_BACKEND ?? 'deterministic'
 const expectedModelIdentity = process.env.EXPECT_MODEL_IDENTITY ?? 'r3-offline-baseline-v1'
 const expectedPromptIdentity = process.env.EXPECT_PROMPT_IDENTITY ?? 'grounded-analysis-v1'
 const expectedExternalTransmission = process.env.EXPECT_EXTERNAL_TRANSMISSION ?? 'false'
+const expectedDeliveryRing = process.env.EXPECT_DELIVERY_RING ?? 'R4'
 const evidenceName = process.env.EVIDENCE_NAME ?? 'r4-complete-flow'
 
 const detectorContracts: Record<string, { signalIdentity: string, library?: string }> = {
@@ -149,7 +150,7 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-REP
   expect(anonymous.status()).toBe(401)
 
   await page.goto('/')
-  await expect(page.getByText('Customer Care · R4')).toBeVisible()
+  await expect(page.getByText(`Customer Care · ${expectedDeliveryRing}`)).toBeVisible()
   await expect(page.getByTestId('operator-login')).toBeVisible()
   await signIn(page)
   await loadCustomer(page)

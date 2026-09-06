@@ -75,6 +75,7 @@ jobs:
         run: |
           local_image="specgraph-reference-app:r5-${SOURCE_SHA}"
           docker build -f docker/app.Dockerfile \
+            --build-arg DELIVERY_RING=R5 \
             --label "org.opencontainers.image.revision=$SOURCE_SHA" \
             --label "dev.specgraph.delivery-ring=R5" \
             -t "$local_image" .
@@ -130,6 +131,7 @@ jobs:
           EXPECT_MODEL_IDENTITY: ministral-3-8b-instruct-2512
           EXPECT_PROMPT_IDENTITY: grounded-analysis-v2
           EXPECT_EXTERNAL_TRANSMISSION: 'false'
+          EXPECT_DELIVERY_RING: R5
         run: |
           export BASE_URL="http://127.0.0.1:${R5_PORT}"
           bash scripts/ci/run-playwright.sh r4-complete-flow.spec.ts
