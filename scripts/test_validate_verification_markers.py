@@ -1258,6 +1258,105 @@ class VerificationMarkerTests(unittest.TestCase):
                     evidence_markers(java),
                 )
 
+    def test_local_composed_junit_guards_are_resolved_transitively(self):
+        with tempfile.TemporaryDirectory() as directory:
+            java = Path(directory) / "Evidence.java"
+            java.write_text(
+                JUNIT_TAG_IMPORT
+                + "import org.junit.jupiter.api.Disabled;\n"
+                "@Disabled @interface DirectGuard {}\n"
+                "@DirectGuard @interface TransitiveGuard {}\n"
+                "@TransitiveGuard\n"
+                '@Tag("VFY-HISTORY-001")\n'
+                "class DisabledTests { @Test void skipped() {} }\n"
+                "class ActiveTests {\n"
+                "  @TransitiveGuard\n"
+                '  @Tag("VFY-AUTH-001") @Test void skipped() {}\n'
+                '  @Tag("VFY-DELIVERY-001") @Test void executes() {}\n'
+                "}\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                frozenset({"VFY-DELIVERY-001"}),
+                evidence_markers(java),
+            )
+
+    def test_cyclic_and_unresolved_local_junit_guards_fail_closed(self):
+        sources = {
+            "cycle": (
+                "@SecondGuard @interface FirstGuard {}\n"
+                "@FirstGuard @interface SecondGuard {}\n"
+                "@FirstGuard\n"
+            ),
+            "unresolved": (
+                "@MissingGuard @interface LocalGuard {}\n"
+                "@LocalGuard\n"
+            ),
+        }
+        for case, annotations in sources.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                java = Path(directory) / "Evidence.java"
+                java.write_text(
+                    JUNIT_TAG_IMPORT
+                    + annotations
+                    + '@Tag("VFY-HISTORY-001")\n'
+                    "class DisabledTests { @Test void skipped() {} }\n"
+                    '@Tag("VFY-DELIVERY-001")\n'
+                    "class ActiveTests { @Test void executes() {} }\n",
+                    encoding="utf-8",
+                )
+
+                self.assertEqual(
+                    frozenset({"VFY-DELIVERY-001"}),
+                    evidence_markers(java),
+                )
+
+    def test_inventory_resolves_composed_junit_guard_across_local_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n"
+                "  VFY-HISTORY-001:\n    covers: []\n"
+                "  VFY-DELIVERY-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            tests = root / "backend/src/test"
+            (tests / "guards").mkdir(parents=True)
+            (tests / "proof").mkdir()
+            (tests / "guards/BaseGuard.java").write_text(
+                "package guards;\nimport org.junit.jupiter.api.Disabled;\n"
+                "@Disabled @interface BaseGuard {}\n",
+                encoding="utf-8",
+            )
+            (tests / "guards/ComposedGuard.java").write_text(
+                "package guards;\n@BaseGuard public @interface ComposedGuard {}\n",
+                encoding="utf-8",
+            )
+            (tests / "proof/EvidenceTests.java").write_text(
+                "package proof;\nimport guards.ComposedGuard;\n"
+                + JUNIT_TAG_IMPORT
+                + '@ComposedGuard @Tag("VFY-HISTORY-001")\n'
+                "class SkippedTests { @Test void skipped() {} }\n"
+                '@Tag("VFY-DELIVERY-001")\n'
+                "class ActiveTests { @Test void executes() {} }\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
+                encoding="utf-8",
+            )
+
+            result = inventory(root)
+
+            self.assertEqual(frozenset({"VFY-HISTORY-001"}), result.missing)
+            self.assertFalse(result.unknown)
+
     def test_foreign_condition_annotation_does_not_disable_junit_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             java = Path(directory) / "Evidence.java"
@@ -1301,6 +1400,64 @@ class VerificationMarkerTests(unittest.TestCase):
                 )
 
                 self.assertEqual(frozenset(), evidence_markers(playwright))
+
+    def test_computed_playwright_controls_fail_closed_outside_quoted_decoys(self):
+        controls = (
+            "testInfo['skip']();",
+            'testInfo["fixme"]();',
+            "test['fail'](true);",
+            "const stop = testInfo['skip']; stop();",
+        )
+        for control in controls:
+            with self.subTest(control=control), tempfile.TemporaryDirectory() as directory:
+                playwright = Path(directory) / "evidence.spec.ts"
+                playwright.write_text(
+                    PLAYWRIGHT_TEST_IMPORT
+                    + 'const decoy = "testInfo[\\\'skip\\\']()";\n'
+                    + control
+                    + "\ntest('VFY-DELIVERY-001 active evidence', async () => {});\n",
+                    encoding="utf-8",
+                )
+
+                self.assertEqual(frozenset(), evidence_markers(playwright))
+
+    def test_inventory_rejects_computed_only_on_imported_test_alias(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-DELIVERY-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
+                encoding="utf-8",
+            )
+            focused = e2e / "focused.spec.ts"
+            focused.write_text(
+                "import { test as scenario } from '@playwright/test';\n"
+                + "const focused = scenario['only'];\n"
+                "focused('focused', async () => {});\n",
+                encoding="utf-8",
+            )
+            (e2e / "evidence.spec.ts").write_text(
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-DELIVERY-001 normally executable', async () => {});\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "focused Playwright .only call"):
+                inventory(root)
+            focused.write_text(
+                PLAYWRIGHT_TEST_IMPORT + "test['only']('focused', async () => {});\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "focused Playwright .only call"):
+                inventory(root)
 
     class fixture:
         def __init__(self, controlled, discovered):
