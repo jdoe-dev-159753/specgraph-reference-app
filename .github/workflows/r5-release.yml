@@ -33,8 +33,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: r5-release-publication
+  group: specgraph-repository-queue
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -42,6 +43,7 @@ permissions:
 
 jobs:
   prove-and-publish:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       APP_PACKAGE: ghcr.io/${{ github.repository_owner }}/specgraph-reference-app
@@ -50,11 +52,6 @@ jobs:
       R5_MODEL: ministral-3-8b-instruct-2512
 
     steps:
-      - name: Reclaim this workflow's stale runtime
-        run: |
-          docker ps -aq --filter 'name=specgraph-r5-release-' | xargs -r docker rm -f || true
-          docker network ls --format '{{.Name}}' | grep '^specgraph-r5-release-' | xargs -r docker network rm || true
-
       - name: Clean container-owned outputs before checkout
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \

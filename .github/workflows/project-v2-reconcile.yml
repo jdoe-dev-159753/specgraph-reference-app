@@ -16,11 +16,13 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: project-v2-reconcile
-  cancel-in-progress: true
+  group: specgraph-repository-queue
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   reconcile:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     steps:
       - uses: actions/checkout@v7
