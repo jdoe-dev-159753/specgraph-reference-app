@@ -28,6 +28,9 @@ if command -v mvn >/dev/null 2>&1; then
     javadoc:test-javadoc@source-test-reference
 elif command -v docker >/dev/null 2>&1; then
   docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    --env HOME=/tmp/specgraph-maven-home \
+    --env MAVEN_CONFIG=/tmp/specgraph-maven-home/.m2 \
     -v "$ROOT:/workspace" \
     -w /workspace \
     "$MAVEN_IMAGE" \

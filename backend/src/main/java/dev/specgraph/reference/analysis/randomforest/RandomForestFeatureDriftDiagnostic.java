@@ -21,7 +21,7 @@ public final class RandomForestFeatureDriftDiagnostic {
             "dev/specgraph/reference/analysis/randomforest/"
                     + "synthetic-review-random-forest-v1-drift-reference.properties";
     static final String EXPECTED_REFERENCE_SHA256 =
-            "b240a5947913b536ed963a3310a32673e7241f4077084842b65c0edb61bcc430";
+            "214fd80309b39585e2d4919399868978b4166d1a07171061fc0ee843a6466245";
     static final int MAX_OBSERVATIONS = 1_000;
     static final int MAX_ACTIVITIES = 10_000;
     private static final int MAX_REFERENCE_BYTES = 16 * 1024;
