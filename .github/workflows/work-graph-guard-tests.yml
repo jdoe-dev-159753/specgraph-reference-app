@@ -1,7 +1,7 @@
 name: work-graph-guard-tests
 
 on:
-  pull_request:
+  pull_request_target:
     paths:
       - 'scripts/work_graph_guard.py'
       - 'scripts/test_work_graph_guard.py'
@@ -13,21 +13,24 @@ permissions:
   contents: read
 
 concurrency:
-  group: work-graph-guard-tests-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ (!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422)) && 'specgraph-repository-queue' || format('specgraph-bypassed-{0}', github.run_id) }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   exact-head-tests:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - name: Clean container-owned outputs before checkout
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams'
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
@@ -36,4 +39,8 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
 
       - name: Verify proposed work-graph guard semantics
-        run: python3 -m unittest scripts/test_work_graph_guard.py
+        run: python3 -B -m unittest scripts/test_work_graph_guard.py
+
+      - name: Reclaim guard test bytecode
+        if: always()
+        run: rm -rf scripts/__pycache__

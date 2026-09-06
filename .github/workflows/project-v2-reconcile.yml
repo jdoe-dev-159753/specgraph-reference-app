@@ -2,8 +2,6 @@ name: project-v2-reconcile
 # Projects native issue/PR lifecycle and ownership facts into the repository's GitHub Project fields.
 
 on:
-  issues:
-    types: [opened, labeled, unlabeled, reopened, closed]
   pull_request_target:
     types: [opened, edited, synchronize, reopened, closed, ready_for_review]
   schedule:
@@ -16,14 +14,16 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: project-v2-reconcile
-  cancel-in-progress: true
+  group: ${{ (!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422)) && 'specgraph-repository-queue' || format('specgraph-bypassed-{0}', github.run_id) }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   reconcile:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.workflow_sha }}
           path: .workgraph-trusted
@@ -35,3 +35,6 @@ jobs:
           script: |
             const run = require(`${process.env.GITHUB_WORKSPACE}/.workgraph-trusted/.github/scripts/project-v2-reconcile.cjs`);
             await run({ github, context, core });
+      - name: Reclaim trusted reconciliation checkout
+        if: always()
+        run: rm -rf .workgraph-trusted

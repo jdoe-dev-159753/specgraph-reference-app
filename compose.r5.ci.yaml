@@ -1,4 +1,4 @@
-# CI overlay binds R5 to pre-provisioned network/cache resources so the proof remains hermetic and reusable.
+# CI overlay binds R5 to run-owned network/cache resources so the proof remains hermetic.
 networks:
   default:
     external: true
@@ -7,4 +7,4 @@ networks:
 volumes:
   r5-embedding-cache:
     external: true
-    name: specgraph-r5-ci-embedding-cache
+    name: "${R5_EMBEDDING_CACHE_VOLUME}"
