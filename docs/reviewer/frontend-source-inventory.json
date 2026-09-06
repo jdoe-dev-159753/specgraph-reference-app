@@ -16,6 +16,7 @@
     {"path": "frontend/package.json", "kind": "tooling-config", "authority": "ADR-004"},
     {"path": "frontend/src/App.tsx", "kind": "browser-application", "authority": "FR-ACT-001, FR-AUTH-001, FR-HIST-002, FR-RAG-001, NFR-SEC-001"},
     {"path": "frontend/src/main.tsx", "kind": "composition-root", "authority": "ADR-004, NFR-SEC-001"},
+    {"path": "frontend/src/vite-env.d.ts", "kind": "compiler-contract", "authority": "ADR-004, VFY-DELIVERY-001"},
     {"path": "frontend/tsconfig.json", "kind": "compiler-config", "authority": "ADR-004"},
     {"path": "frontend/tsconfig.node.json", "kind": "compiler-config", "authority": "ADR-004"},
     {"path": "frontend/vite.config.ts", "kind": "build-config", "authority": "ADR-004"}
