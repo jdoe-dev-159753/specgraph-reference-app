@@ -1266,6 +1266,9 @@ class VerificationMarkerTests(unittest.TestCase):
                 + "import org.junit.jupiter.api.Disabled;\n"
                 "@Disabled @interface DirectGuard {}\n"
                 "@DirectGuard @interface TransitiveGuard {}\n"
+                "class Guards { @Disabled @interface LocalGuard {} }\n"
+                '@Guards.LocalGuard @Tag("VFY-RAG-001")\n'
+                "class NestedGuardTests { @Test void skipped() {} }\n"
                 "@TransitiveGuard\n"
                 '@Tag("VFY-HISTORY-001")\n'
                 "class DisabledTests { @Test void skipped() {} }\n"
@@ -1290,6 +1293,16 @@ class VerificationMarkerTests(unittest.TestCase):
                 "@FirstGuard\n"
             ),
             "unresolved": (
+                "@MissingGuard @interface LocalGuard {}\n"
+                "@LocalGuard\n"
+            ),
+            "unresolved-explicit-import": (
+                "import guards.MissingGuard;\n"
+                "@MissingGuard @interface LocalGuard {}\n"
+                "@LocalGuard\n"
+            ),
+            "unresolved-wildcard-import": (
+                "import guards.*;\n"
                 "@MissingGuard @interface LocalGuard {}\n"
                 "@LocalGuard\n"
             ),
@@ -1405,8 +1418,11 @@ class VerificationMarkerTests(unittest.TestCase):
         controls = (
             "testInfo['skip']();",
             'testInfo["fixme"]();',
+            "testInfo[`skip`]();",
             "test['fail'](true);",
             "const stop = testInfo['skip']; stop();",
+            "const member = 'skip'; testInfo[member]();",
+            "const { skip: stop } = testInfo; stop();",
         )
         for control in controls:
             with self.subTest(control=control), tempfile.TemporaryDirectory() as directory:
@@ -1452,6 +1468,16 @@ class VerificationMarkerTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "focused Playwright .only call"):
                 inventory(root)
+            for computed in (
+                "const member = 'only'; test[member]('focused', async () => {});",
+                "test[`only`]('focused', async () => {});",
+                "const { only: focused } = test; focused('focused', async () => {});",
+            ):
+                focused.write_text(PLAYWRIGHT_TEST_IMPORT + computed + "\n", encoding="utf-8")
+                with self.subTest(computed=computed), self.assertRaisesRegex(
+                    ValueError, "focused Playwright .only call"
+                ):
+                    inventory(root)
             focused.write_text(
                 PLAYWRIGHT_TEST_IMPORT + "test['only']('focused', async () => {});\n",
                 encoding="utf-8",

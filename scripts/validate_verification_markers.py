@@ -93,10 +93,17 @@ JAVA_ANY_ANNOTATION = re.compile(
 PLAYWRIGHT_NON_PASSING = re.compile(r"\.\s*(?:skip|fixme|fail)\b")
 PLAYWRIGHT_FOCUSED = re.compile(r"\.\s*only\b")
 PLAYWRIGHT_COMPUTED_NON_PASSING = re.compile(
-    r"\[\s*(?P<quote>['\"])(?:skip|fixme|fail)(?P=quote)\s*\]"
+    r"\[\s*(?P<quote>['\"`])(?:skip|fixme|fail)(?P=quote)\s*\]"
 )
 PLAYWRIGHT_COMPUTED_FOCUSED = re.compile(
-    r"\[\s*(?P<quote>['\"])only(?P=quote)\s*\]"
+    r"\[\s*(?P<quote>['\"`])only(?P=quote)\s*\]"
+)
+PLAYWRIGHT_DYNAMIC_COMPUTED_CALL = re.compile(
+    r"\[\s*(?!['\"`])[^\]\r\n]+\]\s*\("
+)
+PLAYWRIGHT_DESTRUCTURED_CONTROL = re.compile(
+    r"\b(?:const|let|var)\s*\{(?P<bindings>[^{}]*)\}\s*=\s*"
+    r"(?P<receiver>[A-Za-z_$][A-Za-z0-9_$]*)"
 )
 PLAYWRIGHT_TEST_MATCH = re.compile(r"\btestMatch\s*:\s*/((?:\\.|[^/\r\n])*)/([a-z]*)")
 PLAYWRIGHT_TEST_DIR = re.compile(r"\btestDir\s*:")
@@ -626,32 +633,69 @@ def resolve_local_annotation_reference(
     explicit: tuple[str, ...],
     wildcard: tuple[str, ...],
     known: frozenset[str],
+    strict_external: bool = False,
 ) -> tuple[str | None, bool]:
     """Resolve a local annotation, reporting identities that remain ambiguous."""
+    source_names = {name.replace("$", "."): name for name in known}
+
+    def local_identity(reference: str) -> str | None:
+        return reference if reference in known else source_names.get(reference)
+
     if "." in raw:
-        return (raw if raw in known else None), False
+        references = {raw, f"{package_name}.{raw}" if package_name else raw}
+        first, remainder = raw.split(".", 1)
+        references.update(
+            f"{name}.{remainder}"
+            for name in explicit
+            if name.rsplit(".", 1)[-1] == first
+        )
+        references.update(f"{name}.{raw}" for name in wildcard)
+        candidates = {
+            resolved for reference in references
+            if (resolved := local_identity(reference)) is not None
+        }
+        if len(candidates) == 1:
+            return next(iter(candidates)), False
+        if len(candidates) > 1:
+            return None, True
+        external = next(
+            (reference for reference in references if reference.startswith(("java.", "org.junit."))),
+            None,
+        )
+        return None, strict_external and external is None
     explicit_matches = {name for name in explicit if name.rsplit(".", 1)[-1] == raw}
-    candidates = set(explicit_matches)
+    if len(explicit_matches) > 1:
+        return None, True
+    candidates = {
+        resolved for name in explicit_matches
+        if (resolved := local_identity(name)) is not None
+    }
     same_package = f"{package_name}.{raw}" if package_name else raw
-    if same_package in known:
-        candidates.add(same_package)
+    if (same := local_identity(same_package)) is not None:
+        candidates.add(same)
     candidates.update(
-        candidate
+        resolved
         for imported_package in wildcard
-        if (candidate := f"{imported_package}.{raw}") in known
+        if (resolved := local_identity(f"{imported_package}.{raw}")) is not None
     )
     if len(candidates) == 1:
-        candidate = next(iter(candidates))
-        return (candidate if candidate in known else None), False
+        if explicit_matches and next(iter(explicit_matches)) not in source_names:
+            return None, True
+        return next(iter(candidates)), False
     known_simple = {name.rsplit(".", 1)[-1] for name in known}
     if len(candidates) > 1 or raw in known_simple:
         return None, True
-    if len(wildcard) == 1 or raw in {
+    if raw in {
         "Deprecated", "Documented", "FunctionalInterface", "Inherited",
         "Override", "Repeatable", "Retention", "SafeVarargs",
         "SuppressWarnings", "Target",
     }:
         return None, False
+    if explicit_matches:
+        imported = next(iter(explicit_matches))
+        return None, strict_external and not imported.startswith(("java.", "org.junit."))
+    if len(wildcard) == 1:
+        return None, strict_external and not wildcard[0].startswith(("java.", "org.junit."))
     return None, True
 
 
@@ -667,13 +711,16 @@ def classify_local_junit_annotations(
         imports = tuple(JAVA_IMPORT.findall(structure))
         explicit = tuple(name for name in imports if not name.endswith(".*"))
         wildcard = tuple(name[:-2] for name in imports if name.endswith(".*"))
-        depths = brace_depths(structure)
+        parsed_types = java_types(structure, package_name)
         for declaration in JAVA_ANNOTATION_DECLARATION.finditer(structure):
-            if depths[declaration.end() - 1] != 0:
+            declared_type = next(
+                (java_type for java_type in parsed_types
+                 if java_type.body_start == declaration.end() - 1),
+                None,
+            )
+            if declared_type is None:
                 continue
-            name = declaration.group("name")
-            qualified = f"{package_name}.{name}" if package_name else name
-            declarations.setdefault(qualified, []).append(
+            declarations.setdefault(declared_type.qualified_name, []).append(
                 (structure, declaration, package_name, explicit, wildcard)
             )
 
@@ -703,7 +750,7 @@ def classify_local_junit_annotations(
                 directly_guarded.add(qualified)
                 continue
             dependency, uncertain = resolve_local_annotation_reference(
-                annotation.group()[1:], package_name, explicit, wildcard, known
+                annotation.group()[1:], package_name, explicit, wildcard, known, True
             )
             if dependency is not None:
                 dependencies[qualified].add(dependency)
@@ -1420,6 +1467,38 @@ def playwright_has_computed_control(
     return any(structure[match.start()] == "[" for match in pattern.finditer(text))
 
 
+def playwright_has_ambiguous_test_member(text: str, structure: str) -> bool:
+    """Reject any non-literal computed member on an imported Playwright test binding."""
+    identifiers = playwright_imported_identifiers(text, "test")
+    if not identifiers:
+        return False
+    pattern = re.compile(
+        r"(?<![A-Za-z0-9_$])(?:"
+        + "|".join(re.escape(identifier) for identifier in sorted(identifiers))
+        + r")(?![A-Za-z0-9_$])\s*(?:\?\.)?\s*\["
+    )
+    return any(structure[match.end() - 1] == "[" for match in pattern.finditer(structure))
+
+
+def playwright_has_destructured_control(
+    structure: str,
+    controls: frozenset[str],
+    receivers: frozenset[str] | None = None,
+) -> bool:
+    """Reject aliased execution controls whose binding cannot be followed soundly."""
+    for declaration in PLAYWRIGHT_DESTRUCTURED_CONTROL.finditer(structure):
+        if receivers is not None and declaration.group("receiver") not in receivers:
+            continue
+        names = {
+            name
+            for binding in declaration.group("bindings").split(",")
+            if (name := binding.split(":", 1)[0].strip())
+        }
+        if names & controls:
+            return True
+    return False
+
+
 def playwright_describe_callback_brace(
     structure: str,
     brace: int,
@@ -1663,6 +1742,7 @@ def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
         text = source_without_comments(path.read_text(encoding="utf-8"))
         text = source_without_javascript_regex_literals(text)
         structure = source_without_quoted_text(text)
+        test_identifiers = playwright_imported_identifiers(text, "test")
         if (
             PLAYWRIGHT_FOCUSED.search(structure)
             or playwright_has_computed_control(
@@ -1670,6 +1750,12 @@ def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
                 structure,
                 PLAYWRIGHT_COMPUTED_FOCUSED,
             )
+            or playwright_has_destructured_control(
+                structure,
+                frozenset({"only"}),
+                test_identifiers,
+            )
+            or playwright_has_ambiguous_test_member(text, structure)
         ):
             raise ValueError(
                 "focused Playwright .only call prevents complete evidence discovery"
@@ -1738,6 +1824,12 @@ def evidence_markers(
                 structure,
                 PLAYWRIGHT_COMPUTED_NON_PASSING,
             )
+            or PLAYWRIGHT_DYNAMIC_COMPUTED_CALL.search(structure)
+            or playwright_has_destructured_control(
+                structure,
+                frozenset({"skip", "fixme", "fail"}),
+            )
+            or playwright_has_ambiguous_test_member(text, structure)
         ):
             return frozenset()
         return frozenset(
