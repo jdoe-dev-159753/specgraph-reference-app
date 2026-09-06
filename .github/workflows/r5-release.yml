@@ -58,7 +58,7 @@ jobs:
       - name: Clean container-owned outputs before checkout
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
-            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams'
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams /workspace/build'
 
       - uses: actions/checkout@v7
         with:
@@ -238,4 +238,6 @@ jobs:
           [ -z "${R5_STUB_NAME:-}" ] || docker rm -f "$R5_STUB_NAME" || true
           [ -z "${R5_NETWORK_NAME:-}" ] || docker network rm "$R5_NETWORK_NAME" || true
           [ -z "${LOCAL_R5_IMAGE:-}" ] || docker image rm -f "$LOCAL_R5_IMAGE" || true
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/build' || true
           docker logout ghcr.io || true

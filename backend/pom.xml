@@ -158,7 +158,7 @@
               <goal>javadoc</goal>
             </goals>
             <configuration>
-              <outputDirectory>${source.reference.directory}/java/main</outputDirectory>
+              <outputDirectory>${source.reference.directory}/java</outputDirectory>
             </configuration>
           </execution>
           <execution>
@@ -167,7 +167,7 @@
               <goal>test-javadoc</goal>
             </goals>
             <configuration>
-              <outputDirectory>${source.reference.directory}/java/tests</outputDirectory>
+              <outputDirectory>${source.reference.directory}/java</outputDirectory>
             </configuration>
           </execution>
         </executions>

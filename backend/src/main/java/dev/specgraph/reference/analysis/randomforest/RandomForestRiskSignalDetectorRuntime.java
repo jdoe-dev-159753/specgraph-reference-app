@@ -15,7 +15,7 @@ public final class RandomForestRiskSignalDetectorRuntime {
     static final String MANIFEST_RESOURCE =
             "dev/specgraph/reference/analysis/randomforest/synthetic-review-random-forest-v1.properties";
     static final String EXPECTED_MANIFEST_SHA256 =
-            "45c6e8b7122e77f0362d470a398e94cfcb7e31e2c16c656a7938bbc609c58a4a";
+            "1289ccacf839ec75e56a324450356b8c718e037ab279d20fccdda821e71bda74";
     private static final int MAX_MODEL_BYTES = 16 * 1024 * 1024;
     private static final int MAX_MANIFEST_BYTES = 16 * 1024;
     private static final String EXPECTED_MODEL_VERSION = "synthetic-review-random-forest-v1";

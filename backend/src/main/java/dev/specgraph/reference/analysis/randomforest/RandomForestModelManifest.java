@@ -28,6 +28,8 @@ public record RandomForestModelManifest(
         String labelDefinitionIdentity,
         String scoreSemantics,
         String limitation) {
+    private static final String CANONICAL_HEADER =
+            "# Immutable model manifest binds runtime inference to its training inputs, seeds, schema, and limitations.";
     private static final String FORMAT_VERSION = "1";
     private static final List<String> CANONICAL_KEYS = List.of(
             "format-version",
@@ -83,8 +85,14 @@ public record RandomForestModelManifest(
             throw new IllegalArgumentException("random-forest manifest must use canonical LF-terminated lines");
         }
 
+        String[] lines = content.substring(0, content.length() - 1).split("\n", -1);
+        if (lines.length == 0 || !CANONICAL_HEADER.equals(lines[0])) {
+            throw new IllegalArgumentException("random-forest manifest must begin with its canonical purpose header");
+        }
+
         Map<String, String> values = new LinkedHashMap<>();
-        for (String line : content.substring(0, content.length() - 1).split("\n", -1)) {
+        for (int index = 1; index < lines.length; index++) {
+            String line = lines[index];
             int separator = line.indexOf('=');
             if (separator <= 0 || separator == line.length() - 1 || line.indexOf('=', separator + 1) >= 0) {
                 throw new IllegalArgumentException("invalid random-forest manifest entry");
@@ -145,7 +153,7 @@ public record RandomForestModelManifest(
         values.put("label-definition-identity", labelDefinitionIdentity);
         values.put("score-semantics", scoreSemantics);
         values.put("limitation", limitation);
-        StringBuilder canonical = new StringBuilder();
+        StringBuilder canonical = new StringBuilder(CANONICAL_HEADER).append('\n');
         CANONICAL_KEYS.forEach(key -> canonical.append(key).append('=').append(values.get(key)).append('\n'));
         return canonical.toString().getBytes(StandardCharsets.UTF_8);
     }
