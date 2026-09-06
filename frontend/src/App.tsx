@@ -477,7 +477,8 @@ export default function App() {
     })
   }
 
-  const runtimeLabel = runtimeSession.data?.kind === 'SECURED' ? 'R4' : 'R3'
+  const securedRuntimeLabel = import.meta.env.VITE_DELIVERY_RING === 'R5' ? 'R5' : 'R4'
+  const runtimeLabel = runtimeSession.data?.kind === 'SECURED' ? securedRuntimeLabel : 'R3'
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>

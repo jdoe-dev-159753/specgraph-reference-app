@@ -7,6 +7,8 @@ ARG BUILD_RECIPE_SHA256=unknown
 # the builder architecture instead of emulating the target runtime architecture.
 FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend-build
 ARG SOURCE_ROOT
+ARG DELIVERY_RING=R4
+ENV VITE_DELIVERY_RING=${DELIVERY_RING}
 WORKDIR /frontend
 COPY ${SOURCE_ROOT}/frontend/package.json ./package.json
 RUN --mount=type=cache,id=specgraph-frontend-npm,target=/root/.npm \

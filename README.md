@@ -48,10 +48,10 @@ export SPECGRAPH_LOCAL_MODEL=ministral-3-8b-instruct-2512
 export R5_BIND_ADDRESS=10.77.0.31
 export R5_PORT=8088
 docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-68d1d84bd728065df361d81c9f044def6429162c \
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-f6b989af9574a8d54249e29ffff2045129d8f127 \
   up -d --wait --no-build --pull always
 docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-68d1d84bd728065df361d81c9f044def6429162c ps
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-f6b989af9574a8d54249e29ffff2045129d8f127 ps
 ```
 
 This immutable candidate was proven and published by the successful R5 workflow. The shorter `:r5` tag is promoted only after merge to `main`.
@@ -71,7 +71,7 @@ Stop and reset the R5 demo with the same OCI Compose package:
 
 ```bash
 docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-68d1d84bd728065df361d81c9f044def6429162c \
+  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-f6b989af9574a8d54249e29ffff2045129d8f127 \
   down -v
 ```
 
@@ -84,6 +84,8 @@ These unedited screenshots were promoted from successful browser-validation arti
 ### R5 full composite with local-model provenance
 
 ![Authenticated R5 full composite with three detector artifacts, pgvector grounding and local model provenance](docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png)
+
+[Open the full-size R5 screenshot](docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png)
 
 This unedited capture comes from the exact workflow that published the immutable WatchInfra candidate above. Its Stage-3 endpoint is the deterministic LM Studio contract double; the manual WatchInfra rehearsal proves the same candidate against the real LM Studio process and Developer Logs.
 

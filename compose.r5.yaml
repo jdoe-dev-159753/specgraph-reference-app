@@ -26,6 +26,7 @@ services:
       dockerfile: docker/app.Dockerfile
       args:
         SOURCE_ROOT: "${R5_SOURCE_ROOT:-.}"
+        DELIVERY_RING: R5
     environment:
       SPRING_PROFILES_ACTIVE: r4
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/specgraph
