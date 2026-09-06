@@ -11,3 +11,4 @@ docs/tooling/frontend-reference/node_modules/
 .DS_Store
 __pycache__/
 docs/presentation/.build/
+docs/presentation/node_modules/

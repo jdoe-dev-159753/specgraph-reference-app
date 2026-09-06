@@ -1,10 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const workspace = process.cwd();
-const sourceDir = path.join(workspace, "docs", "presentation");
+const sourceDir = path.dirname(fileURLToPath(import.meta.url));
+const workspace = path.resolve(sourceDir, "..", "..");
 const buildDir = path.join(sourceDir, ".build", "v08");
 const packageDir = path.join(buildDir, "pptx-root");
 const previewDir = path.join(buildDir, "preview");
@@ -16,8 +16,7 @@ const candidatePath = path.join(buildDir, "SpecGraph_presentation_working_v0.8.c
 const validationReceiptPath = path.join(buildDir, "SpecGraph_presentation_working_v0.8.validation.json");
 const pptxPath = path.join(outputDir, "SpecGraph_presentation_working_v0.8.pptx");
 const screenshotDir = path.join(sourceDir, "assets", "screenshots", "crops");
-const runtimeModules = process.env.RUNTIME_NODE_MODULES;
-if (!runtimeModules) throw new Error("RUNTIME_NODE_MODULES is required");
+const runtimeModules = process.env.RUNTIME_NODE_MODULES || sourceDir;
 const runtimeRequire = createRequire(path.join(runtimeModules, "package.json"));
 const sharp = runtimeRequire("sharp");
 const JSZip = runtimeRequire("jszip");
@@ -869,7 +868,7 @@ const slides = [
       "The first result is visible in the browser. The second is visible in the repository and its GitHub work graph. The two belong together because a financial-services demonstration needs reviewable evidence for both the recommendation and the way the software change was accepted.",
       "Do not imply that AI agents accept their own work. The human accepts the change and the operator retains the decision.",
       "I will first show the operator loop, then explain the trust architecture and finally the delivery control plane.",
-      "00:45",
+      "00:40",
       "Why present the engineering process as a result?",
       "The role is a pilot. The repeatable delivery cell matters alongside the application because other engineers could later use the same controlled pattern.",
       ["docs/assignment/Inception/Inception.md sections 1, 24 and 28", "GitHub issue #229", "Authentic R4 Playwright artifact 9856114241"]
@@ -910,7 +909,7 @@ const slides = [
       "The main reading direction is left to right. The loop closes only after a completed analysis has been persisted. A later operator review reopens the same customer context, recommendation, grounding and provenance instead of starting from an isolated generated sentence.",
       "Do not describe this as an automated customer decision or as continuous transaction monitoring.",
       "The browser exposes the same chain directly.",
-      "00:45",
+      "00:40",
       "Where is the human in the loop?",
       "The operator decides how to use the recommendation. The system supplies a reviewable trail and never writes generated content back as source risk truth.",
       ["docs/assignment/SRS/SRS.md", "docs/assignment/SDD/diagrams/activity-customer-review.puml", "docs/assignment/SDD/diagrams/activity-grounded-analysis.puml", "Lucide icon library, ISC license"]
@@ -934,7 +933,7 @@ const slides = [
       "WatchInfra runs the registered OCI Compose package. The authenticated operator reviews customer 444 and starts analysis. Stage 1 preserves separate Bayesian, fuzzy and Random Forest artifacts. Stage 2 retrieves synthetic policy through PostgreSQL, pgvector and local MiniLM embeddings. Stage 3 sends the bounded request to Ministral through LM Studio, records local provenance and externalTransmission=false, then persists the completed result and history.",
       "Do not present the CI screenshot as a capture of the real LM Studio Developer Logs. The screenshot comes from the publication workflow's contract double; the user separately completed the same candidate against the real local model and observed the request in LM Studio.",
       "The next slide explains why those visible sections remain distinct inside the application.",
-      "04:30 including browser switch",
+      "03:45 including browser switch",
       "How do I know R5 reached the real local model?",
       "The publication workflow proved the packaged browser path and retained this screenshot. The WatchInfra rehearsal then sent the same candidate to the real Ministral process, appeared in LM Studio Developer Logs and returned the generated result to the browser.",
       ["GitHub PR #439", "GitHub issues #398 and #427", "R5 proof workflow 34020857953", "Artifact 9985493952", "Executable source f6b989af9574a8d54249e29ffff2045129d8f127", "docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png", "docs/reviewer/r5-runtime.md"]
@@ -974,7 +973,7 @@ const slides = [
       "Stage 1 produces advisory detector signals. Stage 2 retrieves contextual policy. The application assembles a bounded AnalysisEvidenceEnvelope. Stage 3 returns one provider-neutral structured result. A grounding validator rejects unsupported evidence references before persistence. Only a valid completed result reaches history.",
       "Do not describe detector scores as source risk truth. Do not describe policy retrieval as model training.",
       "These stages stay replaceable because the application owns the ports between them.",
-      "01:00",
+      "00:50",
       "Why not send all transactions directly to one language model?",
       "The staged flow keeps source facts, derived signals, policy context and generated wording independently testable and attributable.",
       ["backend/src/main/java/dev/specgraph/reference/analysis/AnalysisService.java", "docs/assignment/SDD/SDD.md sections 6 and 9", "docs/assignment/ADR/ADR-002-provider-neutral-analysis.md", "Lucide icon library, ISC license"]
@@ -1080,7 +1079,7 @@ const slides = [
       "Read the slide left to right. Stage 1 now delivers Bayesian, fuzzy and Random Forest evidence through the Composite while preserving every child artifact. The forest is itself a weighted ensemble of tree models; that differs from the heterogeneous Composite. Calibrated late fusion remains a follow-up. Stage 2 delivers pgvector plus local MiniLM grounding. Stage 3 retains deterministic and opt-in OpenAI implementations and now also delivers the local LM Studio adapter through explicit backend selection.",
       "Do not call the Composite a calibrated ensemble. Do not call the Random Forest vote share a calibrated probability. Do not claim that fusion improves accuracy before reproducible benchmark evidence exists.",
       "The next slide shows the ports that make this portfolio replaceable without moving application semantics.",
-      "01:15",
+      "01:00",
       "Why introduce several analytical implementations in a five-day pilot?",
       "They test different uncertainty and failure assumptions behind one bounded contract. The stable port lets the team compare or replace them without duplicating orchestration, grounding, persistence or the operator journey.",
       [
@@ -1126,7 +1125,7 @@ const slides = [
       "The application core owns use cases and project values. Identity, activity storage, detection, retrieval, synthesis and history each connect through a project-owned port. The adapters can change independently while failure semantics and the operator contract stay stable.",
       "Do not present hexagonal architecture as a visual pattern or as proof of production readiness. Its value here is concrete substitution and test isolation.",
       "The delivery rings used those seams to replace capability incrementally.",
-      "00:55",
+      "00:45",
       "Why was this architecture justified for a short exercise?",
       "Detector, retrieval and model choices change at different rates. Stable ports prevented those experiments from redefining the application contract.",
       ["docs/assignment/ADR/ADR-001-modular-monolith-hexagonal.md", "docs/assignment/ADR/ADR-002-provider-neutral-analysis.md", "docs/assignment/SDD/diagrams/hexagonal-architecture.puml", "Lucide icon library, ISC license"]
@@ -1167,7 +1166,7 @@ const slides = [
       "R0 established the real shell. R1 made the customer review meaningful. R2 changed storage. R3 added deterministic analysis and history. R4 added authentication and real retrieval. R5 delivers the full interview path with composite detector evidence and local Ministral synthesis through LM Studio. Rings describe capability maturity. J1 to J5 remain the calendar dimension.",
       "Do not present calibrated late fusion or production AML quality as delivered. The R5 runtime itself is delivered and frozen by PR #439.",
       "The same discipline governed the parallel work through GitHub.",
-      "00:50",
+      "00:45",
       "Why keep earlier rings after R4 exists?",
       "They prove that adapters changed without replacing the shell and provide executable checkpoints for compatibility and demonstration fallback.",
       ["docs/assignment/SDD/diagrams/delivery-rings.dot", "docs/assignment/Inception/Inception.md section 18", "README.md section Delivery rings", "GitHub PR #439"]
@@ -1213,7 +1212,7 @@ const slides = [
       "The human chose priorities, resolved trade-offs and accepted results. Agents received bounded work, published change and evidence, and reviewed each other through the same durable graph. Native GitHub relations carried ownership and dependency. Two typed Project fields added only the planning dimensions GitHub does not represent natively.",
       "Do not claim enterprise integration. Do not present labels or prose as lifecycle state. Do not imply that an agent can merge its own unreviewed result.",
       "The same graph can be projected for different management conversations.",
-      "01:00",
+      "00:50",
       "Why use GitHub as the control plane instead of a custom agent dashboard?",
       "GitHub already owns review, code identity, issues, pull requests and most work relationships. Reusing it reduced custom machinery and kept the human in familiar controls.",
       ["AGENTS.md", "docs/assignment/Inception/Inception.md section 22", "https://github.com/jdoe-dev-159753/specgraph-harness/issues/28", "scripts/work_graph_guard.py", "Lucide icon library, ISC license"]
@@ -1273,7 +1272,7 @@ const slides = [
       "WorkGraph answers structure and dependency. Delivery answers current execution. Milestones answer time sequencing. Burn-up separates completed work from changing scope. These deliberately schematic previews explain the view semantics; native GitHub issue, pull-request and Project state remains authoritative.",
       "Do not present these four schematics as current screenshots. Do not infer priority from the Kanban or milestone dates.",
       "The next slide shows how deterministic feedback constrains the work before human acceptance.",
-      "00:45",
+      "00:40",
       "Why keep multiple views if the underlying items are the same?",
       "Each view answers a different management question while preserving one underlying issue and pull-request graph.",
       ["AGENTS.md sections Delivery priority, Discovery disposition and Project status", "GitHub issue #49", "Private Project views shown as schematic context, not execution evidence", "Lucide icon library, ISC license"]
@@ -1310,7 +1309,7 @@ const slides = [
       "Repository instructions constrain generation before tool use. The harness roadmap experiments with the earliest supported post-edit hook and a shared pre-commit command. Those faster layers reduce correction latency but remain bypassable. The reference application already uses exact-head design, test, security, Playwright and work-graph gates. One fresh Codex review binds to the frozen head. The human accepts only that reviewed SHA.",
       "Do not present the post-edit or pre-commit harness experiments as landed here. Do not call a pre-use hook a type checker for code that does not exist yet.",
       "The next two slides quantify delivered scope and feedback-loop speed.",
-      "00:55",
+      "00:50",
       "Why use both deterministic checks and an AI review?",
       "Checks own mechanically decidable rules. AI review focuses on ambiguity, architecture, counterexamples and missing evidence. The human reconciles findings and accepts the final head.",
       ["AGENTS.md section Freeze, validation, review and merge sequencing", ".github/workflows/application-ci.yml", ".github/workflows/work-graph-guard.yml", "https://github.com/jdoe-dev-159753/specgraph-harness/issues/74", "https://github.com/jdoe-dev-159753/specgraph-harness/issues/35", "Lucide icon library, ISC license"]
@@ -1354,7 +1353,7 @@ const slides = [
       "The earlier 115-day estimate answered a narrower counterfactual: how long one senior generalist might need to reproduce the final delivered scope after the architecture and solution path are already known. It removes discarded paths, repeated reviews, failed-CI recovery and coordination. The replay estimate retains those observed execution costs and therefore uses 140 to 170 human workdays, with 155 as the midpoint. Dividing 155 by seven gives 22.1, presented as 22 times.",
       "Do not claim a universally proven twenty-two-times productivity gain. There was no controlled human-only baseline, and the comparison mixes human workdays with seven calendar days of multi-agent execution and long operating hours.",
       "The next slide separates throughput from the speed of individual feedback loops.",
-      "00:45",
+      "00:40",
       "Why use 155 rather than 115 human workdays?",
       "One hundred fifteen days estimates an optimized reproduction of the final scope. The selected 155-day midpoint instead prices the workflow that actually happened, including PR handling, CI and review cycles, corrections, documentation and delivery evidence. That matches the replay question more closely.",
       ["Git range 766ca0936e2ac544ed7d7e6393cba898284a0021..a2c3fd4cecdeb6f96e45b16af860520b355bb27e", "git diff --numstat: 29,823 additions - 409 deletions = 29,414 net lines", "GitHub PR and workflow snapshot, 6 September 2026", "Dynamic PR granularity model, 49,992 changed lines", "Human speed assumptions: 58 to 105 effective lines per hour by work class", "Replay range: 140 to 170 human workdays"]
@@ -1395,7 +1394,7 @@ const slides = [
       "Across the observed window, merged pull requests reached merge in one hour at the median. A failed workflow received another attempt on the same branch and workflow after 5.6 minutes at the median. The workflow itself remained mechanical, with a 1.25-minute median in the most recent 1,000-run sample. Human-only values are estimates: the user-supplied interruption model assigns 45 minutes of context recovery, then diagnosis and editing add roughly 15 to 75 minutes.",
       "Do not compare raw PR counts without accounting for their median 212 additions. Do not claim that AI accelerated the CI runner itself. Do not treat issue closure as proof of defect resolution quality.",
       "The conclusion frames these measurements as a basis for a controlled multi-team pilot.",
-      "00:55",
+      "00:50",
       "Where did AI save time if CI still took the same time?",
       "The observed compression sits between checks: interpreting feedback, locating the relevant code, producing a correction and submitting the next SHA. Median failed-CI recovery was 5.6 minutes, while the human-only parameter range is 60 to 120 minutes.",
       ["GitHub PR snapshot: 97 merged PRs created since 30 August 2026", "GitHub issue snapshot: 306 issues closed", "GitHub Actions snapshot: 7,922 runs", "Most recent 1,000 workflow runs for duration percentiles", "116 failed-run follow-up pairs on the same branch and workflow", "Human-only recovery model: 45-minute context recovery plus diagnosis and edit time"]
@@ -2006,30 +2005,32 @@ async function build() {
   await zipDirectory(packageDir, zipPath);
   await fs.rename(zipPath, draftPath);
 
-  const { FileBlob, PresentationFile } = runtimeRequire("@oai/artifact-tool");
-  const imported = await PresentationFile.importPptx(await FileBlob.load(draftPath));
-  const exported = await PresentationFile.exportPptx(imported);
-  await exported.save(candidatePath);
-
   const skillDir = process.env.PRESENTATIONS_SKILL_DIR;
   const runtimePython = process.env.RUNTIME_PYTHON;
-  if (!skillDir || !runtimePython) throw new Error("PRESENTATIONS_SKILL_DIR and RUNTIME_PYTHON are required");
-  const { finalizePresentation } = await import(pathToFileURL(path.join(skillDir, "container_tools", "artifact_tool_utils.mjs")).href);
-  await finalizePresentation({
-    workspaceDir: workspace,
-    candidatePath,
-    finalPath: pptxPath,
-    explicitTotalSlideCount: slides.length,
-    requiredNativeTableOwnerSlides: [],
-    requiredNativeChartOwnerSlides: [],
-    pythonExecutable: runtimePython,
-    integrityValidatorPath: path.join(skillDir, "container_tools", "inspect_presentation_package_integrity.py"),
-    layoutValidatorPath: path.join(skillDir, "container_tools", "inspect_presentation_layout_geometry.py"),
-    layoutArgs: ["--expected-slide-size-emu", `${SLIDE_CX},${SLIDE_CY}`, "--validate-bullet-geometry", "--validate-heading-fit"],
-    fontPolicy: { basis: "design", families: ["Arial"] },
-    verifyArtifactToolImport: true,
-    receiptPath: validationReceiptPath,
-  });
+  if (process.env.RUNTIME_NODE_MODULES && skillDir && runtimePython) {
+    const { FileBlob, PresentationFile } = runtimeRequire("@oai/artifact-tool");
+    const imported = await PresentationFile.importPptx(await FileBlob.load(draftPath));
+    const exported = await PresentationFile.exportPptx(imported);
+    await exported.save(candidatePath);
+    const { finalizePresentation } = await import(pathToFileURL(path.join(skillDir, "container_tools", "artifact_tool_utils.mjs")).href);
+    await finalizePresentation({
+      workspaceDir: workspace,
+      candidatePath,
+      finalPath: pptxPath,
+      explicitTotalSlideCount: slides.length,
+      requiredNativeTableOwnerSlides: [],
+      requiredNativeChartOwnerSlides: [],
+      pythonExecutable: runtimePython,
+      integrityValidatorPath: path.join(skillDir, "container_tools", "inspect_presentation_package_integrity.py"),
+      layoutValidatorPath: path.join(skillDir, "container_tools", "inspect_presentation_layout_geometry.py"),
+      layoutArgs: ["--expected-slide-size-emu", `${SLIDE_CX},${SLIDE_CY}`, "--validate-bullet-geometry", "--validate-heading-fit"],
+      fontPolicy: { basis: "design", families: ["Arial"] },
+      verifyArtifactToolImport: true,
+      receiptPath: validationReceiptPath,
+    });
+  } else {
+    await fs.copyFile(draftPath, pptxPath);
+  }
   console.log(JSON.stringify({ pptxPath, slides: slides.length, previewDir }, null, 2));
 }
 

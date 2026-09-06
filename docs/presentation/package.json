@@ -1,0 +1,18 @@
+{
+  "name": "customer-activity-analytics-presentation",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node build-deck.mjs"
+  },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "lucide": "1.8.0",
+    "sharp": "0.35.4"
+  }
+}
