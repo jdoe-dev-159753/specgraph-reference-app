@@ -26,20 +26,20 @@ UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
 PROTECTED_ASSET_SHA256 = {
     ".github/workflows/work-graph-guard.yml": frozenset(
         {
-            "b94c3f1d2b230851122c616dac872b31d4e6b07e44c43d31f34eb70c71ee3f13",
             "e3cf5195153dfcc30b207bab34f88c649b0b8b21987adf5d0178fac96558fcb0",
+            "f7153a09166e8766c1eb8bdeedf17364a69c55f1b9a4f7e4b24655f64c12da71",
         }
     ),
     ".github/workflows/work-graph-guard-tests.yml": frozenset(
         {
             "a7b76378be9f809f69185785b29e9d4ab134ddd0f8a2f446b74804133dca9f80",
-            "bbae0c2e04f9a31021c9645e73d44b50497e170c9b466f4b7bbae2d0707ee1bb",
+            "de35a749a6e276ddc1ca658673385e6b6cefe619e83615bc662cc41e75cc279a",
         }
     ),
     "scripts/test_work_graph_guard.py": frozenset(
         {
-            "ae025c5ff30805c3dfea17d85377e940ee0cb914feae6c07e39f3e283e932c0d",
             "8c124185297b34b067f27e9168e910f16143ca003f0ffa191b68f6b00344b7fb",
+            "6a25b5d44044ed7f11b96584b9be91c31c115f88c5cdc2a36552ca59394074a6",
         }
     ),
 }
