@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const workspace = process.cwd();
@@ -21,6 +20,7 @@ const runtimeModules = process.env.RUNTIME_NODE_MODULES;
 if (!runtimeModules) throw new Error("RUNTIME_NODE_MODULES is required");
 const runtimeRequire = createRequire(path.join(runtimeModules, "package.json"));
 const sharp = runtimeRequire("sharp");
+const JSZip = runtimeRequire("jszip");
 let lucide = null;
 try {
   lucide = runtimeRequire("lucide");
@@ -789,6 +789,36 @@ function membershipChart(x, y, titleValue, xLabel, low, high, color) {
   ];
 }
 
+function fuzzyPartitionChart(x, y, width, height) {
+  const left = x + 72;
+  const right = x + width - 24;
+  const top = y + 22;
+  const bottom = y + height - 38;
+  const plotWidth = right - left;
+  const px = (value) => left + plotWidth * value;
+  const shapes = [
+    line(left, top, 0, bottom - top, { color: C.slate, width: 1 }),
+    line(left, bottom, plotWidth, 0, { color: C.slate, width: 1 }),
+    text(x, y - 10, width, 22, "Shared low / medium / high partition over every effective ratio", { size: 14, color: C.ink, bold: true, align: "center" }),
+    text(left - 52, top - 8, 40, 18, "1", { size: 10, color: C.muted, align: "right" }),
+    text(left - 52, bottom - 8, 40, 18, "0", { size: 10, color: C.muted, align: "right" }),
+    line(px(0.00), top, px(0.10) - px(0.00), 0, { color: C.blue, width: 4 }),
+    line(px(0.10), top, px(0.30) - px(0.10), bottom - top, { color: C.blue, width: 4 }),
+    line(px(0.10), bottom, px(0.30) - px(0.10), top - bottom, { color: C.amber, width: 4 }),
+    line(px(0.30), top, px(0.60) - px(0.30), bottom - top, { color: C.amber, width: 4 }),
+    line(px(0.30), bottom, px(0.60) - px(0.30), top - bottom, { color: C.green, width: 4 }),
+    line(px(0.60), top, px(1.00) - px(0.60), 0, { color: C.green, width: 4 }),
+    text(px(0.02), top + 10, 96, 20, "LOW", { size: 11, color: C.blue, bold: true }),
+    text(px(0.25), top + 10, 130, 20, "MEDIUM", { size: 11, color: C.amber, bold: true, align: "center" }),
+    text(px(0.68), top + 10, 96, 20, "HIGH", { size: 11, color: C.green, bold: true, align: "center" }),
+  ];
+  for (const value of [0.00, 0.10, 0.30, 0.60, 1.00]) {
+    shapes.push(line(px(value), bottom, 0, 7, { color: C.slate, width: 1 }));
+    shapes.push(text(px(value) - 30, bottom + 10, 60, 18, value.toFixed(2), { size: 9, color: C.muted, align: "center" }));
+  }
+  return shapes;
+}
+
 const slides = [
   {
     bg: C.light,
@@ -1240,13 +1270,13 @@ const slides = [
     ],
     notes: note(
       "The graph supports four views without creating four sources of truth.",
-      "WorkGraph answers structure and dependency. Delivery answers current execution. Milestones answer time sequencing. Burn-up separates completed work from changing scope. The final deck should replace these schematic previews with frozen authenticated GitHub Project captures from the private project.",
+      "WorkGraph answers structure and dependency. Delivery answers current execution. Milestones answer time sequencing. Burn-up separates completed work from changing scope. These deliberately schematic previews explain the view semantics; native GitHub issue, pull-request and Project state remains authoritative.",
       "Do not present these four schematics as current screenshots. Do not infer priority from the Kanban or milestone dates.",
       "The next slide shows how deterministic feedback constrains the work before human acceptance.",
       "00:45",
       "Why keep multiple views if the underlying items are the same?",
       "Each view answers a different management question while preserving one underlying issue and pull-request graph.",
-      ["AGENTS.md sections Delivery priority, Discovery disposition and Project status", "GitHub issue #49", "Authentic private Project captures required before final freeze", "Lucide icon library, ISC license"]
+      ["AGENTS.md sections Delivery priority, Discovery disposition and Project status", "GitHub issue #49", "Private Project views shown as schematic context, not execution evidence", "Lucide icon library, ISC license"]
     ),
   },
   {
@@ -1308,7 +1338,7 @@ const slides = [
       ...[
         [66, "49,992", "changed lines in the complete corpus"],
         [354, "328", "files changed on main"],
-        [642, "35,186", "net lines added on main"],
+        [642, "29,414", "net lines added on cited range"],
         [930, "62,578", "lines of cumulative PR churn"],
       ].flatMap(([x, value, label], index) => [
         ...(index ? [line(x - 22, 510, 0, 96, { color: C.line, width: 1 })] : []),
@@ -1327,7 +1357,7 @@ const slides = [
       "00:45",
       "Why use 155 rather than 115 human workdays?",
       "One hundred fifteen days estimates an optimized reproduction of the final scope. The selected 155-day midpoint instead prices the workflow that actually happened, including PR handling, CI and review cycles, corrections, documentation and delivery evidence. That matches the replay question more closely.",
-      ["Git range 766ca0936e2ac544ed7d7e6393cba898284a0021..a2c3fd4cecdeb6f96e45b16af860520b355bb27e", "GitHub PR and workflow snapshot, 6 September 2026", "Dynamic PR granularity model, 49,992 changed lines", "Human speed assumptions: 58 to 105 effective lines per hour by work class", "Replay range: 140 to 170 human workdays"]
+      ["Git range 766ca0936e2ac544ed7d7e6393cba898284a0021..a2c3fd4cecdeb6f96e45b16af860520b355bb27e", "git diff --numstat: 29,823 additions - 409 deletions = 29,414 net lines", "GitHub PR and workflow snapshot, 6 September 2026", "Dynamic PR granularity model, 49,992 changed lines", "Human speed assumptions: 58 to 105 effective lines per hour by work class", "Replay range: 140 to 170 human workdays"]
     ),
   },
   {
@@ -1462,7 +1492,7 @@ const slides = [
   {
     appendix: true,
     shapes: [
-      ...titleBlock("Seven ADRs concentrate the durable choices and their trade-offs", "Appendix B · Decision record"),
+      ...titleBlock("Eight ADRs concentrate the durable choices and their trade-offs", "Appendix B · Decision record"),
       ...[
         [60, 164, "ADR-001", "Modular monolith and strict hexagonal boundaries", "ADR-001-modular-monolith-hexagonal.md"],
         [60, 254, "ADR-002", "Provider-neutral analysis and trust boundary", "ADR-002-provider-neutral-analysis.md"],
@@ -1471,6 +1501,7 @@ const slides = [
         [660, 164, "ADR-005", "One prebuilt application image per checkpoint", "ADR-005-prebuilt-demo-container-packaging.md"],
         [660, 254, "ADR-006", "Compose OCI and multi-platform distribution", "ADR-006-compose-oci-multi-platform-distribution.md"],
         [660, 344, "ADR-007", "Explicit relational adapters with Spring JDBC", "ADR-007-spring-jdbc-relational-adapters.md"],
+        [660, 434, "ADR-008", "Customer Activity Analytics product identity", "ADR-008-customer-activity-analytics-identity.md"],
       ].flatMap(([x,y,id,label,file])=>[
         text(x,y,112,32,id,{size:15,color:C.red,bold:true,underline:true,href:`https://github.com/jdoe-dev-159753/specgraph-reference-app/blob/main/docs/assignment/ADR/${file}`}),
         text(x+120,y,460,54,label,{size:16,color:C.ink,bold:true}),
@@ -1482,11 +1513,11 @@ const slides = [
     ],
     notes: note(
       "ADRs preserve the why behind choices that would otherwise look arbitrary.",
-      "Open the individual links when a reviewer challenges a trade-off. The ADRs cover module shape, AI trust boundaries, persistence, stack reuse, packaging, distribution and relational access. They record rejected alternatives and consequences rather than repeating the SDD.",
+      "Open the individual links when a reviewer challenges a trade-off. The ADRs cover module shape, AI trust boundaries, persistence, stack reuse, packaging, distribution, relational access and reviewer-facing product identity. They record rejected alternatives and consequences rather than repeating the SDD.",
       "Do not treat ADRs as current execution evidence. Tests, code and workflow results own current behavior.",
       "Use the submodel slides only for mechanism-level questions.",
       "As needed",
-      "Why seven ADRs for a five-day exercise?",
+      "Why eight ADRs for a five-day exercise?",
       "Only choices with durable alternatives received an ADR. The records make substitution and later review cheaper without turning every implementation detail into architecture.",
       ["docs/assignment/ADR/", "docs/assignment/SDD/SDD.md section 13"]
     ),
@@ -1516,29 +1547,40 @@ const slides = [
   {
     appendix: true,
     shapes: [
-      ...titleBlock("Four right-shoulder functions map ratios to graded rule activation", "Appendix D · Fuzzy inference"),
-      ...membershipChart(60, 154, "Crypto activity", "x = crypto activities / all activities", 0.00, 0.35, C.red),
-      ...membershipChart(680, 154, "Cross-border payments", "x = foreign payments / all activities", 0.10, 0.60, C.blue),
-      ...membershipChart(60, 344, "Incomplete activity", "x = incomplete activities / all activities", 0.10, 0.50, C.amber),
-      ...membershipChart(680, 344, "Source-risk density", "x = source-risk records / all activities", 0.10, 0.60, C.green),
-      rect(74, 538, 512, 104, { fill:C.pale,line:C.line,width:1,radius:0 }),
-      text(94, 550, 176, 20, "LINEAR MEMBERSHIP", { size:11,color:C.redDark,bold:true,tracking:80 }),
-      text(94, 578, 468, 54, "μ(x) = 0       when x ≤ a\nμ(x) = (x−a)/(b−a)       when a < x < b\nμ(x) = 1       when x ≥ b", { size:12,color:C.ink,bold:true }),
-      rect(604, 538, 602, 104, { fill:C.white,line:C.line,width:1,radius:0 }),
-      text(626, 550, 558, 24, "Rule R5 = min(μ cross-border, μ source-risk)", { size:13,color:C.ink,bold:true }),
-      text(626, 580, 558, 22, "Output = weighted mean of singleton consequents", { size:13,color:C.ink,bold:true }),
-      text(626, 608, 558, 20, "Synthetic thresholds for the demonstrator, not validated Swissquote policy", { size:11,color:C.redDark,bold:true }),
+      ...titleBlock("One overlapping partition turns prior-adjusted ratios into graded activation", "Appendix D · Fuzzy inference"),
+      ...fuzzyPartitionChart(62, 170, 1156, 184),
+      ...[
+        [62, C.red, "CRYPTO", "weight 0.10"],
+        [354, C.amber, "INCOMPLETE", "weight 0.10"],
+        [646, C.blue, "CROSS-BORDER", "weight 0.2625"],
+        [938, C.green, "SOURCE RISK", "weight 0.4875"],
+      ].flatMap(([x, color, label, weight]) => [
+        rect(x, 382, 254, 64, { fill:C.white, line:color, width:2, radius:6 }),
+        text(x + 14, 392, 226, 22, label, { size:13, color, bold:true, align:"center" }),
+        text(x + 14, 418, 226, 18, weight, { size:11, color:C.muted, align:"center" }),
+      ]),
+      rect(62, 472, 500, 166, { fill:C.pale, line:C.line, width:1, radius:6 }),
+      text(82, 486, 460, 22, "1 · PRIOR-ADJUSTED FEATURE", { size:11, color:C.redDark, bold:true, tracking:60 }),
+      text(82, 514, 460, 30, "r_eff = positives / (observations + 2)", { size:15, color:C.ink, bold:true }),
+      text(82, 548, 460, 24, "2 · ACTIVATION", { size:11, color:C.redDark, bold:true, tracking:60 }),
+      text(82, 576, 460, 28, "degree = 0.5 × μmedium + μhigh", { size:15, color:C.ink, bold:true }),
+      text(82, 610, 460, 18, "Add-two zero-positive prior · thresholds 0.10 / 0.30 / 0.60", { size:10.5, color:C.muted }),
+      rect(586, 472, 632, 166, { fill:C.white, line:C.line, width:1, radius:6 }),
+      text(606, 486, 592, 22, "3 · FIXED MONOTONE SURFACE", { size:11, color:C.redDark, bold:true, tracking:60 }),
+      text(606, 516, 592, 58, "score = clamp₀₋₁(0.05 + 0.10·crypto + 0.10·incomplete\n+ 0.2625·cross-border + 0.4875·source-risk)", { size:13.5, color:C.ink, bold:true }),
+      text(606, 580, 592, 24, "Coupled min(cross-border, source-risk) is retained for diagnosis", { size:11, color:C.muted }),
+      text(606, 608, 592, 18, "Its consequent weight is 0: no double counting · not an AML probability", { size:10.5, color:C.redDark, bold:true }),
       ...footer("D", true),
     ],
     notes: note(
-      "These are linear right-shoulder membership functions, not probability distributions.",
-      "The implementation calls this function rising. Values at or below a receive zero membership. The interval from a to b gives graded activation. Values at or above b receive full activation. The cross-border plus source-risk rule takes the minimum of both memberships. A monotonic weighted singleton mean then combines the baseline and positive rules.",
-      "Do not call fuzzy membership a statistical probability. Do not claim these synthetic thresholds are institutional policy.",
+      "The delivered v3 detector applies one overlapping low-medium-high partition to four prior-adjusted feature ratios.",
+      "Each effective ratio divides its positive count by the observation count plus two zero-positive prior observations. The shared partition is low through 0.10, peaks at medium at 0.30 and reaches high at 0.60. Activation equals one half of the medium membership plus the high membership. The final bounded surface adds a 0.05 baseline and fixed weights of 0.10, 0.10, 0.2625 and 0.4875 for crypto, incomplete, cross-border and source-risk activation. The coupled minimum remains visible in provenance with zero consequent weight so the same evidence is not counted twice.",
+      "Do not call fuzzy membership or the final score a statistical probability. Do not claim these synthetic thresholds are institutional policy or calibrated AML parameters.",
       "The next conditional slide explains how different detector families could be arbitrated after their semantics become comparable.",
       "00:60 if asked",
-      "Are the plateau values validated risk thresholds?",
-      "No. They are synthetic demonstration parameters chosen to give a bounded monotonic response. A production setting would need policy ownership, empirical evaluation and versioned approval.",
-      ["backend/src/main/java/dev/specgraph/reference/analysis/FuzzyRiskSignalDetectorAdapter.java", "backend/src/test/java/dev/specgraph/reference/analysis/FuzzyRiskSignalDetectorAdapterTests.java", "https://www.mathworks.com/help/fuzzy/linearsshapedmf.html"]
+      "Why add two observations and use overlapping memberships?",
+      "The add-two prior prevents tiny samples from saturating the detector, while the partition makes changes continuous and inspectable. Both are versioned heuristic choices, not learned or institutionally validated parameters.",
+      ["backend/src/main/java/dev/specgraph/reference/analysis/FuzzyRiskSignalDetectorAdapter.java", "backend/src/test/java/dev/specgraph/reference/analysis/FuzzyRiskSignalDetectorAdapterTests.java"]
     ),
   },
   {
@@ -1789,6 +1831,29 @@ async function write(rel, data) {
   await fs.writeFile(target, data);
 }
 
+async function zipDirectory(source, target) {
+  const zip = new JSZip();
+  async function addDirectory(current) {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await addDirectory(absolute);
+      } else if (entry.isFile()) {
+        const relative = path.relative(source, absolute).split(path.sep).join("/");
+        zip.file(relative, await fs.readFile(absolute));
+      }
+    }
+  }
+  await addDirectory(source);
+  const data = await zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+    compressionOptions: { level: 9 },
+  });
+  await fs.writeFile(target, data);
+}
+
 function baseSlideRels(slideIndex, media, hyperlinks) {
   const rels = [`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>`];
   let rid = 2;
@@ -1938,8 +2003,7 @@ async function build() {
   await fs.rm(candidatePath, { force: true });
   await fs.rm(validationReceiptPath, { force: true });
   await fs.rm(pptxPath, { force: true });
-  const zipped = spawnSync("tar.exe", ["-a", "-c", "-f", zipPath, "[Content_Types].xml", "_rels", "docProps", "ppt"], { cwd: packageDir, encoding: "utf8" });
-  if (zipped.status !== 0) throw new Error(zipped.stderr || zipped.stdout || "PPTX packaging failed");
+  await zipDirectory(packageDir, zipPath);
   await fs.rename(zipPath, draftPath);
 
   const { FileBlob, PresentationFile } = runtimeRequire("@oai/artifact-tool");
