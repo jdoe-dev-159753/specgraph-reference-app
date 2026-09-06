@@ -2,7 +2,7 @@
 
 ## Selected system
 
-The generated deck uses Lucide icons as its reproducible diagram asset library. The icons share one stroke language and can be recoloured with the Customer Activity Analytics deck palette. The build renders only the selected assets and embeds them into the PowerPoint file. The Lucide and inherited Feather notices are retained in `assets/licenses/LUCIDE-LICENSE.txt`.
+The generated deck uses Lucide icons as its reproducible diagram asset library. The icons share one stroke language and can be recoloured with the existing SpecGraph palette. The build renders only the selected assets and embeds them into the PowerPoint file. The Lucide and inherited Feather notices are retained in `assets/licenses/LUCIDE-LICENSE.txt`.
 
 Diagram structure remains native PowerPoint geometry so labels, containers and connectors remain directly editable. Icons clarify the meaning of a node; they do not replace evidence, charts or labels.
 

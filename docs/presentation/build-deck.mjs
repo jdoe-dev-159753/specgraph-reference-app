@@ -6,27 +6,27 @@ import { pathToFileURL } from "node:url";
 
 const workspace = process.cwd();
 const sourceDir = path.join(workspace, "docs", "presentation");
-const buildDir = path.join(sourceDir, ".build", "final");
+const buildDir = path.join(sourceDir, ".build", "v08");
 const packageDir = path.join(buildDir, "pptx-root");
 const previewDir = path.join(buildDir, "preview");
-const iconDir = path.join(buildDir, "icons");
+const iconDir = path.join(sourceDir, ".build", "v05", "icons");
 const outputDir = path.join(sourceDir, "output");
-const zipPath = path.join(buildDir, "Customer_Activity_Analytics_final.zip");
-const draftPath = path.join(buildDir, "Customer_Activity_Analytics_final.draft.pptx");
-const candidatePath = path.join(buildDir, "Customer_Activity_Analytics_final.candidate.pptx");
-const validationReceiptPath = path.join(buildDir, "Customer_Activity_Analytics_final.validation.json");
-const pptxPath = path.join(outputDir, "Customer_Activity_Analytics_final.pptx");
+const zipPath = path.join(buildDir, "SpecGraph_presentation_working_v0.8.zip");
+const draftPath = path.join(buildDir, "SpecGraph_presentation_working_v0.8.draft.pptx");
+const candidatePath = path.join(buildDir, "SpecGraph_presentation_working_v0.8.candidate.pptx");
+const validationReceiptPath = path.join(buildDir, "SpecGraph_presentation_working_v0.8.validation.json");
+const pptxPath = path.join(outputDir, "SpecGraph_presentation_working_v0.8.pptx");
 const screenshotDir = path.join(sourceDir, "assets", "screenshots", "crops");
-const r5ScreenshotPath = path.join(workspace, "docs", "reviewer", "screenshots", "R5_lmstudio_ensemble_customer_444.png");
-const r5ContextCrop = path.join(buildDir, "R5_context_landscape.png");
-const r5AnalysisCrop = path.join(buildDir, "R5_analysis_landscape.png");
-const r5ForestCrop = path.join(buildDir, "R5_forest_landscape.png");
-const r5ProvenanceCrop = path.join(buildDir, "R5_provenance_landscape.png");
 const runtimeModules = process.env.RUNTIME_NODE_MODULES;
 if (!runtimeModules) throw new Error("RUNTIME_NODE_MODULES is required");
 const runtimeRequire = createRequire(path.join(runtimeModules, "package.json"));
 const sharp = runtimeRequire("sharp");
-const lucide = runtimeRequire("lucide");
+let lucide = null;
+try {
+  lucide = runtimeRequire("lucide");
+} catch {
+  // Reuse the retained v0.5 icon cache when the current runtime omits Lucide.
+}
 
 const W = 1280;
 const H = 720;
@@ -429,13 +429,13 @@ const legacySlides = [
       line(712, 300, 0, 90, { color: C.line, width: 2, arrow: true }),
       text(930, 176, 270, 34, "The management question", { size: 18, color: C.red, bold: true }),
       text(930, 228, 270, 158, "What can start now, what is blocked, and who owns the next reviewable increment?", { size: 19, color: C.ink, bold: true }),
-      text(930, 414, 270, 158, "This conceptual projection explains the management question without disclosing a private Project capture.", { size: 14, color: C.muted }),
+      text(930, 414, 270, 158, "The final slide will use the real WorkGraph screenshot. This schematic fixes the crop, annotation and spoken message.", { size: 14, color: C.muted }),
       ...footer(9),
     ],
     notes: note(
       "The WorkGraph answers readiness and dependency questions before work begins.",
-      "The conceptual projection explains which items can start, which are blocked, how stacked work is ordered and where the accountable owner sits without disclosing a private Project capture.",
-      "Do not present the conceptual projection as a current GitHub screenshot.",
+      "The final version will show the authentic Project view with a small number of annotations. I will use it to explain which items can start, which are blocked, how stacked work is ordered and where the accountable owner sits. This draft schematic defines the intended crop and narration only.",
+      "Do not present the schematic as a current GitHub screenshot. Replace it before the final freeze.",
       "Other Project views answer different management questions.",
       "00:45",
       "Why is a graph more useful than a backlog list?",
@@ -477,12 +477,12 @@ const legacySlides = [
   },
   {
     shapes: [
-      ...titleBlock("Delivered capabilities plug into boundaries that already exist", "Delivered R5"),
+      ...titleBlock("The next capabilities plug into boundaries that already exist", "Conditional slides"),
       ...[
         [72, 170, "LANDED", C.green, "Bayesian and fuzzy detectors", "Inspectable Stage 1 alternatives emit canonical evidence"],
         [72, 282, "LANDED", C.green, "Composite detector", "Ordered detector leaves preserve child evidence"],
-        [72, 394, "DELIVERED", C.green, "Random Forest and typed backend selection", "Implementation remains bounded by project-owned ports"],
-        [72, 506, "EXCLUDED", C.slate, "Calibrated late fusion", "Dataset ceiling prevents an honest comparison"],
+        [72, 394, "IN PROGRESS", C.amber, "Random Forest and typed backend selection", "Implementation remains bounded by project-owned ports"],
+        [72, 506, "NEXT", C.red, "Fusion, local synthesis and visible provenance", "Promote only when implementation and evidence land"],
       ].flatMap(([x, y, status, color, a, b]) => [
         line(x, y, 0, 72, { color, width: 7 }),
         text(x + 24, y, 158, 28, status, { size: 12, color, bold: true, tracking: 100 }),
@@ -494,8 +494,8 @@ const legacySlides = [
       ...footer(11),
     ],
     notes: note(
-      "Delivered R5 capability enters through seams already exercised by simpler adapters; calibrated fusion remains excluded.",
-      "Bayesian, fuzzy, Random Forest and Composite demonstrate Stage 1 replaceability. Typed Stage 3 selection, local synthesis and operator-visible provenance are delivered. Calibrated fusion remains excluded because the synthetic fixture cannot support an honest comparison.",
+      "Future capability remains credible because it enters through seams already exercised by simpler adapters.",
+      "Bayesian, fuzzy and Random Forest detectors now run through the Composite while preserving each child artifact. Typed Stage 3 selection, local LM Studio synthesis and operator-visible provenance are delivered. Calibrated late fusion remains a separate follow-up. A capability moves into the main story only after implementation, tests and retained evidence agree.",
       "Do not call the Random Forest vote share a calibrated probability. Do not claim production AML validity from synthetic data.",
       "The final slide connects the product result to a repeatable organisational model.",
       "00:50",
@@ -618,7 +618,7 @@ const legacySlides = [
     shapes: [
       ...titleBlock("Composite execution preserves child evidence while calibrated fusion remains separate", "Appendix E"),
       text(70, 174, 500, 42, "COMPOSITE, LANDED", { size: 17, color: C.green, bold: true }),
-      text(710, 174, 500, 42, "FUSION, EXCLUDED", { size: 17, color: C.red, bold: true }),
+      text(710, 174, 500, 42, "FUSION, CONDITIONAL", { size: 17, color: C.red, bold: true }),
       ...["Bayesian detector", "Fuzzy detector", "Random Forest when enabled"].flatMap((v, i) => [
         rect(88, 246 + i * 72, 360, 46, { fill: C.pale, line: C.line, radius: 6 }),
         text(108, 254 + i * 72, 320, 30, v, { size: 15, color: C.ink, bold: true, valign: "mid" }),
@@ -637,8 +637,8 @@ const legacySlides = [
   {
     appendix: true,
     shapes: [
-      ...titleBlock("The delivered Random Forest substitution keeps bounded claims", "Appendix F"),
-      text(70, 164, 1140, 34, "STATUS: DELIVERED", { size: 14, color: C.green, bold: true, tracking: 120 }),
+      ...titleBlock("Random Forest remains an in-progress substitution with bounded claims", "Appendix F"),
+      text(70, 164, 1140, 34, "STATUS AT THIS DRAFT: IN PROGRESS", { size: 14, color: C.amber, bold: true, tracking: 120 }),
       ...[
         [90, "INPUT", "Four bounded, non-PII features"],
         [430, "FOREST", "Fixed trained trees behind a project port"],
@@ -652,7 +652,7 @@ const legacySlides = [
       text(90, 474, 1020, 116, "The score is an unweighted forest vote share with no probability calibration. Synthetic training supports architecture and reproducibility work only. It provides no production AML validity.", { size: 17, color: C.white, bold: true, fill: C.ink, margin: 14, align: "center", valign: "mid" }),
       ...footer(18, true),
     ],
-    notes: note("The delivered Random Forest proves a replaceable detector boundary without proving model quality.", "The adapter consumes four bounded non-PII features and validates model provenance. The current score means unweighted tree vote share for the REVIEW_ELEVATED class. Synthetic training and the dataset ceiling prevent any claim of calibration or production AML effectiveness.", "Never call the vote share a probability. Never imply the synthetic data validates real customers.", "Use this slide only if the reviewer asks about the delivered learned detector.", "00:45 if asked", "What would make this production credible?", "A governed real-data programme, representative holdout evaluation, calibration, monitoring, documented feature lineage and independent model-risk review.", ["GitHub issue #223", "docs/analysis/dataset-ceiling.md", "RandomForestRiskSignalDetectorAdapter and tests"]),
+    notes: note("The delivered Random Forest proves a replaceable detector boundary before it proves model quality.", "The adapter consumes four bounded non-PII features and validates model provenance. The current score means unweighted tree vote share for the REVIEW_ELEVATED class. Synthetic training and the current evaluation ceiling prevent any claim of calibration or production AML effectiveness.", "Never call the vote share a probability. Never imply the synthetic data validates real customers.", "Use this slide only if the reviewer asks about the delivered R5 detector portfolio or future learned detectors.", "00:45 if asked", "What would make this production credible?", "A governed real-data programme, representative holdout evaluation, calibration, monitoring, documented feature lineage and independent model-risk review.", ["GitHub issue #223", "RandomForestRiskSignalDetectorAdapter and retained tests"]),
   },
   {
     appendix: true,
@@ -665,7 +665,7 @@ const legacySlides = [
       ...[
         [590, 190, "DETERMINISTIC", "Landed baseline", C.green],
         [590, 312, "OPENAI", "Optional external provider", C.blue],
-        [590, 434, "LOCAL MODEL", "Delivered LM Studio adapter", C.green],
+        [590, 434, "LOCAL MODEL", "Conditional LM Studio adapter", C.amber],
       ].flatMap(([x, y, a, b, color]) => [
         rect(x, y, 500, 82, { fill: C.white, line: color, width: 2, radius: 10 }),
         text(x + 20, y + 14, 220, 24, a, { size: 15, color, bold: true }),
@@ -802,12 +802,12 @@ const slides = [
       text(66, 536, 450, 58, "Customer activity, evidence, analysis and history", { size: 19, color: C.ink, bold: true }),
       text(650, 504, 330, 26, "METHOD PROOF", { size: 12, color: C.blue, bold: true, tracking: 140 }),
       text(650, 536, 490, 58, "Specifications, work graph, ratchets and review", { size: 19, color: C.ink, bold: true }),
-      text(66, 632, 580, 24, "Nicolas Cazin · final reviewer deck", { size: 13, color: C.muted }),
+      text(66, 632, 580, 24, "Nicolas Cazin · working deck v0.8", { size: 13, color: C.muted }),
       text(982, 632, 220, 24, "submission-v1 at final freeze", { size: 13, color: C.muted, align: "right" }),
     ],
     notes: note(
       "The exercise produced a product result and a delivery-system result.",
-      "I will start with the answer. Customer Activity Analytics runs a complete customer-activity review path. The same work also exercises a controlled way for one accountable engineer to coordinate several AI agents through specifications, GitHub work state, deterministic checks and review evidence.",
+      "I will start with the answer. The demonstrator runs a complete Customer Care review path. The same work also exercises a controlled way for one accountable engineer to coordinate several AI agents through specifications, GitHub work state, deterministic checks and review evidence.",
       "Do not start with frameworks, algorithms or issue numbers. Do not claim production readiness.",
       "The next slide states both results before the supporting detail.",
       "00:20",
@@ -818,37 +818,36 @@ const slides = [
   },
   {
     shapes: [
-      ...titleBlock("R5 proves the full local-model operator path and the controlled delivery system", "Answer first"),
+      ...titleBlock("The pilot produced a working operator path and a controlled delivery system", "Answer first"),
       rect(58, 168, 650, 406, { fill: C.white, line: C.line, width: 1, radius: 0 }),
-      image(70, 180, 626, 390, r5ContextCrop),
-      text(82, 192, 206, 30, "R5 · AUTHENTIC CI CAPTURE", { size: 11, color: C.white, bold: true, fill: C.redDark, margin: 7, valign: "mid" }),
+      image(70, 180, 626, 390, path.join(screenshotDir, "R4_context_landscape.png")),
       line(746, 190, 0, 360, { color: C.line, width: 2 }),
       ellipse(792, 184, 58, 58, { fill: C.red, line: C.red }),
       text(792, 197, 58, 32, "1", { size: 20, color: C.white, bold: true, align: "center", valign: "mid" }),
       text(874, 182, 300, 34, "Product proof", { size: 22, color: C.ink, bold: true }),
-      text(874, 224, 318, 86, "R5 combines authenticated review, three detector artifacts, pgvector grounding and local LM Studio synthesis.", { size: 16, color: C.muted }),
+      text(874, 224, 318, 86, "An authenticated operator can inspect source activity, run grounded analysis and reopen persisted history.", { size: 17, color: C.muted }),
       ellipse(792, 338, 58, 58, { fill: C.blue, line: C.blue }),
       text(792, 351, 58, 32, "2", { size: 20, color: C.white, bold: true, align: "center", valign: "mid" }),
       text(874, 336, 300, 34, "Method proof", { size: 22, color: C.ink, bold: true }),
-      text(874, 378, 318, 92, "One human coordinated parallel agents through specifications, GitHub checks and reviewed evidence.", { size: 17, color: C.muted }),
+      text(874, 378, 318, 92, "One human used specifications, GitHub work state, deterministic gates and review evidence to coordinate parallel agents.", { size: 17, color: C.muted }),
       rect(780, 498, 420, 76, { fill: C.ink, line: C.ink, radius: 8 }),
       text(804, 512, 372, 48, "The human remains accountable for both customer review and accepted engineering change", { size: 16, color: C.white, bold: true, align: "center", valign: "mid" }),
       ...footer(2),
     ],
     notes: note(
       "Two results answer the exercise before any architecture detail.",
-      "The first result is visible in the R5 browser capture. The authenticated operator can inspect source activity, run all three Stage 1 detectors through Composite, retrieve synthetic policy with pgvector and all-MiniLM-L6-v2, synthesize through the local LM Studio adapter and reopen the persisted result. The second result is visible in the repository and its GitHub work graph.",
+      "The first result is visible in the browser. The second is visible in the repository and its GitHub work graph. The two belong together because a financial-services demonstration needs reviewable evidence for both the recommendation and the way the software change was accepted.",
       "Do not imply that AI agents accept their own work. The human accepts the change and the operator retains the decision.",
       "I will first show the operator loop, then explain the trust architecture and finally the delivery control plane.",
       "00:45",
       "Why present the engineering process as a result?",
       "The role is a pilot. The repeatable delivery cell matters alongside the application because other engineers could later use the same controlled pattern.",
-      ["docs/assignment/Inception/Inception.md sections 1, 24 and 28", "GitHub issue #229", "docs/reviewer/screenshot-manifest.md", "R5 workflow run 34020857953", "R5 source SHA f6b989af9574a8d54249e29ffff2045129d8f127"]
+      ["docs/assignment/Inception/Inception.md sections 1, 24 and 28", "GitHub issue #229", "Authentic R4 Playwright artifact 9856114241"]
     ),
   },
   {
     shapes: [
-      ...titleBlock("The operator moves from source facts to a recommendation and back to reviewable history", "Customer Activity Analytics loop"),
+      ...titleBlock("The operator moves from source facts to a recommendation and back to reviewable history", "Customer Care loop"),
       line(244, 302, 56, 0, { color: C.red, width: 3, arrow: true }),
       line(484, 302, 56, 0, { color: C.red, width: 3, arrow: true }),
       line(724, 302, 56, 0, { color: C.red, width: 3, arrow: true }),
@@ -889,28 +888,26 @@ const slides = [
   },
   {
     shapes: [
-      ...titleBlock("R5 exposes three detector artifacts, policy grounding and local-model provenance", "Executable product evidence"),
-      ...[
-        [58, r5AnalysisCrop, "1  BAYESIAN + FUZZY", C.red],
-        [450, r5ForestCrop, "2  FUZZY + FOREST", C.green],
-        [842, r5ProvenanceCrop, "3  POLICY + LOCAL MODEL", C.blue],
-      ].flatMap(([x, src, label, color]) => [
-        rect(x, 170, 362, 352, { fill: C.white, line: C.line, width: 1, radius: 0 }),
-        image(x + 8, 180, 346, 334, src),
-        text(x + 16, 188, 226, 30, label, { size: 11, color: C.white, bold: true, fill: color, margin: 7, valign: "mid" }),
-      ]),
-      text(58, 548, 1146, 64, "CI uses a deterministic LM Studio contract double. The WatchInfra rehearsal proves the same immutable candidate against the real process and Developer Logs.", { size: 15, color: C.ink, bold: true, align: "center", valign: "mid", fill: C.blueSoft, margin: 10 }),
+      ...titleBlock("R5 closes the live loop from WatchInfra to LM Studio and back to browser history", "Delivered interview demonstrator"),
+      rect(58, 170, 570, 402, { fill: C.white, line: C.line, width: 1, radius: 0 }),
+      image(68, 180, 550, 382, path.join(screenshotDir, "R5_analysis_landscape.png")),
+      rect(652, 170, 570, 402, { fill: C.white, line: C.line, width: 1, radius: 0 }),
+      image(662, 180, 550, 382, path.join(screenshotDir, "R5_history_landscape.png")),
+      text(76, 188, 206, 30, "1  ANALYSIS RESULT", { size: 12, color: C.white, bold: true, fill: C.red, margin: 7, valign: "mid" }),
+      text(670, 188, 224, 30, "2  LOCAL PROVENANCE", { size: 12, color: C.white, bold: true, fill: C.blue, margin: 7, valign: "mid" }),
+      rect(58, 590, 1164, 54, { fill: C.ink, line: C.ink, radius: 8 }),
+      text(76, 600, 1128, 34, "Bayesian + fuzzy + Random Forest · pgvector + MiniLM · Ministral through LM Studio · external transmission: no", { size: 14, color: C.white, bold: true, align: "center", valign: "mid" }),
       ...footer(4),
     ],
     notes: note(
-      "The retained R5 capture and the manual rehearsal prove complementary boundaries.",
-      "Presenter rail: log in as operator-alpha, search customer 444, inspect the structured activities and source risk evidence, run analysis, show the request in LM Studio Developer Logs, then show the three Stage 1 artifacts, pgvector grounding, backend local, the Ministral model, external transmission no and retained history after reload.",
-      "Do not present the CI contract double as the real LM Studio process. Do not compare every backend during the live path. Do not read UUIDs aloud.",
+      "R5 is the delivered full interview configuration, not a roadmap placeholder.",
+      "WatchInfra runs the registered OCI Compose package. The authenticated operator reviews customer 444 and starts analysis. Stage 1 preserves separate Bayesian, fuzzy and Random Forest artifacts. Stage 2 retrieves synthetic policy through PostgreSQL, pgvector and local MiniLM embeddings. Stage 3 sends the bounded request to Ministral through LM Studio, records local provenance and externalTransmission=false, then persists the completed result and history.",
+      "Do not present the CI screenshot as a capture of the real LM Studio Developer Logs. The screenshot comes from the publication workflow's contract double; the user separately completed the same candidate against the real local model and observed the request in LM Studio.",
       "The next slide explains why those visible sections remain distinct inside the application.",
       "04:30 including browser switch",
-      "How do I know this path is not a mockup?",
-      "The image comes from an authenticated Playwright flow against the packaged R5 topology and its deterministic OpenAI-compatible contract double. The separate WatchInfra rehearsal proves the immutable candidate against the real LM Studio process.",
-      ["docs/reviewer/screenshot-manifest.md", "docs/reviewer/demo-fallback.md", "R5 workflow run 34020857953", "Artifact 9985493952", "Source SHA f6b989af9574a8d54249e29ffff2045129d8f127"]
+      "How do I know R5 reached the real local model?",
+      "The publication workflow proved the packaged browser path and retained this screenshot. The WatchInfra rehearsal then sent the same candidate to the real Ministral process, appeared in LM Studio Developer Logs and returned the generated result to the browser.",
+      ["GitHub PR #439", "GitHub issues #398 and #427", "R5 proof workflow 34020857953", "Artifact 9985493952", "Executable source f6b989af9574a8d54249e29ffff2045129d8f127", "docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png", "docs/reviewer/r5-runtime.md"]
     ),
   },
   {
@@ -955,21 +952,21 @@ const slides = [
   },
   {
     shapes: [
-      ...titleBlock("Bounded mechanisms share one analytical pipeline", "Implementation landscape"),
+      ...titleBlock("The analytical pipeline is a portfolio — not one model", "Implementation landscape"),
       text(60, 143, 300, 20, "STATUS · 6 SEPTEMBER 2026", { size: 10, color: C.muted, bold: true, tracking: 110 }),
       ellipse(718, 146, 12, 12, { fill: C.green, line: C.green }),
-      text(738, 141, 82, 22, "LANDED", { size: 10, color: C.muted, bold: true }),
+      text(738, 141, 82, 22, "DELIVERED", { size: 10, color: C.muted, bold: true }),
       ellipse(838, 146, 12, 12, { fill: C.amber, line: C.amber }),
-      text(858, 141, 84, 22, "OPTIONAL", { size: 10, color: C.muted, bold: true }),
+      text(858, 141, 84, 22, "FOLLOW-UP", { size: 10, color: C.muted, bold: true }),
       ellipse(968, 146, 12, 12, { fill: C.white, line: C.slate, width: 2 }),
-      text(988, 141, 112, 22, "EXCLUDED", { size: 10, color: C.muted, bold: true }),
+      text(988, 141, 112, 22, "PLANNED", { size: 10, color: C.muted, bold: true }),
 
       rect(58, 178, 570, 42, { fill: C.redSoft, line: C.red, width: 1.5, radius: 6 }),
       text(76, 186, 534, 26, "STAGE 1 · DETECT & SCORE", { size: 14, color: C.redDark, bold: true, tracking: 80 }),
       rect(72, 236, 542, 52, { fill: C.white, line: C.red, width: 2, radius: 8 }),
       icon(86, 247, 30, "Radar", C.redDark),
       text(130, 243, 286, 36, "RiskSignalDetectorPort", { size: 18, color: C.ink, bold: true, valign: "mid" }),
-      text(438, 246, 154, 30, "stable application contract", { size: 11, color: C.muted, bold: true, align: "right", valign: "mid" }),
+      text(438, 246, 154, 30, "stable contract", { size: 10, color: C.muted, bold: true, align: "right", valign: "mid" }),
       line(343, 288, 0, 18, { color: C.red, width: 2 }),
       line(131, 306, 406, 0, { color: C.red, width: 2 }),
       ...[131, 265, 399, 533].map((x) => line(x, 306, 0, 12, { color: C.red, width: 2 })),
@@ -977,23 +974,23 @@ const slides = [
         [70, "Minus", "No-op", "baseline", C.green],
         [204, "CircleGauge", "Bayesian", "sequential", C.green],
         [338, "Activity", "Fuzzy logic", "graded rules", C.green],
-        [472, "Trees", "Random Forest", "Tribuo · 31 trees\nvote share", C.green],
+        [472, "Trees", "Random Forest", "weighted ensemble\nof trees", C.green],
       ].flatMap(([x, asset, heading, detail, status]) => [
         rect(x, 318, 122, 96, { fill: C.white, line: status, width: status === C.amber ? 2 : 1.5, radius: 8 }),
-        icon(x + 12, 334, 26, asset, status === C.amber ? C.amber : C.redDark),
+        icon(x + 12, 334, 26, asset, heading === "Random Forest" ? C.amber : (status === C.amber ? C.amber : C.redDark)),
         ellipse(x + 101, 328, 10, 10, { fill: status, line: status }),
         text(x + 40, 328, 76, 34, heading, { size: heading === "Random Forest" ? 10 : 10.5, color: C.ink, bold: true, valign: "mid" }),
-        text(x + 10, 370, 102, 34, detail, { size: heading === "Random Forest" ? 7.2 : 10, color: C.muted, align: "center", valign: "mid" }),
+        text(x + 10, 370, 102, 34, detail, { size: heading === "Random Forest" ? 9 : 10, color: C.muted, align: "center", valign: "mid" }),
       ]),
       rect(72, 432, 542, 52, { fill: C.greenSoft, line: C.green, width: 1.5, radius: 8 }),
       icon(88, 443, 30, "GitMerge", C.green),
       text(132, 439, 136, 34, "COMPOSITE", { size: 13, color: C.green, bold: true, tracking: 70, valign: "mid", href: "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/263" }),
       text(270, 439, 326, 34, "Ordered dispatch; every child artifact remains visible", { size: 12, color: C.ink, bold: true, valign: "mid" }),
-      rect(72, 500, 542, 64, { fill: C.pale, line: C.slate, width: 1.5, radius: 8 }),
-      icon(88, 517, 30, "GitBranch", C.slate),
-      line(343, 484, 0, 16, { color: C.slate, width: 2 }),
-      text(132, 507, 244, 22, "CALIBRATED LATE FUSION", { size: 11, color: C.slate, bold: true, tracking: 30, href: "https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/254" }),
-      text(132, 532, 462, 22, "Excluded: the dataset cannot support an honest comparison", { size: 10.5, color: C.ink, valign: "mid" }),
+      rect(72, 500, 542, 64, { fill: C.amberSoft, line: C.amber, width: 1.5, radius: 8 }),
+      icon(88, 517, 30, "GitBranch", C.amber),
+      line(343, 484, 0, 16, { color: C.amber, width: 2 }),
+      text(132, 507, 244, 22, "CALIBRATED LATE FUSION", { size: 11, color: C.amber, bold: true, tracking: 30, href: "https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/254" }),
+      text(132, 532, 462, 22, "Target: normalize semantics → weight → emit one additional artifact", { size: 10.5, color: C.ink, valign: "mid" }),
 
       rect(642, 178, 254, 42, { fill: C.blueSoft, line: C.blue, width: 1.5, radius: 6 }),
       text(660, 186, 218, 26, "STAGE 2 · GROUND", { size: 14, color: C.blue, bold: true, tracking: 80 }),
@@ -1008,13 +1005,13 @@ const slides = [
       rect(656, 312, 226, 78, { fill: C.white, line: C.green, width: 1.5, radius: 8 }),
       icon(672, 330, 30, "FileText", C.green),
       ellipse(856, 322, 10, 10, { fill: C.green, line: C.green }),
-      text(716, 321, 150, 26, "Static policy", { size: 14, color: C.ink, bold: true }),
-      text(716, 350, 150, 24, "offline baseline", { size: 11, color: C.muted }),
+      text(706, 321, 166, 26, "Static", { size: 13, color: C.ink, bold: true }),
+      text(706, 350, 166, 24, "offline policy baseline", { size: 10.5, color: C.muted }),
       rect(656, 406, 226, 96, { fill: C.white, line: C.green, width: 1.5, radius: 8 }),
       icon(672, 430, 30, "Database", C.green),
       ellipse(856, 416, 10, 10, { fill: C.green, line: C.green }),
-      text(716, 417, 150, 26, "pgvector + all-MiniLM-L6-v2", { size: 10.5, color: C.ink, bold: true }),
-      text(716, 450, 150, 36, "local semantic retrieval\nwith source metadata", { size: 10.5, color: C.muted }),
+      text(706, 417, 166, 32, "pgvector + MiniLM", { size: 12, color: C.ink, bold: true }),
+      text(706, 454, 166, 32, "local retrieval\nwith source metadata", { size: 10.5, color: C.muted }),
       rect(656, 518, 226, 46, { fill: C.blueSoft, line: C.blue, width: 1, radius: 6 }),
       text(672, 526, 194, 28, "PolicyEvidence + provenance", { size: 11, color: C.blue, bold: true, align: "center", valign: "mid" }),
 
@@ -1032,38 +1029,38 @@ const slides = [
       ...[
         [312, "ShieldCheck", "Deterministic", "offline acceptance baseline", C.green, ""],
         [394, "CloudCog", "OpenAI", "explicit external opt-in", C.green, "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/221"],
-        [476, "LaptopMinimal", "Local / LM Studio", "R5 interview path", C.green, "https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/251"],
+        [476, "LaptopMinimal", "LM Studio", "local R5 · delivered", C.green, "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/439"],
       ].flatMap(([y, asset, heading, detail, status, href]) => [
         rect(924, y, 284, 68, { fill: C.white, line: status, width: 1.5, radius: 8 }),
-        icon(940, y + 18, 30, asset, status === C.slate ? C.slate : C.amber),
+        icon(940, y + 18, 30, asset, asset === "LaptopMinimal" ? C.slate : C.amber),
         ellipse(1182, y + 10, 10, 10, { fill: status === C.slate ? C.white : status, line: status, width: status === C.slate ? 2 : 1 }),
         text(984, y + 8, 182, 24, heading, { size: 14, color: C.ink, bold: true, href }),
         text(984, y + 34, 198, 22, detail, { size: 11, color: C.muted }),
       ]),
-      rect(924, 558, 284, 38, { fill: C.amberSoft, line: C.amber, width: 1.5, radius: 6 }),
-      ellipse(940, 572, 10, 10, { fill: C.amber, line: C.amber }),
-      text(958, 565, 232, 24, "Typed selector · delivered", { size: 10, color: C.amber, bold: true, valign: "mid", href: "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/326" }),
+      rect(924, 558, 284, 38, { fill: C.greenSoft, line: C.green, width: 1.5, radius: 6 }),
+      ellipse(940, 572, 10, 10, { fill: C.green, line: C.green }),
+      text(958, 565, 232, 24, "Explicit backend selection · delivered", { size: 10, color: C.green, bold: true, valign: "mid", href: "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/439" }),
 
       rect(72, 616, 1136, 38, { fill: C.ink, line: C.ink, radius: 6 }),
-      text(94, 623, 1092, 24, "One AnalysisService · bounded evidence · provider-neutral result · unchanged operator contract", { size: 13, color: C.white, bold: true, align: "center", valign: "mid" }),
+      text(94, 623, 1092, 24, "One AnalysisService · bounded evidence · provider-neutral output · same operator contract", { size: 12, color: C.white, bold: true, align: "center", valign: "mid" }),
       ...footer(6),
     ],
     notes: note(
       "The analytical pipeline supports several implementations without becoming several applications.",
-      "Read the slide left to right. R5 executes Bayesian, fuzzy and Random Forest through Composite while preserving all three artifacts. The packaged Tribuo forest contains 31 uniformly weighted trees. Stage 2 retrieves only synthetic policy fragments through pgvector and all-MiniLM-L6-v2. Stage 3 uses the local LM Studio adapter as the interview path; deterministic remains the acceptance baseline and OpenAI remains an explicit external opt-in.",
-      "Do not call the Composite a calibrated ensemble. Do not call the Random Forest vote share a calibrated probability. The dataset-ceiling analysis reached a no-go for production performance benchmarking.",
+      "Read the slide left to right. Stage 1 now delivers Bayesian, fuzzy and Random Forest evidence through the Composite while preserving every child artifact. The forest is itself a weighted ensemble of tree models; that differs from the heterogeneous Composite. Calibrated late fusion remains a follow-up. Stage 2 delivers pgvector plus local MiniLM grounding. Stage 3 retains deterministic and opt-in OpenAI implementations and now also delivers the local LM Studio adapter through explicit backend selection.",
+      "Do not call the Composite a calibrated ensemble. Do not call the Random Forest vote share a calibrated probability. Do not claim that fusion improves accuracy before reproducible benchmark evidence exists.",
       "The next slide shows the ports that make this portfolio replaceable without moving application semantics.",
       "01:15",
       "Why introduce several analytical implementations in a five-day pilot?",
       "They test different uncertainty and failure assumptions behind one bounded contract. The stable port lets the team compare or replace them without duplicating orchestration, grounding, persistence or the operator journey.",
       [
-        "docs/assignment/SDD/SDD.md and docs/assignment/SDD/diagrams/",
+        "docs/assignment/SDD/diagrams/hexagonal-architecture.svg",
         "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/263",
         "https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/223",
         "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/384",
-        "docs/analysis/dataset-ceiling.md",
+        "https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/254",
         "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/326",
-        "docs/assignment/Presentation/appendix/submodels.md from PR #423 / issue #268",
+        "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/439",
         "RiskSignalDetectorPort, PolicyKnowledgePort and AnalysisModelPort",
       ]
     ),
@@ -1078,11 +1075,11 @@ const slides = [
       ...[147, 337, 527, 717, 907, 1097].map((x) => line(x, 344, 0, 72, { color: C.line, width: 2 })),
       ...[
         [60, "Operator\nContextPort", "Spring Security\nStatic baseline", "UserRoundCheck", C.red],
-        [250, "Customer\nActivityPort", "Hibernate/JPA\nFlyway schema", "Database", C.blue],
-        [440, "Risk Signal\nDetectorPort", "No-op · Bayesian · Fuzzy\nRandom Forest", "Radar", C.redDark],
+        [250, "Customer\nActivityPort", "Spring JDBC\nSynthetic baseline", "Database", C.blue],
+        [440, "Risk Signal\nDetectorPort", "No-op · Bayesian · Fuzzy\nRandom Forest delivered", "Radar", C.redDark],
         [630, "Policy\nKnowledge\nPort", "pgvector + MiniLM\nStatic baseline", "BookOpenCheck", C.green],
-        [820, "Analysis\nModelPort", "LM Studio interview path\nDeterministic · OpenAI", "BrainCircuit", C.amber],
-        [1010, "Analysis\nHistoryPort", "Hibernate/JPA\nFlyway schema", "History", C.slate],
+        [820, "Analysis\nModelPort", "Deterministic\nProvider adapters", "BrainCircuit", C.amber],
+        [1010, "Analysis\nHistoryPort", "Spring JDBC\nIn-memory baseline", "History", C.slate],
       ].flatMap(([x, port, adapters, asset, color]) => [
         rect(x, 416, 174, 70, { fill: C.redSoft, line: C.red, width: 2, radius: 8 }),
         ...iconBadge(x + 12, 431, 40, asset, color, C.white, true),
@@ -1125,8 +1122,8 @@ const slides = [
         [570, 248, "R1", "Synthetic customer review", "First meaningful operator path"],
         [570, 316, "R2", "Relational substitution", "PostgreSQL and source-shaped evidence"],
         [570, 384, "R3", "Analysis and history", "Deterministic end-to-end baseline"],
-        [570, 452, "R4", "Authentication and real retrieval", "Stable authenticated foundation"],
-        [570, 520, "R5", "Full interview runtime", "Composite + pgvector + local LM Studio"],
+        [570, 452, "R4", "Authenticated retrieval", "R4 baseline retained"],
+        [570, 520, "R5", "Full interview demonstrator", "Delivered composite + LM Studio path"],
       ].flatMap(([x, y, ring, h, b], i) => [
         text(x, y, 48, 30, ring, { size: 15, color: i >= 4 ? C.red : C.ink, bold: true }),
         line(x + 58, y + 14, 44, 0, { color: i >= 4 ? C.red : C.line, width: 2 }),
@@ -1137,13 +1134,13 @@ const slides = [
     ],
     notes: note(
       "Every ring preserved a coherent demonstrable application.",
-      "R0 established the real shell. R1 made customer review meaningful. R2 changed storage. R3 added deterministic analysis and history. R4 added authentication and real retrieval. R5 delivers the full interview runtime: all three detectors through Composite, pgvector grounding, local LM Studio synthesis, visible provenance and retained history. Rings describe capability maturity. J1 to J5 remain the calendar dimension.",
-      "Do not describe the forest vote share as calibrated or the synthetic fixture as production evidence. Calibrated fusion remains excluded.",
+      "R0 established the real shell. R1 made the customer review meaningful. R2 changed storage. R3 added deterministic analysis and history. R4 added authentication and real retrieval. R5 delivers the full interview path with composite detector evidence and local Ministral synthesis through LM Studio. Rings describe capability maturity. J1 to J5 remain the calendar dimension.",
+      "Do not present calibrated late fusion or production AML quality as delivered. The R5 runtime itself is delivered and frozen by PR #439.",
       "The same discipline governed the parallel work through GitHub.",
       "00:50",
       "Why keep earlier rings after R4 exists?",
       "They prove that adapters changed without replacing the shell and provide executable checkpoints for compatibility and demonstration fallback.",
-      ["docs/assignment/SDD/diagrams/delivery-rings.dot", "docs/assignment/Inception/Inception.md section 18", "README.md section Delivery rings"]
+      ["docs/assignment/SDD/diagrams/delivery-rings.dot", "docs/assignment/Inception/Inception.md section 18", "README.md section Delivery rings", "GitHub PR #439"]
     ),
   },
   {
@@ -1195,7 +1192,7 @@ const slides = [
   {
     shapes: [
       ...titleBlock("One work graph supports delivery, schedule and scope conversations", "Management projections"),
-      text(930, 116, 290, 24, "CONCEPTUAL PROJECTIONS", { size: 10, color: C.amber, bold: true, tracking: 120, align: "right" }),
+      text(930, 116, 290, 24, "SCHEMATIC PREVIEW", { size: 10, color: C.amber, bold: true, tracking: 120, align: "right" }),
       rect(58, 160, 548, 208, { fill: C.white, line: C.line, radius: 10 }),
       ...iconBadge(78, 174, 42, "Network", C.red, C.redSoft, true),
       text(136, 182, 220, 28, "WORKGRAPH", { size: 16, color: C.red, bold: true }),
@@ -1243,13 +1240,13 @@ const slides = [
     ],
     notes: note(
       "The graph supports four views without creating four sources of truth.",
-      "WorkGraph answers structure and dependency. Delivery answers current execution. Milestones answer time sequencing. Burn-up separates completed work from changing scope. These conceptual projections explain the management model without disclosing a private Project capture.",
-      "Do not present these diagrams as a live Project snapshot. Do not infer priority from the Kanban or milestone dates.",
+      "WorkGraph answers structure and dependency. Delivery answers current execution. Milestones answer time sequencing. Burn-up separates completed work from changing scope. The final deck should replace these schematic previews with frozen authenticated GitHub Project captures from the private project.",
+      "Do not present these four schematics as current screenshots. Do not infer priority from the Kanban or milestone dates.",
       "The next slide shows how deterministic feedback constrains the work before human acceptance.",
       "00:45",
       "Why keep multiple views if the underlying items are the same?",
       "Each view answers a different management question while preserving one underlying issue and pull-request graph.",
-      ["AGENTS.md sections Delivery priority, Discovery disposition and Project status", "GitHub issue #49", "Lucide icon library, ISC license"]
+      ["AGENTS.md sections Delivery priority, Discovery disposition and Project status", "GitHub issue #49", "Authentic private Project captures required before final freeze", "Lucide icon library, ISC license"]
     ),
   },
   {
@@ -1282,11 +1279,96 @@ const slides = [
       "The feedback hierarchy separates speed from authority.",
       "Repository instructions constrain generation before tool use. The harness roadmap experiments with the earliest supported post-edit hook and a shared pre-commit command. Those faster layers reduce correction latency but remain bypassable. The reference application already uses exact-head design, test, security, Playwright and work-graph gates. One fresh Codex review binds to the frozen head. The human accepts only that reviewed SHA.",
       "Do not present the post-edit or pre-commit harness experiments as landed here. Do not call a pre-use hook a type checker for code that does not exist yet.",
-      "This control loop leads to the scale hypothesis for the pilot.",
+      "The next two slides quantify delivered scope and feedback-loop speed.",
       "00:55",
       "Why use both deterministic checks and an AI review?",
       "Checks own mechanically decidable rules. AI review focuses on ambiguity, architecture, counterexamples and missing evidence. The human reconciles findings and accepts the final head.",
       ["AGENTS.md section Freeze, validation, review and merge sequencing", ".github/workflows/application-ci.yml", ".github/workflows/work-graph-guard.yml", "https://github.com/jdoe-dev-159753/specgraph-harness/issues/74", "https://github.com/jdoe-dev-159753/specgraph-harness/issues/35", "Lucide icon library, ISC license"]
+    ),
+  },
+  {
+    shapes: [
+      ...titleBlock("Replaying the observed workflow would require about 155 human workdays", "Measured delivery scale"),
+      text(66, 166, 390, 126, "22×", { size: 88, color: C.red, bold: true, align: "center", valign: "mid" }),
+      text(86, 286, 350, 56, "central replay compression", { size: 20, color: C.ink, bold: true, align: "center" }),
+      text(96, 354, 330, 48, "155 workdays ÷ 7 calendar days = 22.1", { size: 14, color: C.muted, align: "center" }),
+      line(500, 188, 0, 264, { color: C.line, width: 2 }),
+      text(550, 164, 592, 26, "SELECTED METHOD · REPLAY THE OBSERVED EXECUTION", { size: 12, color: C.blue, bold: true, tracking: 90 }),
+      text(550, 226, 170, 28, "Human alone", { size: 18, color: C.ink, bold: true }),
+      rect(736, 222, 430, 40, { fill: C.pale, line: C.line, radius: 6 }),
+      rect(736, 222, 430, 40, { fill: C.blue, line: C.blue, radius: 6 }),
+      text(748, 230, 400, 24, "140–170 workdays · midpoint 155", { size: 13, color: C.white, bold: true, valign: "mid" }),
+      text(550, 306, 170, 28, "Human + AI", { size: 18, color: C.ink, bold: true }),
+      rect(736, 302, 430, 40, { fill: C.pale, line: C.line, radius: 6 }),
+      rect(736, 302, 26, 40, { fill: C.red, line: C.red, radius: 6 }),
+      text(778, 310, 350, 24, "7 calendar days observed", { size: 14, color: C.redDark, bold: true, valign: "mid" }),
+      rect(540, 372, 642, 82, { fill: C.pale, line: C.line, radius: 6 }),
+      text(554, 382, 614, 62, "What 115 meant: reproduce the final scope after the design is known. It excludes discarded paths, repeated reviews, failed-CI recovery and coordination, so it remains a lower bound.", { size: 12.5, color: C.muted, valign: "mid" }),
+      line(66, 478, 1148, 0, { color: C.line, width: 1 }),
+      ...[
+        [66, "49,992", "changed lines in the complete corpus"],
+        [354, "328", "files changed on main"],
+        [642, "35,186", "net lines added on main"],
+        [930, "62,578", "lines of cumulative PR churn"],
+      ].flatMap(([x, value, label], index) => [
+        ...(index ? [line(x - 22, 510, 0, 96, { color: C.line, width: 1 })] : []),
+        text(x, 506, 244, 46, value, { size: 28, color: index === 0 ? C.red : C.ink, bold: true, align: "center" }),
+        text(x, 558, 244, 48, label, { size: 13, color: C.muted, align: "center", valign: "mid" }),
+      ]),
+      rect(166, 620, 948, 34, { fill: C.pale, line: C.line, radius: 6 }),
+      text(180, 626, 920, 22, "Parametric replay estimate, not a controlled productivity experiment", { size: 13, color: C.ink, bold: true, align: "center" }),
+      ...footer(12),
+    ],
+    notes: note(
+      "The selected comparison replays the observed PR, CI, review, correction and documentation workflow as human work.",
+      "The earlier 115-day estimate answered a narrower counterfactual: how long one senior generalist might need to reproduce the final delivered scope after the architecture and solution path are already known. It removes discarded paths, repeated reviews, failed-CI recovery and coordination. The replay estimate retains those observed execution costs and therefore uses 140 to 170 human workdays, with 155 as the midpoint. Dividing 155 by seven gives 22.1, presented as 22 times.",
+      "Do not claim a universally proven twenty-two-times productivity gain. There was no controlled human-only baseline, and the comparison mixes human workdays with seven calendar days of multi-agent execution and long operating hours.",
+      "The next slide separates throughput from the speed of individual feedback loops.",
+      "00:45",
+      "Why use 155 rather than 115 human workdays?",
+      "One hundred fifteen days estimates an optimized reproduction of the final scope. The selected 155-day midpoint instead prices the workflow that actually happened, including PR handling, CI and review cycles, corrections, documentation and delivery evidence. That matches the replay question more closely.",
+      ["Git range 766ca0936e2ac544ed7d7e6393cba898284a0021..a2c3fd4cecdeb6f96e45b16af860520b355bb27e", "GitHub PR and workflow snapshot, 6 September 2026", "Dynamic PR granularity model, 49,992 changed lines", "Human speed assumptions: 58 to 105 effective lines per hour by work class", "Replay range: 140 to 170 human workdays"]
+    ),
+  },
+  {
+    shapes: [
+      ...titleBlock("AI assistance shortened reaction time between machine checks", "Feedback-loop velocity"),
+      text(66, 154, 510, 28, "OBSERVED WITH AI ASSISTANCE", { size: 12, color: C.red, bold: true, tracking: 120 }),
+      text(704, 154, 510, 28, "HUMAN ALONE, PARAMETRIC ESTIMATE", { size: 12, color: C.blue, bold: true, tracking: 90 }),
+      line(640, 170, 0, 410, { color: C.line, width: 2 }),
+      ...[
+        [190, "PR opened to merged", "1.0 h", "Median   P75 7.5 h   P95 15.9 h", C.red, "BadgeCheck"],
+        [286, "Failed CI to next attempt", "5.6 min", "Median   P75 13.5 min   P95 33.2 min", C.amber, "Activity"],
+        [382, "Workflow execution", "1.25 min", "Median   success 4.0 min   failure 2.1 min", C.green, "ShieldCheck"],
+        [478, "Issue opened to closed", "3.0 h", "Median   P75 11.3 h   P95 85.7 h", C.blue, "ListChecks"],
+      ].flatMap(([y, label, value, detail, color, asset]) => [
+        ...iconBadge(70, y, 54, asset, color, C.white, true),
+        text(144, y - 2, 236, 24, label, { size: 15, color: C.ink, bold: true }),
+        text(396, y - 4, 190, 30, value, { size: 20, color, bold: true, align: "right" }),
+        text(144, y + 31, 442, 22, detail, { size: 11, color: C.muted, align: "right" }),
+      ]),
+      text(706, 202, 440, 26, "Exact workflow replay", { size: 17, color: C.ink, bold: true }),
+      text(706, 238, 440, 64, "140 to 170 workdays\nCentral estimate: 155", { size: 20, color: C.blue, bold: true }),
+      line(706, 316, 438, 0, { color: C.line, width: 1 }),
+      text(706, 334, 440, 26, "Normalized output rate", { size: 17, color: C.ink, bold: true }),
+      text(706, 366, 440, 34, "323 lines per workday", { size: 19, color: C.blue, bold: true }),
+      text(706, 410, 440, 38, "Observed: 7,142 lines per calendar day", { size: 13, color: C.redDark, bold: true }),
+      line(706, 462, 438, 0, { color: C.line, width: 1 }),
+      text(706, 480, 440, 26, "Failure recovery estimate", { size: 17, color: C.ink, bold: true }),
+      text(706, 514, 440, 66, "Human alone: 60 to 120 min\nObserved: 5.6 min", { size: 18, color: C.blue, bold: true }),
+      rect(136, 606, 1008, 48, { fill: C.ink, line: C.ink, radius: 8 }),
+      text(158, 617, 964, 26, "Acceleration occurred between checks: diagnosis, correction, next SHA", { size: 13, color: C.white, bold: true, align: "center", valign: "mid" }),
+      ...footer(13),
+    ],
+    notes: note(
+      "The strongest measured gain appears between a machine signal and the next attempted correction.",
+      "Across the observed window, merged pull requests reached merge in one hour at the median. A failed workflow received another attempt on the same branch and workflow after 5.6 minutes at the median. The workflow itself remained mechanical, with a 1.25-minute median in the most recent 1,000-run sample. Human-only values are estimates: the user-supplied interruption model assigns 45 minutes of context recovery, then diagnosis and editing add roughly 15 to 75 minutes.",
+      "Do not compare raw PR counts without accounting for their median 212 additions. Do not claim that AI accelerated the CI runner itself. Do not treat issue closure as proof of defect resolution quality.",
+      "The conclusion frames these measurements as a basis for a controlled multi-team pilot.",
+      "00:55",
+      "Where did AI save time if CI still took the same time?",
+      "The observed compression sits between checks: interpreting feedback, locating the relevant code, producing a correction and submitting the next SHA. Median failed-CI recovery was 5.6 minutes, while the human-only parameter range is 60 to 120 minutes.",
+      ["GitHub PR snapshot: 97 merged PRs created since 30 August 2026", "GitHub issue snapshot: 306 issues closed", "GitHub Actions snapshot: 7,922 runs", "Most recent 1,000 workflow runs for duration percentiles", "116 failed-run follow-up pairs on the same branch and workflow", "Human-only recovery model: 45-minute context recovery plus diagnosis and edit time"]
     ),
   },
   {
@@ -1310,7 +1392,7 @@ const slides = [
       line(546, 372, 124, 0, { color:C.red, width:4, arrow:true }),
       text(690, 170, 470, 24, "NEXT PILOT HYPOTHESIS", { size:12, color:C.blue, bold:true, tracking:140 }),
       ...[
-        [690, 218, "CELL A", "Customer Activity Analytics", "UserRoundCheck"],
+        [690, 218, "CELL A", "Customer Care", "UserRoundCheck"],
         [690, 316, "CELL B", "Another product team", "Boxes"],
         [690, 414, "CELL C", "Another engineer", "LaptopMinimal"],
       ].flatMap(([x,y,h,b,asset])=>[
@@ -1330,7 +1412,7 @@ const slides = [
       text(1000, 456, 196, 18, "Measured model quality", { size:10,color:"DDE3E8",align:"center" }),
       rect(164, 582, 952, 58, { fill:C.pale, line:C.line, radius:8 }),
       text(188, 596, 904, 32, "The next decision should be based on measured reuse, quality and operating cost across several real delivery cells", { size:15, color:C.ink, bold:true, align:"center", valign:"mid" }),
-      ...footer(12),
+      ...footer(14),
     ],
     notes: note(
       "The credible conclusion is a scale experiment, not a production claim.",
@@ -1348,34 +1430,39 @@ const slides = [
     shapes: [
       ...titleBlock("Authentic Playwright captures document the capability growth from R1 to R5", "Appendix A · Browser evidence"),
       ...[
-        [60, 166, "R1", "Synthetic review", path.join(screenshotDir, "R1_strip.png"), C.ink],
-        [460, 166, "R2", "PostgreSQL substitution", path.join(screenshotDir, "R2_strip.png"), C.blue],
-        [860, 166, "R3", "Analysis and history", path.join(screenshotDir, "R3_strip.png"), C.green],
-        [60, 402, "R4", "Auth + real retrieval", path.join(screenshotDir, "R4_strip.png"), C.red],
-        [660, 402, "R5", "Composite + local LM Studio", r5ProvenanceCrop, C.redDark],
-      ].flatMap(([x,y,ring,label,file,color], index)=>[
-        rect(x,y,index < 3 ? 360 : 560,index < 3 ? 196 : 232,{fill:C.white,line:C.line,width:1,radius:0}),
-        image(x+6,y+6,index < 3 ? 348 : 548,index < 3 ? 189 : 225,file),
-        text(x+14,y+12,54,28,ring,{size:13,color:C.white,bold:true,fill:color,align:"center",valign:"mid"}),
-        text(x+76,y+12,index < 3 ? 246 : 330,28,label,{size:index < 3 ? 11 : 13,color:C.white,bold:true,fill:color,margin:6,valign:"mid"}),
+        [60, "R1", "Synthetic review", "R1_strip.png", C.ink],
+        [350, "R2", "PostgreSQL", "R2_strip.png", C.blue],
+        [640, "R3", "Analysis + history", "R3_strip.png", C.green],
+        [930, "R4", "Auth + retrieval", "R4_strip.png", C.red],
+      ].flatMap(([x,ring,label,file,color])=>[
+        rect(x,166,276,174,{fill:C.white,line:C.line,width:1,radius:0}),
+        image(x+6,172,264,162,path.join(screenshotDir,file)),
+        text(x+12,178,44,26,ring,{size:12,color:C.white,bold:true,fill:color,align:"center",valign:"mid"}),
+        text(x+62,178,196,26,label,{size:11,color:C.white,bold:true,fill:color,margin:5,valign:"mid"}),
       ]),
+      rect(60,366,1160,270,{fill:C.white,line:C.red,width:2,radius:0}),
+      image(68,374,566,254,path.join(screenshotDir,"R5_analysis_landscape.png")),
+      image(646,374,566,254,path.join(screenshotDir,"R5_history_landscape.png")),
+      text(76,384,52,30,"R5",{size:14,color:C.white,bold:true,fill:C.red,align:"center",valign:"mid"}),
+      text(136,384,314,30,"FULL LM STUDIO DEMONSTRATOR",{size:11,color:C.white,bold:true,fill:C.red,margin:6,valign:"mid"}),
+      text(1012,384,188,30,"DELIVERED",{size:11,color:C.white,bold:true,fill:C.green,align:"center",valign:"mid"}),
       ...footer("A", true),
     ],
     notes: note(
       "These are crops from authentic Playwright screenshots, not reconstructed mockups.",
-      "R1 shows synthetic customer review. R2 shows storage substitution through the same visible contract. R3 adds deterministic analysis and history. R4 adds authenticated operator identity and real pgvector retrieval. R5 adds all three detector artifacts, local-model provenance and retained history. The R5 image is a pixel-preserving crop of the authentic workflow PNG; its manifest keeps the original digest and source identity.",
+      "R1 shows the synthetic customer review. R2 shows storage substitution through the same visible contract. R3 adds deterministic analysis and history. R4 adds authenticated operator identity and real pgvector retrieval. The large R5 panel shows the completed local-model analysis, Stage 3 local provenance and persisted history. Cropping supports presentation legibility while the unmodified source PNGs remain retained with their workflow artifacts.",
       "Do not treat image recency as newer than the source SHA in the manifest. Do not present these crops as GitHub Project views.",
       "Return to the relevant main slide or continue to the architecture appendix.",
       "As needed",
       "Why trust these screenshots?",
       "The workflows assert the ring-specific behavior before retaining the Playwright artifact, and the manifest records run, artifact, digest, customer and source revision.",
-      ["docs/reviewer/screenshot-manifest.md", "R1/R2/R3 artifact 9844165175", "R4 artifact 9856114241", "R5 artifact 9985493952", "R5 PNG SHA-256 7503a8da09678241d8d06064d3927961c0ec758a14c0254531f18a2c19411a05"]
+      ["docs/reviewer/screenshot-manifest.md", "R1/R2/R3 artifact 9844165175", "R4 artifact 9856114241", "R5 proof workflow 34020857953", "R5 artifact 9985493952", "docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png"]
     ),
   },
   {
     appendix: true,
     shapes: [
-      ...titleBlock("Eight ADRs concentrate the durable choices and their trade-offs", "Appendix B · Decision record"),
+      ...titleBlock("Seven ADRs concentrate the durable choices and their trade-offs", "Appendix B · Decision record"),
       ...[
         [60, 164, "ADR-001", "Modular monolith and strict hexagonal boundaries", "ADR-001-modular-monolith-hexagonal.md"],
         [60, 254, "ADR-002", "Provider-neutral analysis and trust boundary", "ADR-002-provider-neutral-analysis.md"],
@@ -1383,8 +1470,7 @@ const slides = [
         [60, 434, "ADR-004", "Preferred Java, Spring and React stack", "ADR-004-baseline-web-stack.md"],
         [660, 164, "ADR-005", "One prebuilt application image per checkpoint", "ADR-005-prebuilt-demo-container-packaging.md"],
         [660, 254, "ADR-006", "Compose OCI and multi-platform distribution", "ADR-006-compose-oci-multi-platform-distribution.md"],
-        [660, 344, "ADR-007", "Hibernate/JPA adapters with Flyway-owned schema", "ADR-007-spring-jdbc-relational-adapters.md"],
-        [660, 434, "ADR-008", "Customer Activity Analytics public identity", "ADR-008-customer-activity-analytics-identity.md"],
+        [660, 344, "ADR-007", "Explicit relational adapters with Spring JDBC", "ADR-007-spring-jdbc-relational-adapters.md"],
       ].flatMap(([x,y,id,label,file])=>[
         text(x,y,112,32,id,{size:15,color:C.red,bold:true,underline:true,href:`https://github.com/jdoe-dev-159753/specgraph-reference-app/blob/main/docs/assignment/ADR/${file}`}),
         text(x+120,y,460,54,label,{size:16,color:C.ink,bold:true}),
@@ -1396,11 +1482,11 @@ const slides = [
     ],
     notes: note(
       "ADRs preserve the why behind choices that would otherwise look arbitrary.",
-      "Open the individual links when a reviewer challenges a trade-off. The ADRs cover module shape, AI trust boundaries, persistence, stack reuse, packaging, distribution, relational access and public product identity. They record rejected alternatives and consequences rather than repeating the SDD.",
+      "Open the individual links when a reviewer challenges a trade-off. The ADRs cover module shape, AI trust boundaries, persistence, stack reuse, packaging, distribution and relational access. They record rejected alternatives and consequences rather than repeating the SDD.",
       "Do not treat ADRs as current execution evidence. Tests, code and workflow results own current behavior.",
       "Use the submodel slides only for mechanism-level questions.",
       "As needed",
-      "Why eight ADRs for a five-day exercise?",
+      "Why seven ADRs for a five-day exercise?",
       "Only choices with durable alternatives received an ADR. The records make substitution and later review cheaper without turning every implementation detail into architecture.",
       ["docs/assignment/ADR/", "docs/assignment/SDD/SDD.md section 13"]
     ),
@@ -1448,7 +1534,7 @@ const slides = [
       "These are linear right-shoulder membership functions, not probability distributions.",
       "The implementation calls this function rising. Values at or below a receive zero membership. The interval from a to b gives graded activation. Values at or above b receive full activation. The cross-border plus source-risk rule takes the minimum of both memberships. A monotonic weighted singleton mean then combines the baseline and positive rules.",
       "Do not call fuzzy membership a statistical probability. Do not claim these synthetic thresholds are institutional policy.",
-      "The next slide explains why calibrated arbitration remains outside the final scope.",
+      "The next conditional slide explains how different detector families could be arbitrated after their semantics become comparable.",
       "00:60 if asked",
       "Are the plateau values validated risk thresholds?",
       "No. They are synthetic demonstration parameters chosen to give a bounded monotonic response. A production setting would need policy ownership, empirical evaluation and versioned approval.",
@@ -1458,8 +1544,8 @@ const slides = [
   {
     appendix: true,
     shapes: [
-      ...titleBlock("Calibrated late fusion remains outside the final scope", "Fusion scope"),
-      text(884, 112, 338, 28, "EXCLUDED · DATASET CEILING NO-GO", { size:11,color:C.red,bold:true,tracking:80,align:"right" }),
+      ...titleBlock("Late fusion requires comparable semantics before signals can be combined", "Appendix E · Conditional design target"),
+      text(944, 112, 278, 28, "R5 · NOT YET MEASURED", { size:11,color:C.red,bold:true,tracking:100,align:"right" }),
       ...[
         [66, 188, C.ink, "DETERMINISTIC", "source-shaped baseline", "ListChecks"],
         [66, 276, C.blue, "BAYESIAN", "small-sample posterior", "CircleGauge"],
@@ -1490,25 +1576,25 @@ const slides = [
       text(1070, 358, 132, 24, "ONE SIGNAL", { size:15,color:C.white,bold:true,align:"center" }),
       text(1070, 386, 132, 18, "evidence retained", { size:10,color:"DDE3E8",align:"center" }),
       rect(332, 548, 874, 78, { fill:C.blueSoft,line:C.blue,width:1,radius:0 }),
-      text(360, 562, 818, 48, "The four-scenario fixture cannot identify a fusion gain or production performance ceiling.", { size:15,color:C.ink,bold:true,align:"center",valign:"mid" }),
+      text(360, 562, 818, 48, "Hypothesis: complementary blind spots may improve robustness. A frozen benchmark must measure that gain.", { size:15,color:C.ink,bold:true,align:"center",valign:"mid" }),
       ...footer("E", true),
     ],
     notes: note(
-      "The final scope excludes calibrated late fusion.",
-      "Composite execution preserves unlike child evidence without combining scores. The dataset ceiling found four designed scenarios, no verified outcomes and generator leakage, so the project cannot measure a defensible fusion gain. Issue #254 therefore remains outside the delivered model portfolio.",
+      "Late fusion is a future arbitration stage, not the current Composite behavior.",
+      "Each detector specializes in a different view of the same bounded facts. After score semantics and calibration become comparable, a late-fusion stage could weight or arbitrate those signals. The fused output should retain the child evidence so disagreement and provenance remain inspectable. The expected benefit is complementary error behavior, but this project has not yet measured an accuracy or generalization gain.",
       "Do not present current Composite execution as calibrated fusion. Do not claim accuracy improvement without a frozen benchmark.",
-      "The forest slide explains the delivered learned specialist.",
+      "The forest slide explains one candidate specialist.",
       "00:55 if asked",
       "Why combine several weak detectors?",
       "Specialists can make different errors. Fusion is useful only if comparable semantics and evaluation show that those differences improve the final signal.",
-      ["GitHub issue #224", "GitHub issue #254 closed as not planned", "docs/analysis/dataset-ceiling.md", "docs/assignment/Presentation/appendix/submodels.md from PR #423 / issue #268", "Lucide icon library, ISC license"]
+      ["GitHub issue #224", "GitHub issue #254", "GitHub issue #268", "Lucide icon library, ISC license"]
     ),
   },
   {
     appendix: true,
     shapes: [
-      ...titleBlock("The delivered Tribuo forest aggregates 31 bounded tree votes", "Appendix F · Delivered R5 mechanism"),
-      text(884, 112, 338, 28, "DELIVERED · 31 TREES · FIXED MODEL", { size:11,color:C.green,bold:true,tracking:70,align:"right" }),
+      ...titleBlock("A Random Forest averages many bounded tree votes behind the same detector port", "Appendix F · Delivered R5 detector"),
+      text(944, 112, 278, 28, "R5 · DELIVERED", { size:11,color:C.green,bold:true,tracking:100,align:"right" }),
       ...[
         [86, 214, C.blue, "cross-border ratio > t₁", "crypto ratio > t₂", "0", "1"],
         [426, 214, C.amber, "incomplete ratio > t₃", "activity volume > t₄", "0", "1"],
@@ -1531,27 +1617,26 @@ const slides = [
       ]),
       ...[216,556,896].map((x)=>line(x,486,0,54,{color:C.red,width:2,arrow:true})),
       rect(176, 540, 840, 72, { fill:C.ink,line:C.ink,radius:12 }),
-      text(204, 554, 784, 44, "Forest output = mean of 31 uniform tree votes for REVIEW_ELEVATED", { size:17,color:C.white,bold:true,align:"center",valign:"mid" }),
-      text(86, 494, 240, 20, "Three representative trees shown", { size:10,color:C.muted,bold:true,align:"center" }),
+      text(204, 554, 784, 44, "Forest output = mean of tree votes for REVIEW_ELEVATED", { size:18,color:C.white,bold:true,align:"center",valign:"mid" }),
       text(176, 624, 840, 24, "Vote share, not a calibrated probability · synthetic training only", { size:14,color:C.redDark,bold:true,align:"center" }),
       ...footer("F", true),
     ],
     notes: note(
       "The forest visual shows actual trees and the runtime aggregation semantics.",
-      "Each of the 31 Tribuo trees splits the bounded four-feature vector and emits one class vote. The runtime averages uniformly weighted REVIEW_ELEVATED votes. The fixed protobuf model and manifest carry SHA-256, trainer and feature-contract provenance. The adapter remains behind RiskSignalDetectorPort, so Tribuo types do not enter downstream contracts.",
-      "Do not call the vote share a calibrated probability. The dataset-ceiling no-go prevents production AML performance claims.",
-      "Return to the implementation landscape after explaining this delivered mechanism.",
+      "Each tree splits the bounded feature vector and emits one class vote. The runtime model averages votes for REVIEW_ELEVATED. Training is offline with a fixed seed and packaged model provenance. The adapter remains behind RiskSignalDetectorPort, so downstream grounding and synthesis do not know Tribuo types.",
+      "Do not call the vote share a calibrated probability. Do not claim production AML validity from synthetic training.",
+      "Return to the fusion target only if the reviewer asks how this specialist would combine with others.",
       "00:55 if asked",
       "Why Random Forest after Bayesian and fuzzy detectors?",
       "It adds a learned non-neural baseline with different inductive assumptions while keeping the same bounded features and evidence contract.",
-      ["GitHub issue #223", "docs/analysis/dataset-ceiling.md", "docs/assignment/Presentation/appendix/submodels.md from PR #423 / issue #268", "RandomForestRiskSignalDetectorAdapter and packaged manifest"]
+      ["GitHub issue #223", "GitHub PR #439", "RiskSignalDetectorPort", "RandomForestRiskSignalDetectorAdapter"]
     ),
   },
   {
     appendix: true,
     shapes: [
-      ...titleBlock("Stage 3 backend choice changes execution while preserving context and output contracts", "Appendix G"),
-      text(884, 112, 338, 28, "TYPED SELECTION · DELIVERED", { size:11,color:C.green,bold:true,tracking:90,align:"right" }),
+      ...titleBlock("Stage 3 backend choice changes execution while preserving context and output contracts", "Appendix G · Backend data flow"),
+      text(944, 112, 278, 28, "R5 · DELIVERED", { size:11,color:C.green,bold:true,tracking:100,align:"right" }),
       line(270, 342, 92, 0, { color:C.red,width:3,arrow:true }),
       line(570, 342, 82, -106, { color:C.green,width:2,arrow:true }),
       line(570, 342, 82, 0, { color:C.blue,width:2,arrow:true }),
@@ -1562,15 +1647,15 @@ const slides = [
       rect(60, 262, 210, 160, { fill:C.pale,line:C.ink,width:2,radius:12 }),
       ...iconBadge(134, 278, 62, "PackageCheck", C.ink, C.white, true),
       text(80, 348, 170, 42, "EVIDENCE\nENVELOPE", { size:14,color:C.ink,bold:true,align:"center" }),
-      text(80, 398, 170, 16, "source, detector and policy", { size:10,color:C.muted,align:"center" }),
+      text(80, 398, 170, 16, "source, detector, policy", { size:9,color:C.muted,align:"center" }),
       rect(362, 262, 208, 160, { fill:C.redSoft,line:C.red,width:2,radius:12 }),
       ...iconBadge(435, 278, 62, "ServerCog", C.redDark, C.white, true),
       text(382, 350, 168, 28, "TYPED FACTORY", { size:14,color:C.redDark,bold:true,align:"center" }),
       text(382, 386, 168, 28, "identity and capability checks", { size:10,color:C.ink,align:"center" }),
       ...[
-        [652, 196, C.green, "DETERMINISTIC", "acceptance baseline", "ListChecks"],
-        [652, 302, C.blue, "OPENAI", "explicit external opt-in", "CloudCog"],
-        [652, 408, C.green, "LM STUDIO", "R5 interview path", "LaptopMinimal"],
+        [652, 196, C.green, "DETERMINISTIC", "landed baseline", "ListChecks"],
+        [652, 302, C.blue, "OPENAI", "optional adapter", "CloudCog"],
+        [652, 408, C.amber, "LM STUDIO", "delivered local R5", "LaptopMinimal"],
       ].flatMap(([x,y,color,h,b,asset])=>[
         rect(x,y,250,80,{fill:C.white,line:color,width:2,radius:10}),
         ...iconBadge(x+14,y+15,50,asset,color,C.pale,true),
@@ -1584,20 +1669,19 @@ const slides = [
       line(1097, 422, 0, 66, { color:C.red,width:3,arrow:true }),
       rect(934, 488, 326, 100, { fill:C.blueSoft,line:C.blue,width:2,radius:10 }),
       ...iconBadge(954, 512, 52, "ShieldCheck", C.blue, C.white, true),
-      text(1024, 506, 210, 62, "Grounding validator\nand persisted history", { size:15,color:C.ink,bold:true,align:"center",valign:"mid" }),
-      text(108, 602, 800, 24, "R5 local path sends no customer or policy content to an external provider", { size:14,color:C.muted,bold:true }),
-      text(108, 628, 800, 20, "Token estimate uses CL100K + 25% + margin, not the exact Ministral tokenizer", { size:11,color:C.redDark,bold:true }),
+      text(1024, 506, 210, 62, "Validated output\npersisted to history", { size:14,color:C.ink,bold:true,align:"center",valign:"mid" }),
+      text(108, 610, 800, 34, "Default path sends no customer or policy content outside the local system", { size:15,color:C.muted,bold:true }),
       ...footer("G", true),
     ],
     notes: note(
       "Stage 3 selection is a factory concern, not application semantics.",
-      "The bounded envelope enters one delivered typed selection point. The R5 interview configuration selects LM Studio on the private network with an IP-literal endpoint restriction. Deterministic execution remains the acceptance baseline and OpenAI remains an explicit external opt-in. Every adapter returns the same structured result and model provenance. The grounding validator and history contract remain unchanged.",
-      "Do not imply equivalent output quality across backends. Optional model execution does not change source-fact authority.",
+      "The bounded envelope enters one typed selection point. Deterministic execution remains the mandatory baseline. OpenAI remains opt-in. R5 delivers LM Studio as the local substitution. Every adapter returns the same structured result and model provenance. The grounding validator and history contract remain unchanged.",
+      "Do not imply that local execution proves model quality. The delivered claim covers runtime selection, bounded structured exchange, provenance and the browser-visible result.",
       "The final appendix slide maps behaviors to the evidence level that proves them.",
       "00:55 if asked",
       "Why retain the deterministic backend after adding a live model?",
       "It keeps mandatory verification reproducible, isolates retrieval and orchestration failures, and provides a supported fallback without changing the operator workflow.",
-      ["AnalysisModelPort", "AnalysisEvidenceEnvelope", "GitHub issues #163, #251 and #253", "docs/assignment/Presentation/appendix/submodels.md from PR #423 / issue #268", "Lucide icon library, ISC license"]
+      ["AnalysisModelPort", "AnalysisEvidenceEnvelope", "GitHub PR #439", "GitHub issue #251", "docs/reviewer/r5-runtime.md", "Lucide icon library, ISC license"]
     ),
   },
   {
@@ -1632,8 +1716,8 @@ const slides = [
       "Return to the main conclusion.",
       "As needed",
       "Why retain browser evidence if integration tests pass?",
-      "Authentication, navigation, visible provenance and later history are operator-visible behaviors that lower test layers cannot prove in composition. When the live path is unavailable, the retained Playwright screenshots and source-bound manifest are the mandatory fallback; video is optional.",
-      ["docs/assignment/VV/VV.md", "docs/assignment/VV/verification.yaml", "docs/reviewer/screenshot-manifest.md", "docs/reviewer/demo-fallback.md", "Lucide icon library, ISC license"]
+      "Authentication, navigation, visible provenance and later history are operator-visible behaviors that lower test layers cannot prove in composition.",
+      ["docs/assignment/VV/VV.md", "docs/assignment/VV/verification.yaml", "docs/reviewer/screenshot-manifest.md", "Lucide icon library, ISC license"]
     ),
   },
 ];
@@ -1768,6 +1852,13 @@ async function renderLucideAssets() {
     if (shape.iconName) specs.set(shape.src, shape);
   }
   for (const spec of specs.values()) {
+    try {
+      await fs.access(spec.src);
+      continue;
+    } catch {
+      // Render the missing variant below when Lucide is available.
+    }
+    if (!lucide) throw new Error(`Missing retained Lucide icon and runtime package: ${spec.iconName}`);
     const nodes = lucide[spec.iconName];
     if (!nodes) throw new Error(`Unknown Lucide icon: ${spec.iconName}`);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="192" height="192" fill="none" stroke="#${rgb(spec.iconColor)}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${nodes.map(lucideNodeXml).join("")}</svg>`;
@@ -1780,10 +1871,6 @@ async function build() {
   await fs.mkdir(path.join(packageDir, "ppt", "media"), { recursive: true });
   await fs.mkdir(previewDir, { recursive: true });
   await fs.mkdir(outputDir, { recursive: true });
-  await sharp(r5ScreenshotPath).extract({ left: 0, top: 0, width: 1280, height: 900 }).png().toFile(r5ContextCrop);
-  await sharp(r5ScreenshotPath).extract({ left: 0, top: 1400, width: 1280, height: 900 }).png().toFile(r5AnalysisCrop);
-  await sharp(r5ScreenshotPath).extract({ left: 0, top: 2000, width: 1280, height: 900 }).png().toFile(r5ForestCrop);
-  await sharp(r5ScreenshotPath).extract({ left: 0, top: 2600, width: 1280, height: 900 }).png().toFile(r5ProvenanceCrop);
   await renderLucideAssets();
 
   const overrides = [
@@ -1804,7 +1891,7 @@ async function build() {
   }
   await write("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="svg" ContentType="image/svg+xml"/><Default Extension="png" ContentType="image/png"/>${overrides.join("")}</Types>`);
   await write("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`);
-  await write("docProps/core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Customer Activity Analytics</dc:title><dc:subject>Swissquote pilot presentation</dc:subject><dc:creator>Nicolas Cazin</dc:creator><cp:keywords>Customer Activity Analytics; reviewable AI engineering; GitHub control plane</cp:keywords><dc:description>Final reviewer presentation with speaker guardrails and technical appendix.</dc:description><cp:lastModifiedBy>Nicolas Cazin</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">2026-09-04T08:00:00Z</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">2026-09-05T00:00:00Z</dcterms:modified></cp:coreProperties>`);
+  await write("docProps/core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Customer Activity Analytics</dc:title><dc:subject>Swissquote pilot presentation</dc:subject><dc:creator>Nicolas Cazin</dc:creator><cp:keywords>SpecGraph; reviewable AI engineering; GitHub control plane</cp:keywords><dc:description>Working presentation deck with speaker guardrails and technical appendix.</dc:description><cp:lastModifiedBy>Nicolas Cazin</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">2026-09-04T08:00:00Z</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">2026-09-04T08:00:00Z</dcterms:modified></cp:coreProperties>`);
   await write("docProps/app.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Microsoft Office PowerPoint</Application><PresentationFormat>Widescreen</PresentationFormat><Slides>${slides.length}</Slides><Notes>${slides.length}</Notes><Company></Company><AppVersion>16.0000</AppVersion></Properties>`);
 
   const slideIds = slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join("");
