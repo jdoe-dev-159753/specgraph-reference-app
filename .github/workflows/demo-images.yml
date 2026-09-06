@@ -29,6 +29,8 @@ jobs:
       R3_PORT: '8083'
       R4_PORT: '8084'
       R4_BAYESIAN_PORT: '8085'
+      # Retain a small hot cache between rings without allowing five builds to fill a 36 GiB runner.
+      BUILDER_CACHE_MAX: '2gb'
 
     steps:
       - name: Refuse non-main publication dispatch
@@ -137,7 +139,13 @@ jobs:
           # R4 baseline and Bayesian are two configured processes of one immutable R4 image.
           # The compact Compose identity binds five application manifests plus PostgreSQL and pgvector.
           echo "COMPOSE_IDENTITY_PREFIX=demo-pkg-${compose_packaging_short}" >> "$GITHUB_ENV"
-          echo "BUILDER_NAME=specgraph-multiarch-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          echo "BUILDER_NAME=specgraph-demo-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+
+      - name: Create run-scoped Buildx builder
+        run: |
+          # One exact builder owns both native and multi-platform cache, so every prune is scoped.
+          docker buildx create --name "$BUILDER_NAME" --driver docker-container
+          docker buildx inspect "$BUILDER_NAME" --bootstrap
 
       - name: Build native checkpoint images for pre-publication verification
         working-directory: packaging
@@ -145,13 +153,29 @@ jobs:
           for ring in r0 r1 r2 r3 r4; do
             ring_upper="$(printf '%s' "$ring" | tr '[:lower:]' '[:upper:]')"
             ring_sha="$(eval "printf '%s' \"\$${ring_upper}_SHA\"")"
-            docker build -f docker/app.Dockerfile \
+            docker buildx build --builder "$BUILDER_NAME" \
+              --platform linux/amd64 \
+              --load \
+              -f docker/app.Dockerfile \
               --build-arg "SOURCE_ROOT=checkpoints/$ring" \
               --label "org.opencontainers.image.revision=$ring_sha" \
               --label "dev.specgraph.checkpoint.revision=$ring_sha" \
               --label "dev.specgraph.packaging.revision=$GITHUB_SHA" \
               -t "specgraph-reference-app:$ring" .
+            # --load keeps the final image in the daemon while the builder cache is bounded.
+            docker image inspect "specgraph-reference-app:$ring" >/dev/null
+            docker buildx prune --builder "$BUILDER_NAME" --force --all \
+              --max-used-space "$BUILDER_CACHE_MAX"
+            docker buildx du --builder "$BUILDER_NAME"
+            df -h "$GITHUB_WORKSPACE"
           done
+
+      - name: Reclaim native build cache before side-by-side proof
+        run: |
+          # The loaded R0-R4 images retain the proof payload; BuildKit intermediates do not.
+          docker buildx prune --builder "$BUILDER_NAME" --force --all
+          docker buildx du --builder "$BUILDER_NAME"
+          df -h "$GITHUB_WORKSPACE"
 
       - name: Verify R0 through R4 side by side before publication
         working-directory: packaging
@@ -252,8 +276,8 @@ jobs:
             specgraph-reference-app:r2 \
             specgraph-reference-app:r3 \
             specgraph-reference-app:r4 2>/dev/null || true
-          docker builder prune -af || true
-          df -h "$GITHUB_WORKSPACE" || true
+          docker buildx du --builder "$BUILDER_NAME"
+          df -h "$GITHUB_WORKSPACE"
 
       - name: Require publication headroom before registry mutation
         run: |
@@ -268,10 +292,8 @@ jobs:
       - name: Authenticate to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Create Buildx multi-platform builder
-        run: |
-          docker buildx create --name "$BUILDER_NAME" --driver docker-container --use
-          docker buildx inspect "$BUILDER_NAME" --bootstrap
+      - name: Confirm run-scoped Buildx publication builder
+        run: docker buildx inspect "$BUILDER_NAME"
 
       - name: Publish amd64 and arm64 checkpoint images
         working-directory: packaging
@@ -290,8 +312,14 @@ jobs:
               -t "$APP_PACKAGE:$ring" \
               -t "$APP_PACKAGE:$ring_immutable" \
               --push .
+            docker buildx prune --builder "$BUILDER_NAME" --force --all \
+              --max-used-space "$BUILDER_CACHE_MAX"
+            docker buildx du --builder "$BUILDER_NAME"
+            df -h "$GITHUB_WORKSPACE"
           done
-          docker buildx prune -af --builder "$BUILDER_NAME" || true
+          docker buildx prune --builder "$BUILDER_NAME" --force --all
+          docker buildx du --builder "$BUILDER_NAME"
+          df -h "$GITHUB_WORKSPACE"
 
       - name: Verify published manifests and pin runtime databases
         run: |
@@ -550,7 +578,11 @@ jobs:
           if [ -n "${COMPOSE_IMMUTABLE:-}" ]; then
             COMPOSE_PROJECT_NAME="specgraph-remote-proof-${GITHUB_RUN_ID}" docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" down -v --remove-orphans || true
           fi
-          [ -z "${BUILDER_NAME:-}" ] || docker buildx rm "$BUILDER_NAME" || true
+          if [ -n "${BUILDER_NAME:-}" ]; then
+            # A failed ring must not strand its run-owned BuildKit container or cache.
+            docker buildx du --builder "$BUILDER_NAME" || true
+            docker buildx rm "$BUILDER_NAME" || true
+          fi
           docker image rm -f \
             specgraph-reference-app:r0 \
             specgraph-reference-app:r1 \
