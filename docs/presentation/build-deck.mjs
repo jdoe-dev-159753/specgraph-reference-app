@@ -66,7 +66,7 @@ const text = (x, y, w, h, value, options = {}) => ({ type: "text", x, y, w, h, v
 const rect = (x, y, w, h, options = {}) => ({ type: "rect", x, y, w, h, ...options });
 const ellipse = (x, y, w, h, options = {}) => ({ type: "ellipse", x, y, w, h, ...options });
 const line = (x, y, w, h, options = {}) => ({ type: "line", x, y, w, h, ...options });
-const image = (x, y, w, h, src) => ({ type: "image", x, y, w, h, src });
+const image = (x, y, w, h, src) => ({ type: "image", x, y, w, h, src, fit: "contain" });
 const icon = (x, y, size, name, color = C.ink) => ({
   type: "image",
   x,
@@ -245,13 +245,13 @@ const slides = [
       ellipse(792, 184, 58, 58, { fill: C.red, line: C.red }),
       text(792, 197, 58, 32, "1", { size: 20, color: C.white, bold: true, align: "center", valign: "mid" }),
       text(874, 182, 300, 34, "Product proof", { size: 22, color: C.ink, bold: true }),
-      text(874, 224, 318, 86, "An authenticated operator can inspect source activity, run grounded analysis and reopen persisted history.", { size: 17, color: C.muted }),
-      ellipse(792, 338, 58, 58, { fill: C.blue, line: C.blue }),
-      text(792, 351, 58, 32, "2", { size: 20, color: C.white, bold: true, align: "center", valign: "mid" }),
-      text(874, 336, 300, 34, "Method proof", { size: 22, color: C.ink, bold: true }),
-      text(874, 378, 318, 92, "One human used specifications, GitHub work state, deterministic gates and review evidence to coordinate parallel agents.", { size: 17, color: C.muted }),
-      rect(780, 498, 420, 76, { fill: C.ink, line: C.ink, radius: 8 }),
-      text(804, 512, 372, 48, "The human remains accountable for both customer review and accepted engineering change", { size: 16, color: C.white, bold: true, align: "center", valign: "mid" }),
+      text(874, 224, 318, 96, "An authenticated operator inspects activity, runs grounded analysis and reopens persisted history.", { size: 16, color: C.muted }),
+      ellipse(792, 350, 58, 58, { fill: C.blue, line: C.blue }),
+      text(792, 363, 58, 32, "2", { size: 20, color: C.white, bold: true, align: "center", valign: "mid" }),
+      text(874, 348, 300, 34, "Method proof", { size: 22, color: C.ink, bold: true }),
+      text(874, 390, 318, 100, "One human coordinated agents through specifications, GitHub state, deterministic gates and review evidence.", { size: 16, color: C.muted }),
+      rect(780, 510, 420, 76, { fill: C.ink, line: C.ink, radius: 8 }),
+      text(792, 524, 396, 48, "Human accountability covers customer review and accepted change", { size: 15.5, color: C.white, bold: true, align: "center", valign: "mid" }),
       ...footer(2),
     ],
     notes: note(
@@ -870,7 +870,7 @@ const slides = [
     ],
     notes: note(
       "These are crops from authentic Playwright screenshots, not reconstructed mockups.",
-      "R1 shows the synthetic customer review. R2 shows storage substitution through the same visible contract. R3 adds deterministic analysis and history. R4 adds authenticated operator identity and real pgvector retrieval. The large R5 panel shows the completed local-model analysis, Stage 3 local provenance and persisted history. Cropping supports presentation legibility while the unmodified source PNGs remain retained with their workflow artifacts.",
+      "R1 shows the synthetic customer review. R2 shows storage substitution through the same visible contract. R3 adds deterministic analysis and history. R4 adds authenticated operator identity and real pgvector retrieval. The large R5 panel shows the completed local-model analysis, Stage 3 local provenance and persisted history. The R1-to-R3 source PNGs remain in the named Actions artifact; the manifest identifies and digests that artifact. Only the explicitly promoted R4 and R5 source PNGs are repository-owned.",
       "Do not treat image recency as newer than the source SHA in the manifest. Do not present these crops as GitHub Project views.",
       "Return to the relevant main slide or continue to the architecture appendix.",
       "As needed",
@@ -1254,7 +1254,7 @@ function baseSlideRels(slideIndex, media, hyperlinks) {
 }
 
 function wrapPreviewText(value, width, fontSize) {
-  const maxChars = Math.max(5, Math.floor(width / (fontSize * 0.69)));
+  const maxChars = Math.max(5, Math.floor(width / (fontSize * 0.52)));
   const result = [];
   for (const raw of String(value).split("\n")) {
     if (!raw) { result.push(""); continue; }
@@ -1289,7 +1289,36 @@ function previewShapeSvg(s) {
   if (s.type === "rect") return `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="${s.radius || 0}" fill="${!s.fill || s.fill === "none" ? "none" : `#${rgb(s.fill)}`}" stroke="${!s.line || s.line === "none" ? "none" : `#${rgb(s.line)}`}" stroke-width="${s.width || 1}"/>`;
   if (s.type === "ellipse") return `<ellipse cx="${s.x + s.w / 2}" cy="${s.y + s.h / 2}" rx="${s.w / 2}" ry="${s.h / 2}" fill="${!s.fill || s.fill === "none" ? "none" : `#${rgb(s.fill)}`}" stroke="${!s.line || s.line === "none" ? "none" : `#${rgb(s.line)}`}" stroke-width="${s.width || 1}"/>`;
   if (s.type === "line") return `<line x1="${s.x}" y1="${s.y}" x2="${s.x + s.w}" y2="${s.y + s.h}" stroke="#${rgb(s.color || C.ink)}" stroke-width="${s.width || 1}" marker-start="${s.arrow === "both" ? "url(#arrow-start)" : ""}" marker-end="${s.arrow ? "url(#arrow)" : ""}"/>`;
+  if (s.type === "image") return `<image x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" href="${s.previewHref}" preserveAspectRatio="xMidYMid meet"/>`;
   return "";
+}
+
+async function prepareImageShapes() {
+  const cached = new Map();
+  for (const shape of slides.flatMap((slide) => slide.shapes.flat()).filter((s) => s?.type === "image")) {
+    let asset = cached.get(shape.src);
+    if (!asset) {
+      const buffer = await fs.readFile(shape.src);
+      const metadata = await sharp(buffer).metadata();
+      const mime = metadata.format === "svg" ? "image/svg+xml" : `image/${metadata.format}`;
+      asset = {
+        width: metadata.width,
+        height: metadata.height,
+        dataUri: `data:${mime};base64,${buffer.toString("base64")}`,
+      };
+      cached.set(shape.src, asset);
+    }
+    shape.previewHref = asset.dataUri;
+    if (shape.fit === "contain" && asset.width && asset.height) {
+      const scale = Math.min(shape.w / asset.width, shape.h / asset.height);
+      const width = asset.width * scale;
+      const height = asset.height * scale;
+      shape.x += (shape.w - width) / 2;
+      shape.y += (shape.h - height) / 2;
+      shape.w = width;
+      shape.h = height;
+    }
+  }
 }
 
 function lucideNodeXml([tag, attrs]) {
@@ -1327,6 +1356,7 @@ async function build() {
   await fs.mkdir(previewDir, { recursive: true });
   await fs.mkdir(outputDir, { recursive: true });
   await renderLucideAssets();
+  await prepareImageShapes();
 
   const overrides = [
     '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>',
