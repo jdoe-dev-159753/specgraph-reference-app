@@ -325,7 +325,6 @@ test('records full-composite scores when configured and otherwise proves composi
 test('renders local Stage-3 provenance as retained internal execution without conflating detector or grounding evidence', async ({ page }) => {
   await page.goto('/')
   await signIn(page)
-  await loadCustomer(page)
 
   const localAnalysis: Analysis = {
     analysisId: '55555555-5555-5555-5555-555555555555',
@@ -409,6 +408,7 @@ test('renders local Stage-3 provenance as retained internal execution without co
     })
   })
 
+  await loadCustomer(page)
   await page.getByRole('button', { name: 'Run analysis' }).click()
 
   const current = page.getByTestId('analysis-result')
