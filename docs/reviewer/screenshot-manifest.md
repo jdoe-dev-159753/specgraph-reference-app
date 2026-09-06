@@ -45,17 +45,17 @@ The baseline has no Stage-1 detector evidence; the Bayesian capture retains `bet
 
 `r5-release` first proves the exact source with an authenticated browser flow, the three ordered Stage-1 artifacts, pgvector grounding, local/OpenAI-compatible Stage 3, retained history and the captured model-boundary request. It then uploads `r5-lmstudio-ensemble-<sha>-run-<run>-attempt-<attempt>` and publishes the same exact-head application and Compose candidate to GHCR.
 
-The workflow endpoint is a deterministic LM Studio contract double. The separate WatchInfra rehearsal supplies the actual LM Studio hardware/log proof. After the first successful R5 run, the workflow PNG is promoted unchanged into `docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png`, and its run, source SHA, artifact digest and PNG digest are recorded here before the README embeds it.
+The workflow endpoint is a deterministic LM Studio contract double. The separate WatchInfra rehearsal supplies the actual LM Studio hardware/log proof. After each accepted exact-head R5 run, the workflow PNG is promoted unchanged into `docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png`, and its run, source SHA, artifact digest and PNG digest are recorded here before the README embeds it.
 
-`r5-release` run `33999384969` attempt `1` completed successfully from exact executable source SHA `95291221c48e15010cbcf600bfa84ee087d54f6d`:
+`r5-release` run `34020857953` attempt `1` completed successfully from exact executable source SHA `f6b989af9574a8d54249e29ffff2045129d8f127`:
 
-- artifact id: `9979122183`;
-- artifact name: `r5-lmstudio-ensemble-95291221c48e15010cbcf600bfa84ee087d54f6d-run-33999384969-attempt-1`;
-- artifact digest: `sha256:5c934dfc3d43a03be20abfe60c0a0b877a7b25e9d031476fed2141e0e676a5e1`;
+- artifact id: `9985493952`;
+- artifact name: `r5-lmstudio-ensemble-f6b989af9574a8d54249e29ffff2045129d8f127-run-34020857953-attempt-1`;
+- artifact digest: `sha256:a59a95e0b3221ea9a38d33deb22f360e424b047de4bdf2205a58d006257d9756`;
 - promoted PNG: `docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png`;
-- PNG SHA-256: `4dad12705f9966e483fc6b3c8cf03c365499460472ad8568c865b83c6aad19d9`;
-- immutable application image: `ghcr.io/jdoe-dev-159753/specgraph-reference-app:r5-95291221c48e15010cbcf600bfa84ee087d54f6d`, digest `sha256:5162cd959ec723f3e6c7502d9c17e5c5cdbac0c964c73dc7f7e767ccf99d463a`;
-- immutable Compose candidate: `oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-95291221c48e15010cbcf600bfa84ee087d54f6d`, digest `sha256:91a378060334c679142180e4131cafe9825cac4b90bf3abdc63dd0976e57c687`.
+- PNG SHA-256: `7503a8da09678241d8d06064d3927961c0ec758a14c0254531f18a2c19411a05`;
+- immutable application image: `ghcr.io/jdoe-dev-159753/specgraph-reference-app:r5-f6b989af9574a8d54249e29ffff2045129d8f127`, digest `sha256:810b2ea3d43a1e1be3810f7048252de90cfb5cb54af247c8727c12e859670ebe`;
+- immutable Compose candidate: `oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-f6b989af9574a8d54249e29ffff2045129d8f127`, digest `sha256:a96b6b02df982dc022d0a24fa71772d6748990983fd4d09b59f8cbb03aad66c5`.
 
 The later README/manifest commit only promotes this frozen evidence and records its provenance; it does not claim that the executable artifact was produced from that documentation-only head.
 
