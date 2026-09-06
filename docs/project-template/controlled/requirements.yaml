@@ -1,0 +1,16 @@
+schema_version: 1
+system_id: REPLACE-ME
+requirements:
+  REQ-EXAMPLE-001:
+    title: Replace with one observable capability
+    statement: The system shall expose one reviewable end-to-end outcome.
+    acceptance: [AC-EXAMPLE-001]
+invariants:
+  INV-EXAMPLE-001:
+    title: Replace with one forbidden-state rule
+    statement: The system shall not report completion without retained verification evidence.
+acceptance_criteria:
+  AC-EXAMPLE-001:
+    given: A valid project-owned input
+    when: The capability is exercised through its public boundary
+    then: The intended outcome and its provenance are observable.

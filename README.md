@@ -127,6 +127,11 @@ The runtime is one modular monolith with hexagonal boundaries. HTTP/UI, relation
 
 ## Engineering documents
 
+The completed delivery has also been distilled into a small, domain-neutral
+[project bootstrap template](docs/project-template/README.md). It preserves the reusable governance,
+controlled-artifact, Project v2, and self-hosted CI patterns without copying this repository's
+domain, milestones, or delivery history.
+
 - [SRS — requirements and acceptance semantics](docs/assignment/SRS/SRS.md)
 - [SDD — architecture, modules and trust boundaries](docs/assignment/SDD/SDD.md)
 - [Architecture decisions](docs/assignment/ADR/), including the [public product identity and final-freeze boundary](docs/assignment/ADR/ADR-008-customer-activity-analytics-identity.md)
