@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Prints the configured and observed identities that let a reviewer distinguish each R4 backend.
 set -euo pipefail
 
 variant="${1:-baseline}"

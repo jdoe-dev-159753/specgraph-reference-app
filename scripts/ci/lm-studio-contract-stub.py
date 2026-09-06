@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""OpenAI-compatible test double for the executable R5 browser proof."""
+"""OpenAI-compatible test double for the executable R5 browser proof.
+
+It proves request shape, structured-result handling, provenance display, and browser integration;
+it deliberately does not prove Ministral quality, LM Studio compatibility, or hardware reachability.
+"""
 
 from __future__ import annotations
 

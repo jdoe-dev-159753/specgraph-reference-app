@@ -10,6 +10,10 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 @Tag("VFY-CONFIDENTIALITY-001")
 @Tag("VFY-FAILURE-PATHS-001")
+/**
+ * Proves fail-closed backend binding and that only explicit typed selection may enable transmission.
+ * Application-context fixtures validate wiring policy, not provider availability.
+ */
 final class AnalysisBackendConfigurationTests {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(AnalysisBackendConfiguration.class, LmStudioAnalysisConfiguration.class)

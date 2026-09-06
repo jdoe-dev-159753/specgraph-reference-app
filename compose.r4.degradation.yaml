@@ -1,3 +1,4 @@
+# Test-only overlay injects controlled backend degradation without changing the production adapter boundary.
 services:
   r4:
     image: "${APP_R4_DEGRADATION_IMAGE:?APP_R4_DEGRADATION_IMAGE must name the exact-head degradation image}"

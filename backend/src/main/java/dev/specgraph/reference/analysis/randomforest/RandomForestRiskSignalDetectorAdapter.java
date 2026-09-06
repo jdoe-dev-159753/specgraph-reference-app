@@ -43,6 +43,10 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
     private final Model<Label> model;
     private final RandomForestModelManifest manifest;
 
+    /**
+     * Verifies bytes, schema, labels, executable ensemble shape, and serialized trainer provenance
+     * before accepting a model for inference.
+     */
     public RandomForestRiskSignalDetectorAdapter(byte[] protobuf, RandomForestModelManifest manifest) {
         this.manifest = Objects.requireNonNull(manifest, "manifest");
         byte[] immutableBytes = Objects.requireNonNull(protobuf, "protobuf").clone();
@@ -81,6 +85,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         validateDomains();
     }
 
+    /** Rejects altered combiners or weights before Tribuo deserializes executable model content. */
     private static void validateExecutableEnsemble(WeightedEnsembleModelProto ensemble) {
         if (!VOTING_COMBINER_CLASS.equals(ensemble.getCombiner().getClassName())) {
             throw new IllegalArgumentException("protobuf ensemble combiner is not VotingCombiner");
@@ -101,6 +106,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         }
     }
 
+    /** Projects the fixed feature schema and exposes vote share with its non-calibration limitation. */
     @Override
     public List<RiskSignalEvidence> detect(CustomerSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot");
@@ -141,6 +147,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         return List.of(new RiskSignalEvidence(DETECTOR_IDENTITY, SIGNAL_IDENTITY, score, Map.copyOf(provenance)));
     }
 
+    /** Reconciles the loaded ensemble, feature/output domains, and library version with the manifest. */
     private void validateDomains() {
         if (!(model instanceof WeightedEnsembleModel<?> ensemble)) {
             throw new IllegalArgumentException("model is not a weighted random-forest ensemble");
@@ -175,6 +182,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         }
     }
 
+    /** Verifies forest and member trainer parameters against the pinned training declaration. */
     private void validateTrainerProvenance(WeightedEnsembleModel<?> ensemble) {
         TrainerProvenance forest = model.getProvenance().getTrainerProvenance();
         if (!"org.tribuo.common.tree.RandomForestTrainer".equals(forest.getClassName())) {
@@ -208,6 +216,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         requireDecimal(parameters, "fractionFeaturesInSplit", manifest.featureSubsampling());
     }
 
+    /** Requires an integral provenance value with no lossy numeric coercion. */
     private static void requireIntegral(Map<String, Provenance> parameters, String key, long expected) {
         Provenance value = parameters.get(key);
         if (!(value instanceof PrimitiveProvenance<?> primitive)
@@ -217,6 +226,7 @@ public final class RandomForestRiskSignalDetectorAdapter implements RiskSignalDe
         }
     }
 
+    /** Requires a finite decimal provenance value within the serialization tolerance. */
     private static void requireDecimal(Map<String, Provenance> parameters, String key, double expected) {
         Provenance value = parameters.get(key);
         if (!(value instanceof PrimitiveProvenance<?> primitive)

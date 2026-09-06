@@ -15,6 +15,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/**
+ * Characterizes deterministic bounds, explainability and risk-positive monotonicity of the heuristic
+ * fuzzy surface. Crafted scenarios are not calibration or production-performance evidence.
+ */
 final class FuzzyRiskSignalDetectorAdapterTests {
     private static final double EPSILON = 0.000001;
 
@@ -174,6 +178,10 @@ final class FuzzyRiskSignalDetectorAdapterTests {
         return snapshot("44444444-4444-4444-4444-444444444444", activities, 5);
     }
 
+    /**
+     * Varies exactly one declared monotone feature while holding the observation count fixed, so
+     * the monotonicity proof cannot pass because an unrelated risk dimension changed with it.
+     */
     private CustomerSnapshot dimensionSnapshot(Dimension dimension, int positives, int observations) {
         List<Activity> activities = new ArrayList<>();
         for (int index = 0; index < observations; index++) {
@@ -189,6 +197,10 @@ final class FuzzyRiskSignalDetectorAdapterTests {
         return snapshot("77777777-7777-7777-7777-777777777777", activities, sourceRisks);
     }
 
+    /**
+     * Builds source-shaped risk facts against existing activities for the crafted detector oracle;
+     * round-robin attachment permits density tests without inventing orphan transactions.
+     */
     private CustomerSnapshot snapshot(String customerId, List<Activity> activities, int sourceRiskCount) {
         List<RiskEvidence> sourceRisks = new ArrayList<>();
         for (int index = 0; index < sourceRiskCount; index++) {
@@ -228,6 +240,7 @@ final class FuzzyRiskSignalDetectorAdapterTests {
                         "Ethereum", "0xfrom", "0xto", "synthetic-hash-" + suffix, "Synthetic Exchange"));
     }
 
+    /** Creates a non-cross-border, non-crypto control whose only fuzzy variable is completion status. */
     private Activity card(int suffix, String status) {
         return new Activity(
                 transactionId(suffix),
@@ -253,6 +266,7 @@ final class FuzzyRiskSignalDetectorAdapterTests {
         return UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-" + String.format("%012d", suffix));
     }
 
+    /** Identifies the single risk-positive axis varied by each monotonicity characterization. */
     private enum Dimension {
         CRYPTO,
         CROSS_BORDER,

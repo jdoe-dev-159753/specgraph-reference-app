@@ -1,3 +1,4 @@
+# CI overlay binds R5 to pre-provisioned network/cache resources so the proof remains hermetic and reusable.
 networks:
   default:
     external: true

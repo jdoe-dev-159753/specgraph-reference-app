@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Emits inspectable runtime provenance for every requested R4 gallery variant without changing it.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Tears down both R4 gallery variants while retaining a failure from either independent cleanup.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

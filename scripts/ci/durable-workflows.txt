@@ -1,3 +1,4 @@
+# Lists workflow files whose removal would weaken repository delivery and review enforcement.
 application-ci.yml
 demo-images.yml
 plantuml-diagrams.yml
@@ -7,5 +8,6 @@ r4-auth-ci.yml
 r4-gallery-ci.yml
 r4-retrieval-ci.yml
 r5-release.yml
+source-reference.yml
 work-graph-guard-tests.yml
 work-graph-guard.yml

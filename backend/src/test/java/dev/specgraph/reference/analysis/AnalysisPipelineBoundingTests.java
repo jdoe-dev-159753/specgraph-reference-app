@@ -18,6 +18,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/**
+ * Verifies the architectural cut: detectors/retrieval see full history while the model sees only the
+ * bounded projection. Capturing test ports measure inputs rather than provider behavior.
+ */
 final class AnalysisPipelineBoundingTests {
     @Test
     void detectorAndRetrievalSeeCompleteHistoryWhileModelPortSeesOnlyBoundedProjection() {

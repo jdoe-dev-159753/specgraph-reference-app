@@ -34,6 +34,10 @@ import org.testcontainers.utility.DockerImageName;
 @SpringBootTest
 @ActiveProfiles({"r4", "test"})
 @Import(PgVectorPolicyIntegrationTests.DeterministicEmbeddingConfiguration.class)
+/**
+ * Proves real pgvector retrieval, Flyway schema ownership and idempotent corpus replacement using
+ * deterministic test embeddings; it intentionally does not measure semantic embedding quality.
+ */
 final class PgVectorPolicyIntegrationTests {
     private static final int DIMENSIONS = 384;
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
@@ -115,6 +119,7 @@ final class PgVectorPolicyIntegrationTests {
                 "select id from policy_vector_store order by id", String.class);
     }
 
+    /** Supplies a single lexical policy trigger without unrelated activity terms. */
     private CustomerSnapshot crossBorderPaymentSnapshot() {
         UUID transactionId = UUID.fromString("00000000-0000-0000-0000-000000000901");
         Activity payment = new Activity(
@@ -143,6 +148,7 @@ final class PgVectorPolicyIntegrationTests {
     }
 
     @TestConfiguration(proxyBeanMethods = false)
+    /** Test-only embedding substitute that isolates pgvector semantics from model downloads. */
     static class DeterministicEmbeddingConfiguration {
         @Bean("policyEmbeddingModel")
         EmbeddingModel policyEmbeddingModel() {
@@ -171,6 +177,7 @@ final class PgVectorPolicyIntegrationTests {
             return DIMENSIONS;
         }
 
+        /** Produces a deterministic normalized test vector without loading the production model. */
         private float[] vector(String text) {
             float[] vector = new float[DIMENSIONS];
             if (text == null || text.isBlank()) {

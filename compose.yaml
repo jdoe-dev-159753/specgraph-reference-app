@@ -1,3 +1,4 @@
+# Local build topology for the archived R0/R1 slices; source-root arguments preserve historical replay.
 services:
   r0:
     image: "${APP_R0_IMAGE:-ghcr.io/jdoe-dev-159753/specgraph-reference-app:r0}"

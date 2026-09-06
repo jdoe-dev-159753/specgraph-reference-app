@@ -29,6 +29,9 @@ public record RandomForestFeatureDriftReport(
 
     private static final Set<String> EXPECTED_FEATURES = Set.copyOf(RandomForestRiskFeatures.ORDERED_NAMES);
 
+    /**
+     * Rejects reports whose counts, feature set, maximum statistic, threshold, and status disagree.
+     */
     public RandomForestFeatureDriftReport {
         Objects.requireNonNull(maximumStatistic, "maximumStatistic");
         Objects.requireNonNull(status, "status");
@@ -65,6 +68,7 @@ public record RandomForestFeatureDriftReport(
         return status == Status.REVIEW_TRIGGERED;
     }
 
+    /** Diagnostic outcome; a triggered review is evidence for inspection, not automatic retraining. */
     public enum Status {
         INSUFFICIENT_OBSERVATIONS,
         WITHIN_REVIEW_THRESHOLD,

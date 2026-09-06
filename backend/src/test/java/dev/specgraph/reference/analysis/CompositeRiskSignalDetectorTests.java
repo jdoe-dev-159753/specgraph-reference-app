@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/** Verifies ordered evidence composition and all-or-nothing failure rather than silent leaf omission. */
 final class CompositeRiskSignalDetectorTests {
     private final CustomerSnapshot snapshot = new CustomerSnapshot(UUID.randomUUID(), List.of(), List.of());
 

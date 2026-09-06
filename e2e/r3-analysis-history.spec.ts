@@ -1,9 +1,21 @@
+/**
+ * R3 browser acceptance for deterministic grounded analysis, retained history, and dense J4 interaction.
+ *
+ * @remarks
+ * The first scenario proves the completed-analysis contract and retained policy
+ * provenance across reload. The second reuses the synthetic dense fixture to prove
+ * UI bounding and recovery; neither scenario claims live-model or pgvector behavior.
+ *
+ * @module
+ */
 import { expect, test } from '@playwright/test'
 import { runHighVolumeReviewScenario } from './high-volume-review'
 
+/** Stable R3 seed ties current and reloaded history assertions to one customer. */
 const seededCustomer = '11111111-1111-1111-1111-111111111111'
 
-type Analysis = {
+/** R3 result subset needed to assert attribution, recommendation, and grounding retention. */
+export type Analysis = {
   analysisId: string
   customerId: string
   operatorId: string
@@ -18,6 +30,7 @@ type Analysis = {
   }>
 }
 
+/** Proves deterministic completion becomes visible history with inspectable static grounding. */
 test('VFY-ANALYSIS-CONTRACT-001 VFY-HISTORY-001 R3 deterministic analysis is retained and reviewable after reload', async ({ page }, testInfo) => {
   await page.goto('/')
   await expect(page.getByText('Customer Care · R3')).toBeVisible()
@@ -89,6 +102,7 @@ test('VFY-ANALYSIS-CONTRACT-001 VFY-HISTORY-001 R3 deterministic analysis is ret
     .toContainText('Escalation remains a human decision')
 })
 
+/** Applies the shared dense interaction oracle to the deployed R3 application shell. */
 test('VFY-CUSTOMER-READ-001 J4 dense browser interaction stays bounded and recoverable', async ({ page }) => {
   await runHighVolumeReviewScenario(page)
 })

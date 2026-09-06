@@ -3,9 +3,11 @@ package dev.specgraph.reference.analysis;
 import java.util.ArrayList;
 import java.util.List;
 
+/** Builds the exhaustive set of citable identities from evidence actually supplied to Stage 3. */
 final class AnalysisEvidenceReferences {
     private AnalysisEvidenceReferences() {}
 
+    /** Builds the exact reference allow-list that a model response may cite. */
     static List<AnalysisEvidenceReference> from(AnalysisEvidenceEnvelope evidence) {
         List<AnalysisEvidenceReference> references = new ArrayList<>();
         evidence.activities().forEach(activity -> references.add(new AnalysisEvidenceReference(

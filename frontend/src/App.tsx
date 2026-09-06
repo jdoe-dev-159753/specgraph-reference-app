@@ -1,3 +1,16 @@
+/**
+ * Operator-facing customer review and grounded-analysis workflow.
+ *
+ * @remarks
+ * The module mirrors the HTTP shapes in `openapi.yaml` without becoming their
+ * authority. It keeps editable filters separate from submitted queries, gates
+ * protected content on the runtime session, prevents duplicate customer and
+ * analysis submissions, and renders source risk, detector, retrieval, and model
+ * provenance as distinct evidence layers. See `FR-ACT-001`, `FR-AUTH-001`,
+ * `FR-HIST-002`, `FR-RAG-001`, `NFR-SEC-001`, and ADR-004.
+ *
+ * @module
+ */
 import { FormEvent, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -5,7 +18,8 @@ import {
   TableCell, TableContainer, TableHead, TablePagination, TableRow, TextField, Typography,
 } from '@mui/material'
 
-type Activity = {
+/** Activity transport shape preserved as source evidence, including decimal text and type-specific details. */
+export type Activity = {
   transactionId: string
   type: 'CARD' | 'PAYMENT' | 'CRYPTO'
   amount: string
@@ -15,7 +29,8 @@ type Activity = {
   details: Record<string, string | boolean | null>
 }
 
-type RiskEvidence = {
+/** Source-system assessment associated with one transaction; it is not a detector or model conclusion. */
+export type RiskEvidence = {
   assessmentId: string
   transactionId: string
   ruleId: string
@@ -24,25 +39,29 @@ type RiskEvidence = {
   scoreContribution: number
 }
 
-type PolicyEvidence = {
+/** Policy passage retained with retrieval metadata so a reviewer can inspect grounding. */
+export type PolicyEvidence = {
   sourceIdentity: string
   content: string
   retrievalMetadata: Record<string, string>
 }
 
-type DetectorProvenance = {
+/** One Stage-1 detector artifact whose score remains specific to its detector semantics. */
+export type DetectorProvenance = {
   detectorIdentity: string
   signalIdentity: string
   score: number
   provenance: Record<string, string>
 }
 
-type EvidenceReference = {
+/** Stable reference from model provenance back to one bounded input-evidence class. */
+export type EvidenceReference = {
   kind: 'ACTIVITY' | 'SOURCE_RISK' | 'DETECTOR_SIGNAL' | 'POLICY_RETRIEVAL'
   evidenceIdentity: string
 }
 
-type ModelProvenance = {
+/** Stage-3 execution identity and evidence references, including external-transmission disclosure. */
+export type ModelProvenance = {
   backendIdentity: string
   modelIdentity: string
   promptIdentity: string
@@ -50,7 +69,8 @@ type ModelProvenance = {
   metadata: Record<string, string>
 }
 
-type Analysis = {
+/** Completed, retained advisory analysis; failure responses never use this success shape. */
+export type Analysis = {
   analysisId: string
   customerId: string
   operatorId: string
@@ -63,7 +83,8 @@ type Analysis = {
   modelProvenance: ModelProvenance
 }
 
-type CustomerSnapshot = {
+/** Bounded operator page with page-scoped risk evidence and server-owned totals. */
+export type CustomerSnapshot = {
   customerId: string
   activities: Activity[]
   riskEvidence: RiskEvidence[]
@@ -76,7 +97,8 @@ type CustomerSnapshot = {
   hasNext: boolean
 }
 
-type Request = {
+/** Immutable submitted customer query, separated from editable controls to make refetch identity explicit. */
+export type Request = {
   customerId: string
   submission: number
   page: number
@@ -87,7 +109,8 @@ type Request = {
   createdTo: string
 }
 
-type AnalysisHistoryPage = {
+/** Historical array response combined with pagination metadata transported in HTTP headers. */
+export type AnalysisHistoryPage = {
   entries: Analysis[]
   page: number
   pageSize: number
@@ -97,33 +120,44 @@ type AnalysisHistoryPage = {
   hasNext: boolean
 }
 
-type CsrfView = {
+/** Server-issued CSRF material; the server controls the header name and token. */
+export type CsrfView = {
   headerName: string
   parameterName: string
   token: string
 }
 
-type AuthenticatedSession = {
+/** Secured session variant that permits protected reviewer capabilities. */
+export type AuthenticatedSession = {
   state: 'AUTHENTICATED'
   operatorId: string
   csrf: CsrfView
 }
 
-type UnauthenticatedSession = {
+/** Secured runtime bootstrap state that exposes only the login flow and its CSRF token. */
+export type UnauthenticatedSession = {
   state: 'UNAUTHENTICATED'
   csrf: CsrfView
 }
 
-type SecuritySession = AuthenticatedSession | UnauthenticatedSession
-type RuntimeSession = { kind: 'LEGACY' } | { kind: 'SECURED'; session: SecuritySession }
-type LoginRequest = { username: string; password: string; csrf: CsrfView }
-type RunAnalysisRequest = { customerId: string; csrf?: CsrfView }
+/** Exhaustive secured-session state returned by the public bootstrap endpoint. */
+export type SecuritySession = AuthenticatedSession | UnauthenticatedSession
+/** Compatibility boundary: pre-security rings lack `/api/session`, while secured rings fail closed. */
+export type RuntimeSession = { kind: 'LEGACY' } | { kind: 'SECURED'; session: SecuritySession }
+/** Form login command carrying the server-issued CSRF material. */
+export type LoginRequest = { username: string; password: string; csrf: CsrfView }
+/** Analysis command; CSRF is required only when the runtime activated security. */
+export type RunAnalysisRequest = { customerId: string; csrf?: CsrfView }
 
+/** Repository-owned seed that makes the first reviewer interaction immediately demonstrable. */
 const SEEDED_CUSTOMER = '11111111-1111-1111-1111-111111111111'
+/** Matches the HTTP default while keeping each rendered activity page bounded. */
 const DEFAULT_ACTIVITY_PAGE_SIZE = 50
+/** Matches the retained-history HTTP default independently from activity pagination. */
 const DEFAULT_HISTORY_PAGE_SIZE = 20
 
-function formatAmount(amount: string) {
+/** Formats exact decimal transport text without first coercing it through binary floating point. */
+export function formatAmount(amount: string) {
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(amount)
   if (!match) return amount
   const [, sign, integer, fraction = ''] = match
@@ -131,11 +165,13 @@ function formatAmount(amount: string) {
   return `${sign}${grouped}.${fraction.padEnd(2, '0')}`
 }
 
-function optionalInstant(value: string) {
+/** Converts a populated local date-time control to the instant expected by the HTTP contract. */
+export function optionalInstant(value: string) {
   return value ? new Date(value).toISOString() : ''
 }
 
-function GroundingEvidence({ evidence }: { evidence: PolicyEvidence[] }) {
+/** Renders retained Stage-2 passages and retrieval identity without presenting them as source risk. */
+export function GroundingEvidence({ evidence }: { evidence: PolicyEvidence[] }) {
   if (evidence.length === 0) {
     return <Typography color="text.secondary">No policy grounding evidence retained.</Typography>
   }
@@ -182,7 +218,8 @@ function GroundingEvidence({ evidence }: { evidence: PolicyEvidence[] }) {
   )
 }
 
-function DetectorArtifacts({ artifacts }: { artifacts: DetectorProvenance[] }) {
+/** Keeps heterogeneous Stage-1 artifacts separate instead of aggregating uncalibrated scores in the UI. */
+export function DetectorArtifacts({ artifacts }: { artifacts: DetectorProvenance[] }) {
   return (
     <Box data-testid="analysis-detector-provenance">
       <Typography variant="subtitle2">Stage 1 · Detector artifacts</Typography>
@@ -221,7 +258,8 @@ function DetectorArtifacts({ artifacts }: { artifacts: DetectorProvenance[] }) {
   )
 }
 
-function ModelExecution({ provenance }: { provenance: ModelProvenance }) {
+/** Makes Stage-3 backend/model/prompt identity and data-transmission posture reviewer-visible. */
+export function ModelExecution({ provenance }: { provenance: ModelProvenance }) {
   const externalTransmission = provenance.metadata.externalTransmission
   const externalTransmissionLabel = externalTransmission === 'true'
     ? 'yes'
@@ -245,7 +283,8 @@ function ModelExecution({ provenance }: { provenance: ModelProvenance }) {
   )
 }
 
-function AnalysisProvenance({ analysis }: { analysis: Analysis }) {
+/** Presents the three analysis stages in execution order while preserving their evidence boundaries. */
+export function AnalysisProvenance({ analysis }: { analysis: Analysis }) {
   return (
     <Stack spacing={2} data-testid="analysis-provenance">
       <DetectorArtifacts artifacts={analysis.detectorProvenance} />
@@ -258,14 +297,16 @@ function AnalysisProvenance({ analysis }: { analysis: Analysis }) {
   )
 }
 
-async function loadRuntimeSession(): Promise<RuntimeSession> {
+/** Bootstraps security state; only an absent legacy endpoint enables compatibility mode. */
+export async function loadRuntimeSession(): Promise<RuntimeSession> {
   const response = await fetch('/api/session', { credentials: 'same-origin' })
   if (response.status === 404) return { kind: 'LEGACY' }
   if (!response.ok) throw new Error(`Session request failed (${response.status})`)
   return { kind: 'SECURED', session: await response.json() as SecuritySession }
 }
 
-async function loginOperator(request: LoginRequest): Promise<void> {
+/** Establishes an operator session using form semantics and explicit CSRF protection. */
+export async function loginOperator(request: LoginRequest): Promise<void> {
   const response = await fetch('/api/session/login', {
     method: 'POST',
     credentials: 'same-origin',
@@ -279,7 +320,8 @@ async function loginOperator(request: LoginRequest): Promise<void> {
   if (!response.ok) throw new Error(`Login failed (${response.status})`)
 }
 
-async function logoutOperator(csrf: CsrfView): Promise<void> {
+/** Invalidates the current operator session through the protected logout command. */
+export async function logoutOperator(csrf: CsrfView): Promise<void> {
   const response = await fetch('/api/session/logout', {
     method: 'POST',
     credentials: 'same-origin',
@@ -288,7 +330,8 @@ async function logoutOperator(csrf: CsrfView): Promise<void> {
   if (!response.ok) throw new Error(`Logout failed (${response.status})`)
 }
 
-function customerUrl(request: Request) {
+/** Builds the bounded customer-review URL while retaining the historical unfiltered first-page path. */
+export function customerUrl(request: Request) {
   const base = `/api/customers/${request.customerId}`
   const params = new URLSearchParams()
   if (request.page !== 0) params.set('page', String(request.page))
@@ -301,7 +344,8 @@ function customerUrl(request: Request) {
   return query ? `${base}?${query}` : base
 }
 
-async function loadCustomer(request: Request): Promise<CustomerSnapshot> {
+/** Loads one operator page and maps expected client-actionable failures to stable messages. */
+export async function loadCustomer(request: Request): Promise<CustomerSnapshot> {
   const response = await fetch(customerUrl(request))
   if (response.status === 404) throw new Error('Customer not found')
   if (response.status === 400) throw new Error('Invalid customer activity filters')
@@ -309,7 +353,8 @@ async function loadCustomer(request: Request): Promise<CustomerSnapshot> {
   return response.json()
 }
 
-async function loadAnalysisHistory(
+/** Reconstructs the history page from its compatible array body and pagination headers. */
+export async function loadAnalysisHistory(
   customerId: string,
   page: number,
   pageSize: number,
@@ -322,6 +367,7 @@ async function loadAnalysisHistory(
   const response = await fetch(query ? `${base}?${query}` : base)
   if (!response.ok) throw new Error(`Analysis history request failed (${response.status})`)
   const entries = await response.json() as Analysis[]
+  /** Treats missing or malformed optional pagination headers as compatibility fallbacks, never numeric zero. */
   const headerNumber = (name: string, fallback: number) => {
     const raw = response.headers.get(name)
     if (raw === null || raw.trim() === '') return fallback
@@ -339,7 +385,8 @@ async function loadAnalysisHistory(
   }
 }
 
-async function runAnalysis(request: RunAnalysisRequest): Promise<Analysis> {
+/** Runs the protected advisory workflow and preserves the bounded public failure reason for the operator. */
+export async function runAnalysis(request: RunAnalysisRequest): Promise<Analysis> {
   const headers = request.csrf ? { [request.csrf.headerName]: request.csrf.token } : undefined
   const response = await fetch(`/api/customers/${request.customerId}/analyses`, { method: 'POST', headers })
   if (!response.ok) {
@@ -350,40 +397,71 @@ async function runAnalysis(request: RunAnalysisRequest): Promise<Analysis> {
   return response.json()
 }
 
-function RiskLevelChip({ level }: { level: Analysis['riskLevel'] }) {
+/** Maps the bounded demonstration risk vocabulary to a consistent visual severity. */
+export function RiskLevelChip({ level }: { level: Analysis['riskLevel'] }) {
   const color = level === 'HIGH' ? 'error' : level === 'MEDIUM' ? 'warning' : 'success'
   return <Chip label={level} color={color} size="small" data-testid="analysis-risk-level" />
 }
 
+/**
+ * Composes session, customer review, analysis, and history into one operator workflow.
+ *
+ * @remarks
+ * Draft controls do not fetch until submitted. Query keys own server-state identity;
+ * refs synchronously reject repeat clicks before React Query updates pending state.
+ * Logout clears protected cached data before exposing the login view. Analysis
+ * success resets history to its newest page and invalidates only that customer's
+ * history. These are observable security and recoverability guarantees, not
+ * presentation conveniences.
+ */
 export default function App() {
+  /** Editable customer identifier; it cannot trigger I/O until copied into `request`. */
   const [customerId, setCustomerId] = useState(SEEDED_CUSTOMER)
+  /** Last submitted customer query and pagination identity, or null before/after protected review. */
   const [request, setRequest] = useState<Request | null>(null)
+  /** Draft activity-type filter retained separately from the submitted request. */
   const [activityType, setActivityType] = useState<Request['activityType']>('')
+  /** Draft status filter; trimming occurs only when the submitted URL is built. */
   const [activityStatus, setActivityStatus] = useState('')
+  /** Draft lower time bound in browser-local input form. */
   const [createdFrom, setCreatedFrom] = useState('')
+  /** Draft upper time bound in browser-local input form. */
   const [createdTo, setCreatedTo] = useState('')
+  /** Independently selected retained-history page for the currently loaded customer. */
   const [historyPage, setHistoryPage] = useState(0)
+  /** History page size bounded by the HTTP contract, independent from activity pagination. */
   const [historyPageSize, setHistoryPageSize] = useState(DEFAULT_HISTORY_PAGE_SIZE)
+  /** Ephemeral login identity; never copied into retained customer or analysis state. */
   const [username, setUsername] = useState('')
+  /** Ephemeral password cleared after successful login. */
   const [password, setPassword] = useState('')
+  /** Monotonic discriminator that makes otherwise identical explicit searches distinct query keys. */
   const submission = useRef(0)
+  /** Synchronous duplicate-click guard released by the customer query's `finally` path. */
   const customerSubmissionInFlight = useRef(false)
+  /** Synchronous duplicate-analysis guard released on settle and explicitly across logout. */
   const analysisSubmissionInFlight = useRef(false)
+  /** Shared cache authority used for scoped invalidation and protected-data removal. */
   const queryClient = useQueryClient()
 
+  /** Session bootstrap is never retried implicitly because security failures require explicit evidence. */
   const runtimeSession = useQuery({
     queryKey: ['runtime-session'],
     queryFn: loadRuntimeSession,
     retry: false,
   })
+  /** Derived exhaustive session variants keep authorization decisions out of ad-hoc truthiness checks. */
   const authenticatedSession = runtimeSession.data?.kind === 'SECURED' && runtimeSession.data.session.state === 'AUTHENTICATED'
     ? runtimeSession.data.session
     : null
+  /** Login is rendered only for an explicit secured-runtime unauthenticated state, never during bootstrap ambiguity. */
   const unauthenticatedSession = runtimeSession.data?.kind === 'SECURED' && runtimeSession.data.session.state === 'UNAUTHENTICATED'
     ? runtimeSession.data.session
     : null
+  /** Protected workspace gate: legacy compatibility or positively authenticated secured session. */
   const applicationEnabled = runtimeSession.data?.kind === 'LEGACY' || authenticatedSession !== null
 
+  /** Submitted customer server state; disabled until both session and request gates are satisfied. */
   const customer = useQuery({
     queryKey: ['customer', request],
     queryFn: async () => {
@@ -396,13 +474,16 @@ export default function App() {
     enabled: applicationEnabled && request !== null,
     retry: false,
   })
+  /** Server-confirmed identity prevents history requests from following an unsubmitted or failed draft identifier. */
   const selectedCustomerId = customer.data?.customerId ?? null
+  /** Retained history is scoped to the server-confirmed customer, not the editable identifier. */
   const history = useQuery({
     queryKey: ['analysis-history', selectedCustomerId, historyPage, historyPageSize],
     queryFn: () => loadAnalysisHistory(selectedCustomerId!, historyPage, historyPageSize),
     enabled: applicationEnabled && selectedCustomerId !== null,
     retry: false,
   })
+  /** Successful analysis returns history to newest-first page zero before scoped invalidation. */
   const analysis = useMutation({
     mutationFn: runAnalysis,
     onSuccess: async (_completed, analyzed) => {
@@ -410,6 +491,7 @@ export default function App() {
       await queryClient.invalidateQueries({ queryKey: ['analysis-history', analyzed.customerId] })
     },
   })
+  /** Login refreshes the session authority and erases the password after success. */
   const login = useMutation({
     mutationFn: loginOperator,
     onSuccess: async () => {
@@ -417,6 +499,7 @@ export default function App() {
       await queryClient.invalidateQueries({ queryKey: ['runtime-session'] })
     },
   })
+  /** Logout removes protected customer/history state and releases synchronous guards before re-bootstrap. */
   const logout = useMutation({
     mutationFn: logoutOperator,
     onSuccess: async () => {
@@ -431,6 +514,7 @@ export default function App() {
     },
   })
 
+  /** Freezes draft filters into a new page-zero request and rejects rapid duplicate submissions. */
   function submit(event: FormEvent) {
     event.preventDefault()
     if (customerSubmissionInFlight.current) return
@@ -451,6 +535,7 @@ export default function App() {
     })
   }
 
+  /** Changes only submitted paging state and returns to server-owned bounded retrieval. */
   function updateActivityPage(page: number, pageSize = request?.pageSize ?? DEFAULT_ACTIVITY_PAGE_SIZE) {
     if (!request || customerSubmissionInFlight.current) return
     customerSubmissionInFlight.current = true
@@ -458,12 +543,14 @@ export default function App() {
     setRequest({ ...request, page, pageSize, submission: submission.current })
   }
 
+  /** Refuses login without the unauthenticated session variant that owns valid CSRF material. */
   function submitLogin(event: FormEvent) {
     event.preventDefault()
     if (!unauthenticatedSession) return
     login.mutate({ username, password, csrf: unauthenticatedSession.csrf })
   }
 
+  /** Runs analysis only for a server-loaded customer and releases its guard on every terminal outcome. */
   function submitAnalysis() {
     if (!customer.data || analysisSubmissionInFlight.current) return
     analysisSubmissionInFlight.current = true
@@ -477,7 +564,9 @@ export default function App() {
     })
   }
 
+  /** Reviewer-facing maturity label follows the immutable delivery-ring build argument for secured runtimes. */
   const securedRuntimeLabel = import.meta.env.VITE_DELIVERY_RING === 'R5' ? 'R5' : 'R4'
+  /** Anonymous and deterministic operation remains identified as the R3 boundary. */
   const runtimeLabel = runtimeSession.data?.kind === 'SECURED' ? securedRuntimeLabel : 'R3'
 
   return (

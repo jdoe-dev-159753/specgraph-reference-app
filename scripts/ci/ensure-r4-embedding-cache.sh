@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Materializes one content-addressed embedding cache under a host lock for deterministic R4 reuse.
 set -euo pipefail
 
 command -v docker >/dev/null

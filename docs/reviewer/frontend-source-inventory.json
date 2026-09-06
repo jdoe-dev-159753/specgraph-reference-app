@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "scope": "All maintained browser application and Playwright TypeScript/configuration sources",
+  "files": [
+    {"path": "e2e/high-volume-review.ts", "kind": "browser-fixture", "authority": "VFY-CUSTOMER-READ-001, FR-ACT-001, FR-HIST-002"},
+    {"path": "e2e/package.json", "kind": "tooling-config", "authority": "V&V browser evidence toolchain"},
+    {"path": "e2e/playwright.config.ts", "kind": "browser-config", "authority": "V&V delivery evidence policy"},
+    {"path": "e2e/r1-customer-review.spec.ts", "kind": "browser-scenario", "authority": "VFY-CUSTOMER-READ-001"},
+    {"path": "e2e/r2-customer-review.spec.ts", "kind": "browser-scenario", "authority": "VFY-CUSTOMER-READ-001"},
+    {"path": "e2e/r3-analysis-history.spec.ts", "kind": "browser-scenario", "authority": "VFY-HISTORY-001, VFY-CUSTOMER-READ-001"},
+    {"path": "e2e/r4-auth.spec.ts", "kind": "browser-scenario", "authority": "VFY-AUTH-001, NFR-SEC-001"},
+    {"path": "e2e/r4-complete-flow.spec.ts", "kind": "browser-scenario", "authority": "VFY-ANALYSIS-CONTRACT-001, VFY-RAG-001, VFY-HISTORY-001"},
+    {"path": "e2e/r4-persistence-degradation.spec.ts", "kind": "browser-scenario", "authority": "VFY-FAILURE-PATHS-001, NFR-RES-001"},
+    {"path": "e2e/r4-side-by-side-session-isolation.spec.ts", "kind": "browser-scenario", "authority": "VFY-AUTH-001, ADR-006"},
+    {"path": "frontend/index.html", "kind": "application-shell", "authority": "ADR-004"},
+    {"path": "frontend/package.json", "kind": "tooling-config", "authority": "ADR-004"},
+    {"path": "frontend/src/App.tsx", "kind": "browser-application", "authority": "FR-ACT-001, FR-AUTH-001, FR-HIST-002, FR-RAG-001, NFR-SEC-001"},
+    {"path": "frontend/src/main.tsx", "kind": "composition-root", "authority": "ADR-004, NFR-SEC-001"},
+    {"path": "frontend/src/vite-env.d.ts", "kind": "compiler-contract", "authority": "ADR-004, VFY-DELIVERY-001"},
+    {"path": "frontend/tsconfig.json", "kind": "compiler-config", "authority": "ADR-004"},
+    {"path": "frontend/tsconfig.node.json", "kind": "compiler-config", "authority": "ADR-004"},
+    {"path": "frontend/vite.config.ts", "kind": "build-config", "authority": "ADR-004"}
+  ]
+}

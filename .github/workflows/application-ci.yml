@@ -1,4 +1,5 @@
 name: application-ci
+# Provides the main deterministic application gate, with heavier compatibility proof only on request.
 
 on:
   workflow_dispatch:
@@ -79,7 +80,7 @@ jobs:
       - name: Clean container-owned outputs before checkout
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
-            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams'
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams /workspace/build'
 
       - uses: actions/checkout@v7
         with:
@@ -206,7 +207,7 @@ jobs:
       - name: Clean container-owned outputs from previous runs
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
-            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints'
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/build'
 
       - name: Recover malformed persistent workspace
         run: |

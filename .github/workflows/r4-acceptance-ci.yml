@@ -1,4 +1,5 @@
 name: r4-acceptance-ci
+# Runs the stable R4 browser acceptance suite and retains reviewer-readable evidence artifacts.
 
 on:
   pull_request:
@@ -33,7 +34,7 @@ jobs:
       - name: Clean container-owned outputs before checkout
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
-            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints'
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/build'
 
       - uses: actions/checkout@v7
         with:

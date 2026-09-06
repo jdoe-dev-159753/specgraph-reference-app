@@ -20,6 +20,9 @@
     <swagger-parser.version>2.1.48</swagger-parser.version>
     <commons-math3.version>3.6.1</commons-math3.version>
     <tribuo.version>4.3.2</tribuo.version>
+    <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
+    <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+    <source.reference.directory>${project.build.directory}/source-reference</source.reference.directory>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -133,6 +136,70 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>${maven-javadoc-plugin.version}</version>
+        <configuration>
+          <doclint>all,-missing</doclint>
+          <failOnError>true</failOnError>
+          <failOnWarnings>true</failOnWarnings>
+          <show>private</show>
+          <notimestamp>true</notimestamp>
+          <encoding>UTF-8</encoding>
+          <docencoding>UTF-8</docencoding>
+          <charset>UTF-8</charset>
+          <quiet>true</quiet>
+        </configuration>
+        <executions>
+          <execution>
+            <id>source-main-reference</id>
+            <goals>
+              <goal>javadoc</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${source.reference.directory}/java</outputDirectory>
+            </configuration>
+          </execution>
+          <execution>
+            <id>source-test-reference</id>
+            <goals>
+              <goal>test-javadoc</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${source.reference.directory}/java</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>source-reference</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>${build-helper-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>include-e2e-java-fixture-in-test-reference</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>${project.basedir}/../e2e/fixtures/backend</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

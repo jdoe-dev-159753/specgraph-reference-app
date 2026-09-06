@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Starts the deterministic R4 reviewer baseline and adds the OpenAI variant only on explicit opt-in.
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

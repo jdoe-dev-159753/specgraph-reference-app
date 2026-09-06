@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Regenerates controlled diagram views from PlantUML/DOT authorities using one pinned renderer image.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

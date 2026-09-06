@@ -15,6 +15,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
 
+/**
+ * Infrastructure wiring for local transformer embeddings, the Flyway-owned pgvector table and the
+ * transaction boundary used to replace the synthetic policy corpus atomically.
+ */
 @Configuration(proxyBeanMethods = false)
 @Profile("r4")
 @EnableConfigurationProperties(PolicyRetrievalProperties.class)
@@ -31,6 +35,7 @@ class PgVectorPolicyConfiguration {
         return model;
     }
 
+    /** Uses the Flyway-owned table and validates its vector contract instead of creating schema. */
     @Bean("policyVectorStore")
     VectorStore policyVectorStore(
             JdbcTemplate jdbcTemplate,

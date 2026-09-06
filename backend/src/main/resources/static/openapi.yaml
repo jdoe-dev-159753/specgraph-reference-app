@@ -1,3 +1,4 @@
+# This maintained contract is the sole HTTP API authority; generated reference pages render this file.
 openapi: 3.0.3
 info:
   title: Customer Activity Analytics API

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-HISTORY-001")
+/** Proves page-navigation metadata remains overflow-safe at the maximum supported page index. */
 final class AnalysisHistoryPageTests {
 
     @Test

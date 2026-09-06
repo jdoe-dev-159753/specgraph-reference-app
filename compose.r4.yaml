@@ -1,3 +1,4 @@
+# R4 topology keeps PostgreSQL/pgvector, the authenticated app, and backend selection behind one shell.
 services:
   postgres:
     image: pgvector/pgvector:0.8.6-pg17

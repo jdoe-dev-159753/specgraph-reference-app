@@ -23,6 +23,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
+/** Proves stable chunk identity and transactional replacement/rollback using in-memory collaborators. */
 final class SyntheticPolicyCorpusLoaderTests {
     @Test
     void corpusIdentityIsStableUuidAndIngestionReplacesTheOwnedSnapshotInOneTransaction() {
@@ -73,6 +74,7 @@ final class SyntheticPolicyCorpusLoaderTests {
                 new TransactionTemplate(transactionManager));
     }
 
+    /** Provides a stable small chunking configuration so tests isolate replacement semantics. */
     private PolicyRetrievalProperties properties() {
         return new PolicyRetrievalProperties(
                 "classpath:policy/synthetic/index.txt",

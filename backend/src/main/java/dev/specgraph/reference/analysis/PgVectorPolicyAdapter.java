@@ -17,6 +17,11 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+/**
+ * Pgvector retrieval adapter that derives a bounded lexical query from the complete customer
+ * snapshot and maps matching Spring AI documents back to project-owned policy evidence.
+ * Query terms are bounded independently of the later model-context selection.
+ */
 @Component
 @Profile("r4")
 final class PgVectorPolicyAdapter implements PolicyKnowledgePort {
@@ -34,6 +39,7 @@ final class PgVectorPolicyAdapter implements PolicyKnowledgePort {
         this.properties = properties;
     }
 
+    /** Maps only non-blank matches and preserves retriever/model identity as grounding metadata. */
     @Override
     public List<PolicyEvidence> retrieveRelevant(CustomerSnapshot snapshot) {
         SearchRequest request = SearchRequest.builder()
@@ -66,6 +72,7 @@ final class PgVectorPolicyAdapter implements PolicyKnowledgePort {
         return List.copyOf(evidence);
     }
 
+    /** Builds a bounded, newest-first lexical projection without exposing the complete history. */
     private String buildQuery(CustomerSnapshot snapshot) {
         StringJoiner terms = new StringJoiner(" ", "customer activity review policy ", "");
 
@@ -90,6 +97,7 @@ final class PgVectorPolicyAdapter implements PolicyKnowledgePort {
         return query.length() <= MAX_QUERY_CHARS ? query : query.substring(0, MAX_QUERY_CHARS);
     }
 
+    /** Emits only review-relevant categorical terms from the closed activity variants. */
     private void addActivityTerms(StringJoiner terms, Activity activity) {
         terms.add(activity.type().name().toLowerCase(Locale.ROOT));
         terms.add(activity.status().toLowerCase(Locale.ROOT));
@@ -113,6 +121,7 @@ final class PgVectorPolicyAdapter implements PolicyKnowledgePort {
         }
     }
 
+    /** Tokenizes free text into lowercase alphanumerics to keep the vector query deterministic. */
     private void addWords(StringJoiner terms, String value) {
         if (value == null || value.isBlank()) {
             return;

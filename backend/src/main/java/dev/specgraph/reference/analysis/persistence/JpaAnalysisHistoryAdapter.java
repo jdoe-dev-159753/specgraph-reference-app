@@ -16,6 +16,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Durable JPA implementation of analysis history with customer-scoped reads and stable newest-first
+ * ordering. Page count and entries share a repeatable-read snapshot so pagination metadata cannot
+ * describe a different committed state from its rows.
+ */
 @Component
 @Primary
 class JpaAnalysisHistoryAdapter implements AnalysisHistoryPort {
@@ -32,6 +37,7 @@ class JpaAnalysisHistoryAdapter implements AnalysisHistoryPort {
         this.entityManager = entityManager;
     }
 
+    /** Persists the complete provenance snapshot alongside the operator-attributed result. */
     @Override
     @Transactional
     public AnalysisHistoryEntry persist(AnalysisHistoryCreateCommand command) {
@@ -62,6 +68,7 @@ class JpaAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 .toList();
     }
 
+    /** Reads count and rows in one repeatable-read transaction with a stable identity tie-breaker. */
     @Override
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public AnalysisHistoryPage pageByCustomer(UUID customerId, AnalysisHistoryQuery query) {
@@ -82,6 +89,7 @@ class JpaAnalysisHistoryAdapter implements AnalysisHistoryPort {
         return new AnalysisHistoryPage(entries, query.page(), query.pageSize(), totalEntries);
     }
 
+    /** Keeps object lookup customer-scoped so an analysis identifier cannot cross tenant context. */
     @Override
     @Transactional(readOnly = true)
     public Optional<AnalysisHistoryEntry> findByCustomerAndId(UUID customerId, UUID analysisId) {
@@ -100,6 +108,7 @@ class JpaAnalysisHistoryAdapter implements AnalysisHistoryPort {
                 .map(this::map);
     }
 
+    /** Rehydrates project-owned values without leaking persistence entities across the port. */
     private AnalysisHistoryEntry map(AnalysisHistoryEntity entity) {
         AnalysisResult result = new AnalysisResult(
                 entity.riskLevel(), entity.findingsSummary(), entity.recommendations());

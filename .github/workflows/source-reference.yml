@@ -1,0 +1,103 @@
+name: source-reference
+# Builds one exact-head, navigable artifact from maintained intent comments and contracts.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
+      - 'backend/pom.xml'
+      - 'backend/src/main/java/**'
+      - 'backend/src/test/java/**'
+      - 'backend/src/main/resources/application*.yml'
+      - 'backend/src/main/resources/db/**/*.sql'
+      - 'backend/src/main/resources/**/*.properties'
+      - 'backend/src/main/resources/static/openapi.yaml'
+      - 'compose*.yaml'
+      - 'docker/*Dockerfile'
+      - 'docs/reviewer/frontend-source-inventory.json'
+      - 'docs/tooling/frontend-reference/**'
+      - 'e2e/**'
+      - 'frontend/**'
+      - 'scripts/**/*.py'
+      - 'scripts/**/*.sh'
+      - 'scripts/ci/*.tsv'
+      - 'scripts/ci/*.txt'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
+      - 'backend/pom.xml'
+      - 'backend/src/main/java/**'
+      - 'backend/src/test/java/**'
+      - 'backend/src/main/resources/application*.yml'
+      - 'backend/src/main/resources/db/**/*.sql'
+      - 'backend/src/main/resources/**/*.properties'
+      - 'backend/src/main/resources/static/openapi.yaml'
+      - 'compose*.yaml'
+      - 'docker/*Dockerfile'
+      - 'docs/reviewer/frontend-source-inventory.json'
+      - 'docs/tooling/frontend-reference/**'
+      - 'e2e/**'
+      - 'frontend/**'
+      - 'scripts/**/*.py'
+      - 'scripts/**/*.sh'
+      - 'scripts/ci/*.tsv'
+      - 'scripts/ci/*.txt'
+  workflow_dispatch:
+
+concurrency:
+  group: source-reference-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Clean generated source reference before checkout
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/build'
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Assert exact source revision
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Generate implementation and HTTP API reference
+        run: bash scripts/generate-source-reference.sh
+
+      - name: Record artifact provenance
+        run: |
+          printf 'sourceSha=%s\nworkflowRun=%s\nworkflowAttempt=%s\n' \
+            "$SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > backend/target/source-reference/provenance.txt
+
+      - name: Upload navigable source reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-reference-${{ env.SOURCE_SHA }}
+          path: backend/target/source-reference/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Reclaim container-owned source-reference outputs
+        if: always()
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/build'

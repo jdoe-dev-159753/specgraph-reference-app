@@ -25,6 +25,9 @@ final class LmStudioPromptBudget {
         this(contextWindowTokens, maxOutputTokens, transportMarginTokens, new JTokkitTokenCountEstimator());
     }
 
+    /**
+     * Precomputes fixed-envelope cost and rejects configurations that leave no possible user input.
+     */
     LmStudioPromptBudget(
             int contextWindowTokens,
             int maxOutputTokens,
@@ -45,6 +48,7 @@ final class LmStudioPromptBudget {
         }
     }
 
+    /** Computes and returns the provenance-ready budget, failing before any network request. */
     RequestBudget requireFits(String userPrompt) {
         int userTokens = estimate(userPrompt);
         int estimatedTotalTokens = systemTokens
@@ -78,6 +82,7 @@ final class LmStudioPromptBudget {
                         / ESTIMATE_SAFETY_DENOMINATOR);
     }
 
+    /** Immutable estimate retained in provenance and checked before the request is transmitted. */
     record RequestBudget(
             int contextWindowTokens,
             int systemTokens,

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("architecture")
+/** Proves the HTTP adapter depends inward on the use case and never on the outbound activity port. */
 class CustomerHttpBoundaryArchitectureTests {
     @Test
     void httpAdapterDependsOnInboundUseCaseAndNeverOnOutboundActivityPort() {

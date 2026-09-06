@@ -43,6 +43,7 @@ The figures use UML 2.5.1 where it answers the engineering question and explicit
 - Figure 2b: hexagonal ports/adapters schematic;
 - Figure 3: UML Component diagram;
 - Figures 4a/4b: UML Class diagrams;
+- Figure 4c: function-first analysis-stage schematic;
 - Figure 5: entity-relationship view;
 - Figures 6-9: UML Activity diagrams with ActivityPartitions;
 - Figure 10: UML Deployment diagram;
@@ -138,6 +139,10 @@ The R3 deterministic analysis may synthesize customer context, source risk evide
 R4 activates the project-owned `RiskSignalDetectorPort` as an explicit stage in the chain. Stage-1 topology is selected through the bounded ordered `specgraph.analysis.detectors` property using project-owned IDs `NO_OP`, `BAYESIAN`, `FUZZY` and `RANDOM_FOREST`. `RiskSignalDetectorFactory` resolves one selected ID directly to its leaf or resolves multiple concrete IDs to `CompositeRiskSignalDetector`, which invokes children deterministically and returns their canonical evidence in configured order. `NO_OP` remains the absent-configuration baseline and deliberately emits no additional signals. The legacy `bayesian-detector` and `fuzzy-detector` profiles remain compatibility aliases only when the typed property is absent; an explicitly empty typed list, duplicate ID, `NO_OP` mixed with concrete leaves, unknown/unregistered selection or child execution failure fails clearly rather than silently changing topology or dropping evidence. The Bayesian leaf emits transparent synthetic-demo Beta-binomial review-elevation probability evidence; the fuzzy leaf emits deterministic graded review-elevation evidence from bounded project-owned membership functions and versioned rules. The R5 Random Forest leaf performs inference only through a lazily loaded, memoized Tribuo adapter whose packaged model and manifest are provenance-pinned and validated when selected; missing or invalid packaged resources fail startup instead of changing detector topology. Every leaf translates only into `RiskSignalEvidence` and retains synthetic/demo and dataset-ceiling limitations in provenance. Further graph leaves may register behind the same port when justified by data and benchmark evidence. Calibrated score fusion remains separate work owned by #254. No detector output overwrites source `risk_assessments`, and `AnalysisService` remains unaware of whether Stage 1 resolved a leaf or a Composite.
 
 The detector stage and analysis-model stage are therefore intentionally different. A detector may estimate or rank a suspicious pattern from activity evidence; `AnalysisModelPort` receives those derived signals together with source evidence and retrieved policy context and produces bounded advisory synthesis. The OpenAI/Spring AI adapter, when explicitly selected, receives the same `AnalysisEvidenceEnvelope` as the deterministic model rather than a provider-specific side channel.
+
+![Figure 4c - Function-first analysis stages and subordinate adapter choices](diagrams/analysis-functional-stages.svg)
+
+[PlantUML source](diagrams/analysis-functional-stages.puml)
 
 [`ADR-002`](../ADR/ADR-002-provider-neutral-analysis.md) owns this decision and compares candidate detector families.
 

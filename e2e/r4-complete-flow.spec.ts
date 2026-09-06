@@ -1,18 +1,39 @@
+/**
+ * End-to-end evidence for the fully composed authenticated, detected, grounded, and retained flow.
+ *
+ * @remarks
+ * Environment variables select expected adapter identities without weakening the
+ * invariant assertions. The primary scenario proves composition and provenance;
+ * the detector-order scenario is a crafted-data diagnostic rather than calibration;
+ * the local-model scenario isolates rendering semantics with a browser route double.
+ *
+ * @module
+ */
 import { expect, test, type Locator } from '@playwright/test'
 import { writeFile } from 'node:fs/promises'
 
+/** Densest crafted customer maximizes visible evidence across all composed stages. */
 const seededCustomer = '44444444-4444-4444-4444-444444444444'
+/** Workflow-owned detector expectation supports baseline, single, and composite evidence with one scenario. */
 const expectedDetectorSelection = process.env.EXPECT_DETECTORS ?? process.env.EXPECT_DETECTOR ?? 'none'
+/** Ordered detector identities remain visible independently; they are never averaged in the test. */
 const expectedDetectors = expectedDetectorSelection === 'none'
   ? []
   : expectedDetectorSelection.split(',').map(value => value.trim()).filter(Boolean)
+/** Expected Stage-3 adapter identity supplied by the variant manifest. */
 const expectedModelBackend = process.env.EXPECT_MODEL_BACKEND ?? 'deterministic'
+/** Expected model identity prevents a successful response from hiding adapter drift. */
 const expectedModelIdentity = process.env.EXPECT_MODEL_IDENTITY ?? 'r3-offline-baseline-v1'
+/** Prompt identity is independently asserted so model selection cannot obscure prompt drift. */
 const expectedPromptIdentity = process.env.EXPECT_PROMPT_IDENTITY ?? 'grounded-analysis-v1'
+/** Transmission expectation makes local/deterministic versus external handling explicit. */
 const expectedExternalTransmission = process.env.EXPECT_EXTERNAL_TRANSMISSION ?? 'false'
+/** Expected delivery ring proves the browser label belongs to the built topology. */
 const expectedDeliveryRing = process.env.EXPECT_DELIVERY_RING ?? 'R4'
+/** Evidence namespace separates parallel gallery/release artifacts. */
 const evidenceName = process.env.EVIDENCE_NAME ?? 'r4-complete-flow'
 
+/** Known detector-specific contracts preserve heterogeneous identities and library provenance. */
 const detectorContracts: Record<string, { signalIdentity: string, library?: string }> = {
   'beta-binomial-review-elevation-v1': {
     signalIdentity: 'posterior-review-elevation-rate',
@@ -25,12 +46,14 @@ const detectorContracts: Record<string, { signalIdentity: string, library?: stri
   },
 }
 
-type EvidenceReference = {
+/** Evidence-reference subset used to prove that model provenance cites every activated stage. */
+export type EvidenceReference = {
   kind: 'ACTIVITY' | 'SOURCE_RISK' | 'DETECTOR_SIGNAL' | 'POLICY_RETRIEVAL'
   evidenceIdentity: string
 }
 
-type Analysis = {
+/** Complete browser-facing result contract asserted across current and retained views. */
+export type Analysis = {
   analysisId: string
   customerId: string
   operatorId: string
@@ -58,20 +81,23 @@ type Analysis = {
   }
 }
 
-type CustomerSnapshot = {
+/** Customer subset needed to prove all activity families and unchanged source-risk evidence. */
+export type CustomerSnapshot = {
   customerId: string
   activities: Array<{ type: 'CARD' | 'PAYMENT' | 'CRYPTO' }>
   riskEvidence: unknown[]
 }
 
-async function signIn(page: import('@playwright/test').Page) {
+/** Enters the fixed reviewer identity used by immutable R4/R5 evidence runs. */
+export async function signIn(page: import('@playwright/test').Page) {
   await page.getByLabel('Operator ID').fill('operator-alpha')
   await page.getByLabel('Password').fill('alpha-demo-2026')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.getByTestId('operator-session')).toContainText('operator-alpha')
 }
 
-async function loadCustomer(page: import('@playwright/test').Page) {
+/** Loads the dense crafted customer and waits for both evidence and analysis workspaces. */
+export async function loadCustomer(page: import('@playwright/test').Page) {
   await page.getByLabel('Customer ID').fill(seededCustomer)
   const customerResponsePromise = page.waitForResponse(response =>
     response.url().endsWith(`/api/customers/${seededCustomer}`) &&
@@ -83,7 +109,8 @@ async function loadCustomer(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('analysis-workspace')).toBeVisible()
 }
 
-async function annotateReviewerEvidence(page: import('@playwright/test').Page, completed: Analysis) {
+/** Adds an evidence-only screenshot banner derived from the observed result and expected runtime configuration. */
+export async function annotateReviewerEvidence(page: import('@playwright/test').Page, completed: Analysis) {
   const detectorLabel = expectedDetectors.length === 0
     ? 'Stage 1: no-op baseline'
     : `Stage 1: ${expectedDetectors.join(' + ')}`
@@ -113,7 +140,8 @@ async function annotateReviewerEvidence(page: import('@playwright/test').Page, c
   await expect(banner).toContainText(modelLabel)
 }
 
-async function expectRenderedProvenance(container: Locator, completed: Analysis) {
+/** Applies one provenance oracle to both the immediate result and its retained-history representation. */
+export async function expectRenderedProvenance(container: Locator, completed: Analysis) {
   const provenance = container.getByTestId('analysis-provenance')
   await expect(provenance).toContainText('Stage 1 · Detector artifacts')
   await expect(provenance).toContainText('Stage 2 · Policy grounding')
@@ -145,6 +173,7 @@ async function expectRenderedProvenance(container: Locator, completed: Analysis)
   )
 }
 
+/** Proves the configured full flow through HTTP, browser rendering, persistence, and screenshot evidence. */
 test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-REPRODUCIBILITY-001 VFY-DETERMINISM-001 VFY-DELIVERY-001 prove the executable configured authenticated grounded R4 flow and retain reviewer evidence', async ({ page, request }, testInfo) => {
   const anonymous = await request.get(`/api/customers/${seededCustomer}`)
   expect(anonymous.status()).toBe(401)
@@ -264,6 +293,7 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-REP
   await expectRenderedProvenance(reloadedEntry, reloaded as Analysis)
 })
 
+/** Records bounded detector diagnostics; only explicitly asserted order relations are treated as oracle facts. */
 test('records full-composite scores when configured and otherwise proves composite mode is absent', async ({ page }, testInfo) => {
   // R4 deliberately runs this shared file without the three-detector R5 configuration. Keeping
   // that branch executable avoids hiding the controlled V&V scenario elsewhere in this file.
@@ -322,6 +352,7 @@ test('records full-composite scores when configured and otherwise proves composi
   )
 })
 
+/** Isolates UI semantics for local execution provenance; the route double does not prove LM Studio connectivity. */
 test('renders local Stage-3 provenance as retained internal execution without conflating detector or grounding evidence', async ({ page }) => {
   await page.goto('/')
   await signIn(page)

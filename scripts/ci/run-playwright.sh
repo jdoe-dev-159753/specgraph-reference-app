@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Runs one browser scenario in the pinned dependency image and preserves evidence outside the container.
 set -euo pipefail
 
 spec="${1:?usage: run-playwright.sh SPEC_FILE}"

@@ -20,6 +20,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+/**
+ * Standalone MVC evidence distinguishing malformed client input from bounded data-source failure problems.
+ * A throwing use-case double proves disclosure behavior without a database.
+ */
 class CustomerDataFailureHttpTests {
     private static final UUID CUSTOMER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
 

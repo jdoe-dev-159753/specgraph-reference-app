@@ -4,6 +4,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Provider-neutral identity and grounding trail for one model execution.
+ *
+ * <p>Evidence references point only to details supplied in the bounded model envelope; they do not
+ * establish that retrieved policy, derived signals and source facts have equal authority. Metadata
+ * is retained as immutable diagnostics and must not be interpreted as part of the domain result.
+ */
 public record AnalysisModelProvenance(
         String backendIdentity,
         String modelIdentity,
@@ -12,6 +19,7 @@ public record AnalysisModelProvenance(
         Map<String, String> metadata) implements AnalysisPipelineArtifact {
     private static final String LEGACY_PROMPT_IDENTITY = "r3-legacy-unversioned";
 
+    /** Requires a usable provider/model identity and an immutable evidence-reference snapshot. */
     public AnalysisModelProvenance {
         backendIdentity = requireText(backendIdentity, "backendIdentity");
         modelIdentity = requireText(modelIdentity, "modelIdentity");

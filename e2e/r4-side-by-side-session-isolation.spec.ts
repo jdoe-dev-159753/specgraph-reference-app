@@ -1,9 +1,22 @@
+/**
+ * Browser acceptance for cookie isolation between simultaneous R4 reviewer variants.
+ *
+ * @remarks
+ * One browser context visits two origins and proves each Compose variant retains
+ * its own operator session cookie. This establishes demo isolation at the browser
+ * boundary; it does not by itself prove database/network isolation between stacks.
+ *
+ * @module
+ */
 import { expect, test } from '@playwright/test'
 
+/** Baseline origin has its own configured session-cookie namespace. */
 const baselineUrl = process.env.R4_BASELINE_URL ?? 'http://127.0.0.1:8084'
+/** Bayesian origin must retain a different operator beside the baseline session. */
 const bayesianUrl = process.env.R4_BAYESIAN_URL ?? 'http://127.0.0.1:8085'
 
-async function signIn(
+/** Signs into a named origin so the scenario can compare origin-scoped session cookies. */
+export async function signIn(
   page: import('@playwright/test').Page,
   baseUrl: string,
   operatorId: string,
@@ -16,6 +29,7 @@ async function signIn(
   await expect(page.getByTestId('operator-session')).toContainText(operatorId)
 }
 
+/** Proves baseline and Bayesian origins preserve distinct identities during side-by-side review. */
 test('VFY-AUTH-001 prove R4 reviewer variants keep independent sessions in one browser context', async ({ browser }) => {
   const context = await browser.newContext()
   const page = await context.newPage()

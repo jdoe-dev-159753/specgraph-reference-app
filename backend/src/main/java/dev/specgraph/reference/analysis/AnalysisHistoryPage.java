@@ -9,6 +9,7 @@ public record AnalysisHistoryPage(
         int page,
         int pageSize,
         long totalEntries) {
+    /** Preserves bounded paging metadata even for an empty page beyond the available history. */
     public AnalysisHistoryPage {
         entries = List.copyOf(Objects.requireNonNull(entries, "entries"));
         if (page < 0 || pageSize < 1 || totalEntries < 0) {

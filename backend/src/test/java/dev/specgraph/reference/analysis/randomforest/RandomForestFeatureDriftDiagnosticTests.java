@@ -21,6 +21,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/**
+ * Characterizes the bounded KS review diagnostic, pinned reference integrity and fail-closed inputs.
+ * A triggered status requests human review; these tests do not justify automated retraining.
+ */
 final class RandomForestFeatureDriftDiagnosticTests {
     private final RandomForestFeatureDriftDiagnostic diagnostic = new RandomForestFeatureDriftDiagnostic();
 
@@ -163,6 +167,7 @@ final class RandomForestFeatureDriftDiagnosticTests {
         }
     }
 
+    /** Supplies controlled missing or altered classpath resources to exercise fail-closed loading. */
     private static final class ResourceClassLoader extends ClassLoader {
         private final Map<String, byte[]> resources;
 

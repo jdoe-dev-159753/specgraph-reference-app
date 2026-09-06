@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-HISTORY-001")
+/** Verifies zero-based history bounds, stable offsets and rejection before persistence access. */
 final class AnalysisHistoryQueryTests {
 
     @Test

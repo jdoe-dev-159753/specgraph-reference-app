@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @Tag("VFY-ANALYSIS-CONTRACT-001")
+/** Verifies lazy detector selection, ordered composition and invalid-selection failure semantics. */
 final class RiskSignalDetectorFactoryTests {
     private final RiskSignalDetectorPort noOp = snapshot -> java.util.List.of();
     private final RiskSignalDetectorPort bayesian = snapshot -> java.util.List.of();

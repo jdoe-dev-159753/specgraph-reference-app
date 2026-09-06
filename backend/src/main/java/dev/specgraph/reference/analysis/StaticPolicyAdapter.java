@@ -6,6 +6,10 @@ import java.util.Map;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+/**
+ * Deterministic grounding adapter for offline acceptance.
+ * Its single synthetic policy excerpt is explicit test/demo material, not institutional policy.
+ */
 @Component
 @Profile("!r4")
 class StaticPolicyAdapter implements PolicyKnowledgePort {

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Serializes the exact R5 runtime/model/token-budget identities used as reviewer evidence.
 set -euo pipefail
 
 port="${1:-8088}"

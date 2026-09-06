@@ -1,7 +1,19 @@
+/**
+ * Development/build boundary for the browser adapter.
+ *
+ * @remarks
+ * Development proxies `/api` to the selected local backend so browser code keeps
+ * the same-origin paths used by the packaged Spring Boot runtime. The backend
+ * target is an operator-controlled build setting, not a durable application
+ * contract. Production output remains static assets consumed by the Java image.
+ *
+ * @module
+ */
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig(({ mode }) => {
+/** Creates the Vite configuration while limiting the development-only proxy to the `/api` boundary. */
+export const createViteConfiguration = defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
   return {
     plugins: [react()],
@@ -17,3 +29,5 @@ export default defineConfig(({ mode }) => {
     },
   }
 })
+
+export default createViteConfiguration

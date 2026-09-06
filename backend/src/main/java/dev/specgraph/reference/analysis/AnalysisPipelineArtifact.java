@@ -12,12 +12,14 @@ import java.util.Map;
 public sealed interface AnalysisPipelineArtifact
         permits RiskSignalEvidence, PolicyEvidence, AnalysisModelProvenance {
 
+    /** Closed discriminator for the supported derived-artifact families. */
     enum Kind {
         DETECTOR_EVIDENCE,
         POLICY_RETRIEVAL_EVIDENCE,
         MODEL_BACKEND_PROVENANCE
     }
 
+    /** Derives the stable family discriminator from the closed payload type. */
     default Kind kind() {
         return switch (this) {
             case RiskSignalEvidence ignored -> Kind.DETECTOR_EVIDENCE;
@@ -26,6 +28,7 @@ public sealed interface AnalysisPipelineArtifact
         };
     }
 
+    /** Returns the family-specific identity used for grounding references and deduplication. */
     default String artifactIdentity() {
         return switch (this) {
             case RiskSignalEvidence evidence -> evidence.detectorIdentity() + ":" + evidence.signalIdentity();

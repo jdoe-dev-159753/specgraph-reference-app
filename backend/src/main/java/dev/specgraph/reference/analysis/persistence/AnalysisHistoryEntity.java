@@ -16,6 +16,11 @@ import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+/**
+ * Adapter-private JPA representation of one retained analysis row.
+ * JSONB columns preserve the three provenance families without leaking persistence annotations into
+ * application records; Flyway, not Hibernate, remains schema authority.
+ */
 @Entity(name = "PersistedAnalysisHistory")
 @Table(name = "analysis_history")
 class AnalysisHistoryEntity {
@@ -57,6 +62,7 @@ class AnalysisHistoryEntity {
 
     protected AnalysisHistoryEntity() {}
 
+    /** Takes defensive copies of JSONB collections before the entity enters the persistence context. */
     AnalysisHistoryEntity(
             UUID id,
             UUID customerId,
