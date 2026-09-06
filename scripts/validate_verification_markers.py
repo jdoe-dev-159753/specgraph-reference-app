@@ -106,7 +106,7 @@ PLAYWRIGHT_DYNAMIC_COMPUTED_ALIAS = re.compile(
     r"[A-Za-z_$][A-Za-z0-9_$]*\s*(?:\?\.)?\s*"
     r"\[\s*(?!['\"`])[^\]\r\n]+\]"
 )
-PLAYWRIGHT_REFLECT_GET = re.compile(r"\bReflect\s*\.\s*get\s*\(")
+PLAYWRIGHT_REFLECT_USAGE = re.compile(r"(?<![A-Za-z0-9_$])Reflect(?![A-Za-z0-9_$])")
 PLAYWRIGHT_DESTRUCTURED_CONTROL = re.compile(
     r"\b(?:const|let|var)\s*\{(?P<bindings>[^{}]*)\}\s*=\s*"
     r"(?P<receiver>[A-Za-z_$][A-Za-z0-9_$]*)"
@@ -1520,18 +1520,6 @@ def playwright_has_dynamic_destructuring(
     )
 
 
-def playwright_invokes_dynamic_computed_alias(structure: str) -> bool:
-    """Reject a computed member captured in a local alias and later invoked."""
-    return any(
-        re.search(
-            rf"(?<![A-Za-z0-9_$]){re.escape(match.group('alias'))}"
-            r"(?![A-Za-z0-9_$])\s*\(",
-            structure[match.end():],
-        )
-        for match in PLAYWRIGHT_DYNAMIC_COMPUTED_ALIAS.finditer(structure)
-    )
-
-
 def playwright_describe_callback_brace(
     structure: str,
     brace: int,
@@ -1790,7 +1778,7 @@ def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
             )
             or playwright_has_ambiguous_test_member(text, structure)
             or playwright_has_dynamic_destructuring(structure, test_identifiers)
-            or PLAYWRIGHT_REFLECT_GET.search(structure)
+            or PLAYWRIGHT_REFLECT_USAGE.search(structure)
         ):
             raise ValueError(
                 "focused Playwright .only call prevents complete evidence discovery"
@@ -1860,13 +1848,13 @@ def evidence_markers(
                 PLAYWRIGHT_COMPUTED_NON_PASSING,
             )
             or PLAYWRIGHT_DYNAMIC_COMPUTED_CALL.search(structure)
-            or playwright_invokes_dynamic_computed_alias(structure)
+            or PLAYWRIGHT_DYNAMIC_COMPUTED_ALIAS.search(structure)
             or playwright_has_destructured_control(
                 structure,
                 frozenset({"skip", "fixme", "fail"}),
             )
             or playwright_has_dynamic_destructuring(structure)
-            or PLAYWRIGHT_REFLECT_GET.search(structure)
+            or PLAYWRIGHT_REFLECT_USAGE.search(structure)
             or playwright_has_ambiguous_test_member(text, structure)
         ):
             return frozenset()

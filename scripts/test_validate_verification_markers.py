@@ -1425,9 +1425,15 @@ class VerificationMarkerTests(unittest.TestCase):
             "const member = 'skip'; const stop = testInfo[member]; stop();",
             "const member = 'fixme'; const stop = testInfo[member]; stop();",
             "const member = 'fail'; const stop = testInfo[member]; stop();",
+            "const member = 'skip'; const first = testInfo[member]; "
+            "const second = first; second();",
+            "const info = testInfo; const member = 'fixme'; const stop = info[member];",
             "const { skip: stop } = testInfo; stop();",
             "const member = 'skip'; const { [member]: stop } = testInfo; stop();",
             "const member = 'skip'; const stop = Reflect.get(testInfo, member); stop();",
+            "const stop = Reflect?.get(testInfo, 'skip'); stop();",
+            "const stop = Reflect['get'](testInfo, 'skip'); stop();",
+            "const get = Reflect.get; const stop = get(testInfo, 'skip'); stop();",
         )
         for control in controls:
             with self.subTest(control=control), tempfile.TemporaryDirectory() as directory:
