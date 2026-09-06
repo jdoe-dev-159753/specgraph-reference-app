@@ -24,6 +24,8 @@ JUNIT_TAG_IMPORT = (
     "import org.junit.jupiter.api.Tag;\n"
     "import org.junit.jupiter.api.Test;\n"
 )
+PLAYWRIGHT_TEST_IMPORT = "import { test } from '@playwright/test';\n"
+PLAYWRIGHT_CONFIG_IMPORT = "import { defineConfig } from '@playwright/test';\n"
 
 
 class VerificationMarkerTests(unittest.TestCase):
@@ -90,7 +92,8 @@ class VerificationMarkerTests(unittest.TestCase):
             )
             playwright = root / "evidence.spec.ts"
             playwright.write_text(
-                "// VFY-NOT-A-TEST-001\n"
+                PLAYWRIGHT_TEST_IMPORT
+                + "// VFY-NOT-A-TEST-001\n"
                 "test('VFY-DELIVERY-001 executable slice', async () => {});\n",
                 encoding="utf-8",
             )
@@ -252,7 +255,8 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
 
@@ -287,7 +291,8 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
 
@@ -322,7 +327,8 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
 
@@ -352,7 +358,8 @@ class VerificationMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             playwright = Path(directory) / "evidence.spec.ts"
             playwright.write_text(
-                "// test('VFY-COMMENTED-LINE-001 disabled', async () => {});\n"
+                PLAYWRIGHT_TEST_IMPORT
+                + "// test('VFY-COMMENTED-LINE-001 disabled', async () => {});\n"
                 "/* test('VFY-COMMENTED-BLOCK-001 disabled', async () => {}); */\n"
                 "test('VFY-DELIVERY-001 preserves https://, /*, test.skip(, and test.fail( in a title', async () => {});\n",
                 encoding="utf-8",
@@ -364,7 +371,8 @@ class VerificationMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             playwright = Path(directory) / "evidence.spec.ts"
             playwright.write_text(
-                'const quoted = "test(\'VFY-NOT-CONTROLLED-001 quoted\')";\n'
+                PLAYWRIGHT_TEST_IMPORT
+                + 'const quoted = "test(\'VFY-NOT-CONTROLLED-001 quoted\')";\n'
                 "const templated = `test('VFY-NOT-CONTROLLED-002 templated')`;\n"
                 "matcher.test('VFY-NOT-CONTROLLED-003 member call');\n"
                 "test('VFY-HISTORY-001 real single-quoted test', async () => {});\n"
@@ -382,7 +390,8 @@ class VerificationMarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             playwright = Path(directory) / "evidence.spec.ts"
             playwright.write_text(
-                "const markerPattern = /test('VFY-NOT-CONTROLLED-001 shaped')/;\n"
+                PLAYWRIGHT_TEST_IMPORT
+                + "const markerPattern = /test('VFY-NOT-CONTROLLED-001 shaped')/;\n"
                 r"const failPattern = /testInfo\.fail\(/;" "\n"
                 "test('VFY-DELIVERY-001 real test', async () => {});\n",
                 encoding="utf-8",
@@ -393,11 +402,44 @@ class VerificationMarkerTests(unittest.TestCase):
                 evidence_markers(playwright),
             )
 
+    def test_playwright_scanner_resolves_test_import_identity_and_alias(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            foreign = root / "foreign.spec.ts"
+            foreign.write_text(
+                "import { test } from '@acme/not-playwright';\n"
+                "test('VFY-NOT-CONTROLLED-001 foreign binding', async () => {});\n",
+                encoding="utf-8",
+            )
+            local = root / "local.spec.ts"
+            local.write_text(
+                "function test(title, callback) { callback(); }\n"
+                "test('VFY-NOT-CONTROLLED-002 local function', () => {});\n",
+                encoding="utf-8",
+            )
+            aliased = root / "aliased.spec.ts"
+            aliased.write_text(
+                "import { test as scenario } from '@playwright/test';\n"
+                "scenario.describe('suite', () => {\n"
+                "  scenario('VFY-HISTORY-001 aliased nested test', async () => {});\n"
+                "});\n"
+                "scenario('VFY-DELIVERY-001 aliased test', async () => {});\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(frozenset(), evidence_markers(foreign))
+            self.assertEqual(frozenset(), evidence_markers(local))
+            self.assertEqual(
+                frozenset({"VFY-HISTORY-001", "VFY-DELIVERY-001"}),
+                evidence_markers(aliased),
+            )
+
     def test_playwright_scanner_only_accepts_top_level_registrations(self):
         with tempfile.TemporaryDirectory() as directory:
             playwright = Path(directory) / "evidence.spec.ts"
             playwright.write_text(
-                "function neverCalled() {\n"
+                PLAYWRIGHT_TEST_IMPORT
+                + "function neverCalled() {\n"
                 "  test('VFY-NOT-CONTROLLED-001 hidden function', async () => {});\n"
                 "}\n"
                 "if (false) {\n"
@@ -437,15 +479,18 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
             (e2e / "executed.spec.ts").write_text(
-                "test('VFY-DELIVERY-001 executable slice', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-DELIVERY-001 executable slice', async () => {});\n",
                 encoding="utf-8",
             )
             (e2e / "helper.ts").write_text(
-                "test('VFY-NOT-CONTROLLED-001 helper text', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-NOT-CONTROLLED-001 helper text', async () => {});\n",
                 encoding="utf-8",
             )
 
@@ -470,15 +515,18 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.evidence\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.evidence\\.ts/ });\n",
                 encoding="utf-8",
             )
             (e2e / "executed.evidence.ts").write_text(
-                "test('VFY-DELIVERY-001 configured evidence', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-DELIVERY-001 configured evidence', async () => {});\n",
                 encoding="utf-8",
             )
             (e2e / "ignored.spec.ts").write_text(
-                "test('VFY-NOT-CONTROLLED-001 stale convention', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-NOT-CONTROLLED-001 stale convention', async () => {});\n",
                 encoding="utf-8",
             )
 
@@ -503,18 +551,21 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default {\n"
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({\n"
                 "  testDir: '.',\n"
                 "  testMatch: /^.*\\/e2e\\/selected\\.spec\\.ts$/,\n"
-                "};\n",
+                "});\n",
                 encoding="utf-8",
             )
             (e2e / "selected.spec.ts").write_text(
-                "test('VFY-DELIVERY-001 selected absolute path', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-DELIVERY-001 selected absolute path', async () => {});\n",
                 encoding="utf-8",
             )
             (e2e / "ignored.spec.ts").write_text(
-                "test('VFY-NOT-CONTROLLED-001 ignored absolute path', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-NOT-CONTROLLED-001 ignored absolute path', async () => {});\n",
                 encoding="utf-8",
             )
 
@@ -526,6 +577,73 @@ class VerificationMarkerTests(unittest.TestCase):
                 (Path("e2e/selected.spec.ts"),),
                 result.sources["VFY-DELIVERY-001"],
             )
+
+    def test_inventory_reads_only_the_object_exported_through_define_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-DELIVERY-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            selected = e2e / "selected"
+            decoy = e2e / "decoy"
+            selected.mkdir(parents=True)
+            decoy.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                "import { defineConfig as configure } from '@playwright/test';\n"
+                "const lexicalDecoy = { testDir: './decoy', testMatch: /.*\\.decoy\\.ts/ };\n"
+                "export default configure({\n"
+                "  testDir: './selected',\n"
+                "  testMatch: /.*\\.spec\\.ts/,\n"
+                "});\n",
+                encoding="utf-8",
+            )
+            (selected / "executed.spec.ts").write_text(
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-DELIVERY-001 exported config', async () => {});\n",
+                encoding="utf-8",
+            )
+            (decoy / "ignored.decoy.ts").write_text(
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-NOT-CONTROLLED-001 lexical decoy', async () => {});\n",
+                encoding="utf-8",
+            )
+
+            result = inventory(root)
+
+            self.assertFalse(result.unknown)
+            self.assertFalse(result.missing)
+            self.assertEqual(
+                (Path("e2e/selected/executed.spec.ts"),),
+                result.sources["VFY-DELIVERY-001"],
+            )
+
+    def test_inventory_fails_closed_when_define_config_object_is_indirect(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-DELIVERY-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "const config = defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n"
+                "export default config;\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "default export must call defineConfig",
+            ):
+                inventory(root)
 
     def test_inherited_contract_tests_make_concrete_subclass_discoverable(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -551,7 +669,8 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
 
@@ -616,7 +735,8 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
 
@@ -653,7 +773,8 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
 
@@ -693,7 +814,8 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
 
@@ -727,7 +849,8 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
 
@@ -943,15 +1066,18 @@ class VerificationMarkerTests(unittest.TestCase):
             selected = e2e / "specs"
             selected.mkdir(parents=True)
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: './specs', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: './specs', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
             (selected / "executed.spec.ts").write_text(
-                "test('VFY-DELIVERY-001 configured evidence', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-DELIVERY-001 configured evidence', async () => {});\n",
                 encoding="utf-8",
             )
             (e2e / "outside.spec.ts").write_text(
-                "test('VFY-NOT-CONTROLLED-001 outside testDir', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-NOT-CONTROLLED-001 outside testDir', async () => {});\n",
                 encoding="utf-8",
             )
 
@@ -984,9 +1110,10 @@ class VerificationMarkerTests(unittest.TestCase):
                 e2e = root / "e2e"
                 e2e.mkdir()
                 (e2e / "playwright.config.ts").write_text(
-                    "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/, "
+                    PLAYWRIGHT_CONFIG_IMPORT
+                    + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/, "
                     + configured_filter
-                    + " };\n",
+                    + " });\n",
                     encoding="utf-8",
                 )
 
@@ -1008,15 +1135,17 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
             (e2e / "focused.spec.ts").write_text(
-                "test.only('focused', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT + "test.only('focused', async () => {});\n",
                 encoding="utf-8",
             )
             (e2e / "evidence.spec.ts").write_text(
-                "test('VFY-DELIVERY-001 normally executable', async () => {});\n",
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-DELIVERY-001 normally executable', async () => {});\n",
                 encoding="utf-8",
             )
 
@@ -1165,7 +1294,8 @@ class VerificationMarkerTests(unittest.TestCase):
             with self.subTest(disabled_call=disabled_call), tempfile.TemporaryDirectory() as directory:
                 playwright = Path(directory) / "evidence.spec.ts"
                 playwright.write_text(
-                    disabled_call
+                    PLAYWRIGHT_TEST_IMPORT
+                    + disabled_call
                     + "\ntest('VFY-DELIVERY-001 active evidence', async () => {});\n",
                     encoding="utf-8",
                 )
@@ -1198,7 +1328,8 @@ class VerificationMarkerTests(unittest.TestCase):
             e2e = root / "e2e"
             e2e.mkdir()
             (e2e / "playwright.config.ts").write_text(
-                "export default { testDir: '.', testMatch: /.*\\.spec\\.ts/ };\n",
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
                 encoding="utf-8",
             )
             return root

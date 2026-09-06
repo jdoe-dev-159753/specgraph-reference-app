@@ -94,6 +94,16 @@ PLAYWRIGHT_TEST_DIR = re.compile(r"\btestDir\s*:")
 PLAYWRIGHT_UNSUPPORTED_FILTER = re.compile(
     r"(?<![.$A-Za-z0-9_])(?:testIgnore|grep|grepInvert|projects)\s*(?=:|[,}])"
 )
+JAVASCRIPT_NAMED_IMPORT = re.compile(
+    r"(?m)^[ \t]*import[ \t]*\{(?P<bindings>[^{};]+)\}[ \t]*from"
+)
+JAVASCRIPT_IMPORT_BINDING = re.compile(
+    r"(?:type\s+)?(?P<imported>[A-Za-z_$][A-Za-z0-9_$]*)"
+    r"(?:\s+as\s+(?P<local>[A-Za-z_$][A-Za-z0-9_$]*))?\Z"
+)
+JAVASCRIPT_EXPORT_DEFAULT = re.compile(
+    r"(?m)^[ \t]*export\s+default\s+(?P<callee>[A-Za-z_$][A-Za-z0-9_$]*)"
+)
 SUREFIRE_DEFAULT_TEST_TYPE = re.compile(r"(?:Test.*|.*Test|.*Tests|.*TestCase)\Z")
 JAVA_METHOD_MODIFIERS = frozenset({
     "public", "protected", "private", "static", "final", "abstract",
@@ -1191,28 +1201,75 @@ def java_tag_markers(
     return frozenset(markers)
 
 
-def playwright_describe_callback_brace(structure: str, brace: int) -> bool:
+def javascript_named_imports(text: str) -> dict[str, frozenset[tuple[str, str]]]:
+    """Resolve local named-import bindings without trusting quoted lookalikes."""
+    structure = source_without_quoted_text(text)
+    depths = brace_depths(structure)
+    resolved: dict[str, set[tuple[str, str]]] = {}
+    for statement in JAVASCRIPT_NAMED_IMPORT.finditer(structure):
+        if depths[statement.start()] != 0:
+            continue
+        cursor = statement.end()
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+        if cursor >= len(text) or text[cursor] not in ('"', "'"):
+            continue
+        module, _ = quoted_literal(text, cursor)
+        if module is None:
+            continue
+        for raw_binding in statement.group("bindings").split(","):
+            binding = JAVASCRIPT_IMPORT_BINDING.fullmatch(raw_binding.strip())
+            if binding is None or raw_binding.strip().startswith("type "):
+                continue
+            imported = binding.group("imported")
+            local = binding.group("local") or imported
+            resolved.setdefault(local, set()).add((module, imported))
+    return {local: frozenset(origins) for local, origins in resolved.items()}
+
+
+def playwright_imported_identifiers(text: str, imported: str) -> frozenset[str]:
+    """Return unambiguous local names imported from the Playwright test package."""
+    return frozenset(
+        local
+        for local, origins in javascript_named_imports(text).items()
+        if origins == frozenset({("@playwright/test", imported)})
+    )
+
+
+def playwright_describe_callback_brace(
+    structure: str,
+    brace: int,
+    test_identifiers: frozenset[str],
+) -> bool:
     boundary = max(
         structure.rfind("{", 0, brace),
         structure.rfind("}", 0, brace),
         structure.rfind(";", 0, brace),
     )
     prefix = structure[boundary + 1:brace]
+    identifiers = "|".join(re.escape(identifier) for identifier in test_identifiers)
+    if not identifiers:
+        return False
     return re.search(
-        r"\btest\s*\.\s*describe\s*\([^{};]*,\s*"
+        rf"\b(?:{identifiers})\s*\.\s*describe\s*\([^{{}};]*,\s*"
         r"(?:async\s*)?\([^{}]*\)\s*=>\s*\Z",
         prefix,
         re.DOTALL,
     ) is not None
 
 
-def playwright_registration_scopes(structure: str) -> tuple[bool, ...]:
+def playwright_registration_scopes(
+    structure: str,
+    test_identifiers: frozenset[str],
+) -> tuple[bool, ...]:
     scopes: list[bool] = []
     allowed_stack: list[bool] = []
     for index, character in enumerate(structure):
         scopes.append(all(allowed_stack))
         if character == "{":
-            allowed_stack.append(playwright_describe_callback_brace(structure, index))
+            allowed_stack.append(
+                playwright_describe_callback_brace(structure, index, test_identifiers)
+            )
         elif character == "}" and allowed_stack:
             allowed_stack.pop()
     return tuple(scopes)
@@ -1264,35 +1321,26 @@ def playwright_has_control_prefix(structure: str, start: int) -> bool:
 
 
 def playwright_test_titles(text: str) -> tuple[str, ...]:
-    """Extract static titles from global ``test(...)`` calls in executable source."""
+    """Extract titles from imported Playwright ``test`` bindings only."""
     titles: list[str] = []
     structure = source_without_quoted_text(text)
-    registration_scopes = playwright_registration_scopes(structure)
-    index = 0
-    while index < len(text):
-        character = text[index]
-        if character in ('"', "'", "`"):
-            _, index = quoted_literal(text, index)
-            continue
-
-        if not text.startswith("test", index):
-            index += 1
-            continue
-
-        before = text[index - 1] if index else ""
-        after_index = index + len("test")
-        after = text[after_index] if after_index < len(text) else ""
-        if (before and (before.isalnum() or before in "_$")) or (
-            after and (after.isalnum() or after in "_$")
-        ):
-            index = after_index
-            continue
+    test_identifiers = playwright_imported_identifiers(text, "test")
+    if not test_identifiers:
+        return tuple()
+    registration_scopes = playwright_registration_scopes(structure, test_identifiers)
+    calls = re.compile(
+        r"(?<![A-Za-z0-9_$])(?:"
+        + "|".join(re.escape(identifier) for identifier in sorted(test_identifiers))
+        + r")(?![A-Za-z0-9_$])"
+    )
+    for call in calls.finditer(structure):
+        index = call.start()
+        after_index = call.end()
 
         previous = index - 1
-        while previous >= 0 and text[previous].isspace():
+        while previous >= 0 and structure[previous].isspace():
             previous -= 1
-        if previous >= 0 and text[previous] == ".":
-            index = after_index
+        if previous >= 0 and structure[previous] == ".":
             continue
 
         # Direct top-level and test.describe callback registrations are trustworthy.
@@ -1303,44 +1351,92 @@ def playwright_test_titles(text: str) -> tuple[str, ...]:
             or structure[line_start:index].strip()
             or playwright_has_control_prefix(structure, index)
         ):
-            index = after_index
             continue
 
         cursor = after_index
         while cursor < len(text) and text[cursor].isspace():
             cursor += 1
         if cursor >= len(text) or text[cursor] != "(":
-            index = after_index
             continue
         cursor += 1
         while cursor < len(text) and text[cursor].isspace():
             cursor += 1
         if cursor >= len(text) or text[cursor] not in ('"', "'"):
-            index = after_index
             continue
 
-        title, index = quoted_literal(text, cursor)
+        title, _ = quoted_literal(text, cursor)
         if title is not None:
             titles.append(title)
 
     return tuple(titles)
 
 
+def exported_playwright_config(config: str) -> tuple[str, str]:
+    """Return the sole object directly exported through imported ``defineConfig``."""
+    syntax = source_without_javascript_regex_literals(config)
+    structure = source_without_quoted_text(syntax)
+    depths = brace_depths(structure)
+    define_config_names = playwright_imported_identifiers(config, "defineConfig")
+    exports = [
+        export
+        for export in JAVASCRIPT_EXPORT_DEFAULT.finditer(structure)
+        if depths[export.start()] == 0
+    ]
+    if len(exports) != 1:
+        raise ValueError(
+            "playwright.config.ts must have one unambiguous default defineConfig export"
+        )
+    export = exports[0]
+    if export.group("callee") not in define_config_names:
+        raise ValueError(
+            "playwright.config.ts default export must call defineConfig imported from @playwright/test"
+        )
+    cursor = export.end()
+    while cursor < len(structure) and structure[cursor].isspace():
+        cursor += 1
+    if cursor >= len(structure) or structure[cursor] != "(":
+        raise ValueError("playwright.config.ts default export must call defineConfig")
+    cursor += 1
+    while cursor < len(structure) and structure[cursor].isspace():
+        cursor += 1
+    if cursor >= len(structure) or structure[cursor] != "{":
+        raise ValueError("playwright.config.ts defineConfig argument must be an object literal")
+    end = closing_brace(structure, cursor)
+    if end >= len(structure):
+        raise ValueError("playwright.config.ts defineConfig object must be closed")
+    after = end + 1
+    while after < len(structure) and structure[after].isspace():
+        after += 1
+    if after >= len(structure) or structure[after] != ")":
+        raise ValueError("playwright.config.ts defineConfig must have one object argument")
+    exported_object = config[cursor:end + 1]
+    return exported_object, source_without_quoted_text(exported_object)
+
+
+def object_level_matches(pattern: re.Pattern[str], structure: str) -> tuple[re.Match[str], ...]:
+    """Find properties that belong directly to the selected object literal."""
+    depths = brace_depths(structure)
+    return tuple(match for match in pattern.finditer(structure) if depths[match.start()] == 1)
+
+
 def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
     config = source_without_comments((root / PLAYWRIGHT_CONFIG).read_text(encoding="utf-8"))
-    structure = source_without_quoted_text(config)
-    unsupported_filter = PLAYWRIGHT_UNSUPPORTED_FILTER.search(structure)
-    if unsupported_filter is not None:
+    config, structure = exported_playwright_config(config)
+    unsupported_filters = object_level_matches(PLAYWRIGHT_UNSUPPORTED_FILTER, structure)
+    if unsupported_filters:
+        unsupported_filter = unsupported_filters[0]
         option = re.match(r"[A-Za-z]+", unsupported_filter.group(0)).group(0)
         raise ValueError(
             f"unsupported Playwright evidence filter {option}; refusing partial discovery"
         )
-    configured = PLAYWRIGHT_TEST_MATCH.search(structure)
-    if configured is None:
+    configured_matches = object_level_matches(PLAYWRIGHT_TEST_MATCH, structure)
+    if len(configured_matches) != 1:
         raise ValueError("playwright.config.ts must declare one regex testMatch")
-    configured_dir = PLAYWRIGHT_TEST_DIR.search(structure)
-    if configured_dir is None:
+    configured = configured_matches[0]
+    configured_dirs = object_level_matches(PLAYWRIGHT_TEST_DIR, structure)
+    if len(configured_dirs) != 1:
         raise ValueError("playwright.config.ts must declare one string testDir")
+    configured_dir = configured_dirs[0]
     cursor = configured_dir.end()
     while cursor < len(config) and config[cursor].isspace():
         cursor += 1
