@@ -1,0 +1,11 @@
+schema_version: 1
+system_id: REPLACE-ME
+requirements: requirements.yaml
+design: design-map.yaml
+obligations:
+  VER-EXAMPLE-001:
+    covers: [REQ-EXAMPLE-001, INV-EXAMPLE-001]
+    acceptance: [AC-EXAMPLE-001]
+    design: [DES-EXAMPLE-001]
+    methods: [unit, integration, public_boundary]
+    executable_evidence: discovered_by_markers
