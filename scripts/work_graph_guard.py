@@ -20,8 +20,6 @@ EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
 EVENT_NAME = os.environ.get("GITHUB_EVENT_NAME", "")
 CODEX_USER_ID = 199175422
 CODEX_APP_ID = 1144995
-MIN_REVIEWED_SHA_PREFIX = 10
-MIN_SUMMARY_SHA_PREFIX = 7
 WORKFLOW_DIR = ".github/workflows"
 DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 GUARD_SOURCE = "scripts/work_graph_guard.py"
@@ -56,14 +54,7 @@ PREFIX = re.compile(
 )
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
 CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
-REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
-COMPLETED_CODEX_SUMMARY = re.compile(
-    r"<!--\s*codex-pull-request-review-summary\s*-->.*?"
-    r"\|\s*[^|\n]*\*\*Code Review\*\*\s*\|"
-    r"\s*[^|\n]*\*\*Completed\*\*[^|\n]*\|"
-    r"\s*`([0-9a-fA-F]{7,40})`\s*\|",
-    re.DOTALL,
-)
+REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{40})`")
 CANONICAL_WORKFLOW_NAME = re.compile(r"^name: ([a-z0-9]+(?:-[a-z0-9]+)*)$")
 CANONICAL_ROOT_KEY = re.compile(
     r"^(run-name|on|permissions|env|defaults|concurrency|jobs):(?:\s|$)"
@@ -97,20 +88,29 @@ DIGEST_PERMISSION_NAMES = frozenset(
     {"PROTECTED_ASSET_SHA256", "APPROVED_GUARD_SUCCESSOR_SHA256"}
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+REVIEW_STATUS_CONTEXT = "codex-review-freshness"
+INTEGRITY_STATUS_CONTEXT = "work-graph-integrity"
 
 
-def api(path: str):
-    req = request.Request(f"{API}{path}")
+def api_request(path: str, method: str = "GET", payload: dict | None = None):
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    req = request.Request(f"{API}{path}", data=data, method=method)
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("X-GitHub-Api-Version", "2026-03-10")
     if TOKEN:
         req.add_header("Authorization", f"Bearer {TOKEN}")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
     try:
         with request.urlopen(req, timeout=30) as response:
             return json.loads(response.read())
     except error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")
-        raise RuntimeError(f"GitHub API GET {path} failed: {exc.code} {detail}") from exc
+        raise RuntimeError(f"GitHub API {method} {path} failed: {exc.code} {detail}") from exc
+
+
+def api(path: str):
+    return api_request(path)
 
 
 def pages(path: str):
@@ -176,12 +176,14 @@ def is_codex_review(review: dict) -> bool:
 
 def has_current_head_codex_review(reviews, head_sha: str) -> bool:
     return any(
-        is_codex_review(review) and review.get("commit_id") == head_sha
+        is_codex_review(review)
+        and review.get("commit_id") == head_sha
+        and review.get("state") != "DISMISSED"
         for review in reviews
     )
 
 
-def clean_codex_reviewed_prefix(comment: dict) -> str | None:
+def clean_codex_reviewed_sha(comment: dict) -> str | None:
     if (comment.get("user") or {}).get("id") != CODEX_USER_ID:
         return None
     if (comment.get("performed_via_github_app") or {}).get("id") != CODEX_APP_ID:
@@ -192,74 +194,26 @@ def clean_codex_reviewed_prefix(comment: dict) -> str | None:
     match = REVIEWED_COMMIT.search(body)
     if not match:
         return None
-    prefix = match.group(1).lower()
-    return prefix if len(prefix) >= MIN_REVIEWED_SHA_PREFIX else None
+    return match.group(1).lower()
 
 
 def has_current_head_clean_codex_result(comments, head_sha: str) -> bool:
     normalized = head_sha.lower()
     return any(
-        (prefix := clean_codex_reviewed_prefix(comment)) is not None
-        and normalized.startswith(prefix)
+        clean_codex_reviewed_sha(comment) == normalized
         for comment in comments
     )
 
 
-def clean_codex_summary_prefix(comment: dict) -> str | None:
-    if (comment.get("user") or {}).get("id") != CODEX_USER_ID:
-        return None
-    if (comment.get("performed_via_github_app") or {}).get("id") != CODEX_APP_ID:
-        return None
-    match = COMPLETED_CODEX_SUMMARY.search(comment.get("body") or "")
-    if not match:
-        return None
-    prefix = match.group(1).lower()
-    return prefix if len(prefix) >= MIN_SUMMARY_SHA_PREFIX else None
-
-
-def is_codex_approval_reaction(reaction: dict) -> bool:
-    return (
-        reaction.get("content") == "+1"
-        and (reaction.get("user") or {}).get("id") == CODEX_USER_ID
-    )
-
-
-def has_current_head_clean_codex_summary(comments, reactions, head_sha: str) -> bool:
-    normalized = head_sha.lower()
-    has_current_summary = any(
-        (prefix := clean_codex_summary_prefix(comment)) is not None
-        and normalized.startswith(prefix)
-        for comment in comments
-    )
-    return has_current_summary and any(is_codex_approval_reaction(reaction) for reaction in reactions)
-
-
-def require_current_head_codex_review(pr_number: int, failures: list[str]) -> None:
-    pr = api(f"/repos/{REPO}/pulls/{pr_number}")
-    if pr.get("state") != "open" or pr.get("draft"):
-        return
-    if (pr.get("base") or {}).get("ref") != "main":
-        return
-
-    head_sha = pr["head"]["sha"]
+def exact_head_review_state(pr_number: int, head_sha: str) -> tuple[str, str]:
     reviews = pages(f"/repos/{REPO}/pulls/{pr_number}/reviews")
     if has_current_head_codex_review(reviews, head_sha):
-        print(f"pull request #{pr_number}: Codex review object covers current head {head_sha[:12]}")
-        return
+        return "success", "Codex review covers the exact current head"
 
     comments = list(pages(f"/repos/{REPO}/issues/{pr_number}/comments"))
     if has_current_head_clean_codex_result(comments, head_sha):
-        print(f"pull request #{pr_number}: clean Codex result covers current head {head_sha[:12]}")
-        return
-
-    reactions = pages(f"/repos/{REPO}/issues/{pr_number}/reactions")
-    if has_current_head_clean_codex_summary(comments, reactions, head_sha):
-        print(f"pull request #{pr_number}: clean Codex summary covers current head {head_sha[:12]}")
-        return
-
-    failures.append(
-        f"pull request #{pr_number}: no Codex review evidence is anchored to current head {head_sha[:12]}"
-    )
+        return "success", "Clean Codex result covers the exact current head"
+    return "pending", "Awaiting Codex review of the exact current head"
 
 
 def decode_contents_payload(payload: dict, path: str) -> str:
