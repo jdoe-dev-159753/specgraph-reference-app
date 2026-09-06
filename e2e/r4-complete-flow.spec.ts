@@ -46,6 +46,11 @@ const detectorContracts: Record<string, { signalIdentity: string, library?: stri
   },
 }
 
+/** Resolves detector evidence data without aliasing a computed callable member. */
+function detectorContract(identity: string) {
+  return detectorContracts[identity]
+}
+
 /** Evidence-reference subset used to prove that model provenance cites every activated stage. */
 export type EvidenceReference = {
   kind: 'ACTIVITY' | 'SOURCE_RISK' | 'DETECTOR_SIGNAL' | 'POLICY_RETRIEVAL'
@@ -215,7 +220,7 @@ test('VFY-AUTH-001 VFY-ANALYSIS-CONTRACT-001 VFY-RAG-001 VFY-HISTORY-001 VFY-REP
   } else {
     expect(completed.detectorProvenance.map(item => item.detectorIdentity)).toEqual(expectedDetectors)
     for (const detector of completed.detectorProvenance) {
-      const contract = detectorContracts[detector.detectorIdentity]
+      const contract = detectorContract(detector.detectorIdentity)
       if (contract === undefined) {
         throw new Error(`unknown detector contract ${detector.detectorIdentity}`)
       }

@@ -1258,6 +1258,118 @@ class VerificationMarkerTests(unittest.TestCase):
                     evidence_markers(java),
                 )
 
+    def test_local_composed_junit_guards_are_resolved_transitively(self):
+        with tempfile.TemporaryDirectory() as directory:
+            java = Path(directory) / "Evidence.java"
+            java.write_text(
+                JUNIT_TAG_IMPORT
+                + "import org.junit.jupiter.api.Disabled;\n"
+                "@Disabled @interface DirectGuard {}\n"
+                "@DirectGuard @interface TransitiveGuard {}\n"
+                "class Guards { @Disabled @interface LocalGuard {} }\n"
+                '@Guards.LocalGuard @Tag("VFY-RAG-001")\n'
+                "class NestedGuardTests { @Test void skipped() {} }\n"
+                "@TransitiveGuard\n"
+                '@Tag("VFY-HISTORY-001")\n'
+                "class DisabledTests { @Test void skipped() {} }\n"
+                "class ActiveTests {\n"
+                "  @TransitiveGuard\n"
+                '  @Tag("VFY-AUTH-001") @Test void skipped() {}\n'
+                '  @Tag("VFY-DELIVERY-001") @Test void executes() {}\n'
+                "}\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                frozenset({"VFY-DELIVERY-001"}),
+                evidence_markers(java),
+            )
+
+    def test_cyclic_and_unresolved_local_junit_guards_fail_closed(self):
+        sources = {
+            "cycle": (
+                "@SecondGuard @interface FirstGuard {}\n"
+                "@FirstGuard @interface SecondGuard {}\n"
+                "@FirstGuard\n"
+            ),
+            "unresolved": (
+                "@MissingGuard @interface LocalGuard {}\n"
+                "@LocalGuard\n"
+            ),
+            "unresolved-explicit-import": (
+                "import guards.MissingGuard;\n"
+                "@MissingGuard @interface LocalGuard {}\n"
+                "@LocalGuard\n"
+            ),
+            "unresolved-wildcard-import": (
+                "import guards.*;\n"
+                "@MissingGuard @interface LocalGuard {}\n"
+                "@LocalGuard\n"
+            ),
+        }
+        for case, annotations in sources.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                java = Path(directory) / "Evidence.java"
+                java.write_text(
+                    JUNIT_TAG_IMPORT
+                    + annotations
+                    + '@Tag("VFY-HISTORY-001")\n'
+                    "class DisabledTests { @Test void skipped() {} }\n"
+                    '@Tag("VFY-DELIVERY-001")\n'
+                    "class ActiveTests { @Test void executes() {} }\n",
+                    encoding="utf-8",
+                )
+
+                self.assertEqual(
+                    frozenset({"VFY-DELIVERY-001"}),
+                    evidence_markers(java),
+                )
+
+    def test_inventory_resolves_composed_junit_guard_across_local_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n"
+                "  VFY-HISTORY-001:\n    covers: []\n"
+                "  VFY-DELIVERY-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            tests = root / "backend/src/test"
+            (tests / "guards").mkdir(parents=True)
+            (tests / "proof").mkdir()
+            (tests / "guards/BaseGuard.java").write_text(
+                "package guards;\nimport org.junit.jupiter.api.Disabled;\n"
+                "@Disabled @interface BaseGuard {}\n",
+                encoding="utf-8",
+            )
+            (tests / "guards/ComposedGuard.java").write_text(
+                "package guards;\n@BaseGuard public @interface ComposedGuard {}\n",
+                encoding="utf-8",
+            )
+            (tests / "proof/EvidenceTests.java").write_text(
+                "package proof;\nimport guards.ComposedGuard;\n"
+                + JUNIT_TAG_IMPORT
+                + '@ComposedGuard @Tag("VFY-HISTORY-001")\n'
+                "class SkippedTests { @Test void skipped() {} }\n"
+                '@Tag("VFY-DELIVERY-001")\n'
+                "class ActiveTests { @Test void executes() {} }\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
+                encoding="utf-8",
+            )
+
+            result = inventory(root)
+
+            self.assertEqual(frozenset({"VFY-HISTORY-001"}), result.missing)
+            self.assertFalse(result.unknown)
+
     def test_foreign_condition_annotation_does_not_disable_junit_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             java = Path(directory) / "Evidence.java"
@@ -1301,6 +1413,92 @@ class VerificationMarkerTests(unittest.TestCase):
                 )
 
                 self.assertEqual(frozenset(), evidence_markers(playwright))
+
+    def test_computed_playwright_controls_fail_closed_outside_quoted_decoys(self):
+        controls = (
+            "testInfo['skip']();",
+            'testInfo["fixme"]();',
+            "testInfo[`skip`]();",
+            "test['fail'](true);",
+            "const stop = testInfo['skip']; stop();",
+            "const member = 'skip'; testInfo[member]();",
+            "const member = 'skip'; const stop = testInfo[member]; stop();",
+            "const member = 'fixme'; const stop = testInfo[member]; stop();",
+            "const member = 'fail'; const stop = testInfo[member]; stop();",
+            "const member = 'skip'; const first = testInfo[member]; "
+            "const second = first; second();",
+            "const info = testInfo; const member = 'fixme'; const stop = info[member];",
+            "const { skip: stop } = testInfo; stop();",
+            "const member = 'skip'; const { [member]: stop } = testInfo; stop();",
+            "const member = 'skip'; const stop = Reflect.get(testInfo, member); stop();",
+            "const stop = Reflect?.get(testInfo, 'skip'); stop();",
+            "const stop = Reflect['get'](testInfo, 'skip'); stop();",
+            "const get = Reflect.get; const stop = get(testInfo, 'skip'); stop();",
+        )
+        for control in controls:
+            with self.subTest(control=control), tempfile.TemporaryDirectory() as directory:
+                playwright = Path(directory) / "evidence.spec.ts"
+                playwright.write_text(
+                    PLAYWRIGHT_TEST_IMPORT
+                    + 'const decoy = "testInfo[\\\'skip\\\']()";\n'
+                    + control
+                    + "\ntest('VFY-DELIVERY-001 active evidence', async () => {});\n",
+                    encoding="utf-8",
+                )
+
+                self.assertEqual(frozenset(), evidence_markers(playwright))
+
+    def test_inventory_rejects_computed_only_on_imported_test_alias(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "docs/assignment/VV/verification.yaml"
+            catalogue.parent.mkdir(parents=True)
+            catalogue.write_text(
+                "obligations:\n  VFY-DELIVERY-001:\n    covers: []\n",
+                encoding="utf-8",
+            )
+            e2e = root / "e2e"
+            e2e.mkdir()
+            (e2e / "playwright.config.ts").write_text(
+                PLAYWRIGHT_CONFIG_IMPORT
+                + "export default defineConfig({ testDir: '.', testMatch: /.*\\.spec\\.ts/ });\n",
+                encoding="utf-8",
+            )
+            focused = e2e / "focused.spec.ts"
+            focused.write_text(
+                "import { test as scenario } from '@playwright/test';\n"
+                + "const focused = scenario['only'];\n"
+                "focused('focused', async () => {});\n",
+                encoding="utf-8",
+            )
+            (e2e / "evidence.spec.ts").write_text(
+                PLAYWRIGHT_TEST_IMPORT
+                + "test('VFY-DELIVERY-001 normally executable', async () => {});\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "focused Playwright .only call"):
+                inventory(root)
+            for computed in (
+                "const member = 'only'; test[member]('focused', async () => {});",
+                "test[`only`]('focused', async () => {});",
+                "const { only: focused } = test; focused('focused', async () => {});",
+                "const member = 'only'; const { [member]: focused } = test; "
+                "focused('focused', async () => {});",
+                "const focused = Reflect.get(test, 'only'); "
+                "focused('focused', async () => {});",
+            ):
+                focused.write_text(PLAYWRIGHT_TEST_IMPORT + computed + "\n", encoding="utf-8")
+                with self.subTest(computed=computed), self.assertRaisesRegex(
+                    ValueError, "focused Playwright .only call"
+                ):
+                    inventory(root)
+            focused.write_text(
+                PLAYWRIGHT_TEST_IMPORT + "test['only']('focused', async () => {});\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "focused Playwright .only call"):
+                inventory(root)
 
     class fixture:
         def __init__(self, controlled, discovered):

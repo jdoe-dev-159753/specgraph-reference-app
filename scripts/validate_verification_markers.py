@@ -84,11 +84,33 @@ JAVA_IMPORT = re.compile(
 JAVA_LOCAL_TAG_DECLARATION = re.compile(
     r"(?:\b(?:class|interface|record|enum)|@interface)\s+Tag\b"
 )
+JAVA_ANNOTATION_DECLARATION = re.compile(
+    r"(?<![A-Za-z0-9_$])@interface\s+(?P<name>[A-Za-z_$][A-Za-z0-9_$]*)\s*\{"
+)
 JAVA_ANY_ANNOTATION = re.compile(
     r"@[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*"
 )
-PLAYWRIGHT_NON_PASSING = re.compile(r"\.\s*(?:skip|fixme|fail)\s*\(")
-PLAYWRIGHT_FOCUSED = re.compile(r"\.\s*only\s*\(")
+PLAYWRIGHT_NON_PASSING = re.compile(r"\.\s*(?:skip|fixme|fail)\b")
+PLAYWRIGHT_FOCUSED = re.compile(r"\.\s*only\b")
+PLAYWRIGHT_COMPUTED_NON_PASSING = re.compile(
+    r"\[\s*(?P<quote>['\"`])(?:skip|fixme|fail)(?P=quote)\s*\]"
+)
+PLAYWRIGHT_COMPUTED_FOCUSED = re.compile(
+    r"\[\s*(?P<quote>['\"`])only(?P=quote)\s*\]"
+)
+PLAYWRIGHT_DYNAMIC_COMPUTED_CALL = re.compile(
+    r"\[\s*(?!['\"`])[^\]\r\n]+\]\s*\("
+)
+PLAYWRIGHT_DYNAMIC_COMPUTED_ALIAS = re.compile(
+    r"\b(?:const|let|var)\s+(?P<alias>[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*"
+    r"[A-Za-z_$][A-Za-z0-9_$]*\s*(?:\?\.)?\s*"
+    r"\[\s*(?!['\"`])[^\]\r\n]+\]"
+)
+PLAYWRIGHT_REFLECT_USAGE = re.compile(r"(?<![A-Za-z0-9_$])Reflect(?![A-Za-z0-9_$])")
+PLAYWRIGHT_DESTRUCTURED_CONTROL = re.compile(
+    r"\b(?:const|let|var)\s*\{(?P<bindings>[^{}]*)\}\s*=\s*"
+    r"(?P<receiver>[A-Za-z_$][A-Za-z0-9_$]*)"
+)
 PLAYWRIGHT_TEST_MATCH = re.compile(r"\btestMatch\s*:\s*/((?:\\.|[^/\r\n])*)/([a-z]*)")
 PLAYWRIGHT_TEST_DIR = re.compile(r"\btestDir\s*:")
 PLAYWRIGHT_UNSUPPORTED_FILTER = re.compile(
@@ -598,11 +620,198 @@ def resolved_junit_execution_guards(
 
 def java_top_level_type_names(structure: str) -> frozenset[str]:
     depths = brace_depths(structure)
-    return frozenset(
+    ordinary = {
         declaration.group("name")
         for declaration in JAVA_TYPE_DECLARATION.finditer(structure)
         if depths[declaration.end() - 1] == 0
+    }
+    annotations = {
+        declaration.group("name")
+        for declaration in JAVA_ANNOTATION_DECLARATION.finditer(structure)
+        if depths[declaration.end() - 1] == 0
+    }
+    return frozenset(ordinary | annotations)
+
+
+def resolve_local_annotation_reference(
+    raw: str,
+    package_name: str,
+    explicit: tuple[str, ...],
+    wildcard: tuple[str, ...],
+    known: frozenset[str],
+    strict_external: bool = False,
+) -> tuple[str | None, bool]:
+    """Resolve a local annotation, reporting identities that remain ambiguous."""
+    source_names = {name.replace("$", "."): name for name in known}
+
+    def local_identity(reference: str) -> str | None:
+        return reference if reference in known else source_names.get(reference)
+
+    if "." in raw:
+        references = {raw, f"{package_name}.{raw}" if package_name else raw}
+        first, remainder = raw.split(".", 1)
+        references.update(
+            f"{name}.{remainder}"
+            for name in explicit
+            if name.rsplit(".", 1)[-1] == first
+        )
+        references.update(f"{name}.{raw}" for name in wildcard)
+        candidates = {
+            resolved for reference in references
+            if (resolved := local_identity(reference)) is not None
+        }
+        if len(candidates) == 1:
+            return next(iter(candidates)), False
+        if len(candidates) > 1:
+            return None, True
+        external = next(
+            (reference for reference in references if reference.startswith(("java.", "org.junit."))),
+            None,
+        )
+        return None, strict_external and external is None
+    explicit_matches = {name for name in explicit if name.rsplit(".", 1)[-1] == raw}
+    if len(explicit_matches) > 1:
+        return None, True
+    candidates = {
+        resolved for name in explicit_matches
+        if (resolved := local_identity(name)) is not None
+    }
+    same_package = f"{package_name}.{raw}" if package_name else raw
+    if (same := local_identity(same_package)) is not None:
+        candidates.add(same)
+    candidates.update(
+        resolved
+        for imported_package in wildcard
+        if (resolved := local_identity(f"{imported_package}.{raw}")) is not None
     )
+    if len(candidates) == 1:
+        if explicit_matches and next(iter(explicit_matches)) not in source_names:
+            return None, True
+        return next(iter(candidates)), False
+    known_simple = {name.rsplit(".", 1)[-1] for name in known}
+    if len(candidates) > 1 or raw in known_simple:
+        return None, True
+    if raw in {
+        "Deprecated", "Documented", "FunctionalInterface", "Inherited",
+        "Override", "Repeatable", "Retention", "SafeVarargs",
+        "SuppressWarnings", "Target",
+    }:
+        return None, False
+    if explicit_matches:
+        imported = next(iter(explicit_matches))
+        return None, strict_external and not imported.startswith(("java.", "org.junit."))
+    if len(wildcard) == 1:
+        return None, strict_external and not wildcard[0].startswith(("java.", "org.junit."))
+    return None, True
+
+
+def classify_local_junit_annotations(
+    structures: list[str],
+    package_types: dict[str, frozenset[str]],
+) -> tuple[dict[str, str], frozenset[str]]:
+    """Classify local annotations as safe, guarded, or unresolved."""
+    declarations: dict[str, list[tuple[str, re.Match[str], str, tuple[str, ...], tuple[str, ...]]]] = {}
+    for structure in structures:
+        package = JAVA_PACKAGE.search(structure)
+        package_name = package.group(1) if package is not None else ""
+        imports = tuple(JAVA_IMPORT.findall(structure))
+        explicit = tuple(name for name in imports if not name.endswith(".*"))
+        wildcard = tuple(name[:-2] for name in imports if name.endswith(".*"))
+        parsed_types = java_types(structure, package_name)
+        for declaration in JAVA_ANNOTATION_DECLARATION.finditer(structure):
+            declared_type = next(
+                (java_type for java_type in parsed_types
+                 if java_type.body_start == declaration.end() - 1),
+                None,
+            )
+            if declared_type is None:
+                continue
+            declarations.setdefault(declared_type.qualified_name, []).append(
+                (structure, declaration, package_name, explicit, wildcard)
+            )
+
+    known = frozenset(declarations)
+    dependencies: dict[str, set[str]] = {name: set() for name in known}
+    directly_guarded: set[str] = set()
+    unresolved: set[str] = {
+        name for name, entries in declarations.items() if len(entries) != 1
+    }
+    for qualified, entries in declarations.items():
+        if qualified in unresolved:
+            continue
+        structure, declaration, package_name, explicit, wildcard = entries[0]
+        direct_guards = {
+            match.start()
+            for match in resolved_junit_execution_guards(
+                structure,
+                package_types.get(package_name, frozenset()),
+                explicit,
+                wildcard,
+            )
+        }
+        for annotation in JAVA_ANY_ANNOTATION.finditer(structure):
+            if not java_annotation_attaches_to_type(structure, annotation, declaration):
+                continue
+            if annotation.start() in direct_guards:
+                directly_guarded.add(qualified)
+                continue
+            dependency, uncertain = resolve_local_annotation_reference(
+                annotation.group()[1:], package_name, explicit, wildcard, known, True
+            )
+            if dependency is not None:
+                dependencies[qualified].add(dependency)
+            elif uncertain:
+                unresolved.add(qualified)
+
+    statuses: dict[str, str] = {}
+    visiting: set[str] = set()
+
+    def status(name: str) -> str:
+        if name in statuses:
+            return statuses[name]
+        if name in visiting or name in unresolved:
+            return "unresolved"
+        if name in directly_guarded:
+            statuses[name] = "guarded"
+            return "guarded"
+        visiting.add(name)
+        child_statuses = {status(child) for child in dependencies[name]}
+        visiting.remove(name)
+        resolved = (
+            "guarded" if "guarded" in child_statuses
+            else "unresolved" if "unresolved" in child_statuses
+            else "safe"
+        )
+        statuses[name] = resolved
+        return resolved
+
+    for name in known:
+        statuses[name] = status(name)
+    return statuses, known
+
+
+def resolved_local_execution_guards(
+    structure: str,
+    statuses: dict[str, str],
+    known: frozenset[str],
+) -> tuple[re.Match[str], ...]:
+    """Return uses of guarded or unresolved local composed annotations."""
+    package = JAVA_PACKAGE.search(structure)
+    package_name = package.group(1) if package is not None else ""
+    imports = tuple(JAVA_IMPORT.findall(structure))
+    explicit = tuple(name for name in imports if not name.endswith(".*"))
+    wildcard = tuple(name[:-2] for name in imports if name.endswith(".*"))
+    guarded: list[re.Match[str]] = []
+    for annotation in JAVA_ANY_ANNOTATION.finditer(structure):
+        raw = annotation.group()[1:]
+        if raw == "interface":
+            continue
+        resolved, uncertain = resolve_local_annotation_reference(
+            raw, package_name, explicit, wildcard, known
+        )
+        if uncertain or (resolved is not None and statuses.get(resolved) != "safe"):
+            guarded.append(annotation)
+    return tuple(guarded)
 
 
 def java_annotation_end(structure: str, annotation: re.Match[str]) -> int:
@@ -879,6 +1088,8 @@ def java_types(
 def java_source(
     structure: str,
     package_type_names: frozenset[str] | None = None,
+    local_annotation_statuses: dict[str, str] | None = None,
+    local_annotation_names: frozenset[str] = frozenset(),
 ) -> JavaSource:
     package = JAVA_PACKAGE.search(structure)
     package_name = package.group(1) if package is not None else ""
@@ -909,6 +1120,12 @@ def java_source(
         explicit_imports,
         wildcard_imports,
     )
+    if local_annotation_statuses is not None:
+        execution_guards += resolved_local_execution_guards(
+            structure,
+            local_annotation_statuses,
+            local_annotation_names,
+        )
     return JavaSource(
         package_name,
         explicit_imports,
@@ -967,6 +1184,8 @@ def resolved_java_parent(
 def discoverable_java_types(
     structures: list[str],
     package_types: dict[str, frozenset[str]] | None = None,
+    local_annotation_statuses: dict[str, str] | None = None,
+    local_annotation_names: frozenset[str] = frozenset(),
 ) -> frozenset[str]:
     if package_types is None:
         package_types = java_package_types(structures)
@@ -977,6 +1196,8 @@ def discoverable_java_types(
                 (package.group(1) if (package := JAVA_PACKAGE.search(structure)) else ""),
                 frozenset(),
             ),
+            local_annotation_statuses,
+            local_annotation_names,
         )
         for structure in structures
     )
@@ -1146,10 +1367,17 @@ def java_tag_markers(
     discoverable_types: frozenset[str],
     shadowed_tag_packages: frozenset[str],
     package_type_names: frozenset[str],
+    local_annotation_statuses: dict[str, str] | None = None,
+    local_annotation_names: frozenset[str] = frozenset(),
 ) -> frozenset[str]:
     """Keep tags attached to executable test methods or discoverable test types."""
     depths = brace_depths(structure)
-    source = java_source(structure, package_type_names)
+    source = java_source(
+        structure,
+        package_type_names,
+        local_annotation_statuses,
+        local_annotation_names,
+    )
     types = source.types
     executable_test_annotations = executable_junit_test_annotations(
         structure,
@@ -1233,6 +1461,62 @@ def playwright_imported_identifiers(text: str, imported: str) -> frozenset[str]:
         local
         for local, origins in javascript_named_imports(text).items()
         if origins == frozenset({("@playwright/test", imported)})
+    )
+
+
+def playwright_has_computed_control(
+    text: str,
+    structure: str,
+    pattern: re.Pattern[str],
+) -> bool:
+    """Recognise quoted computed members only when their bracket is executable code."""
+    return any(structure[match.start()] == "[" for match in pattern.finditer(text))
+
+
+def playwright_has_ambiguous_test_member(text: str, structure: str) -> bool:
+    """Reject any non-literal computed member on an imported Playwright test binding."""
+    identifiers = playwright_imported_identifiers(text, "test")
+    if not identifiers:
+        return False
+    pattern = re.compile(
+        r"(?<![A-Za-z0-9_$])(?:"
+        + "|".join(re.escape(identifier) for identifier in sorted(identifiers))
+        + r")(?![A-Za-z0-9_$])\s*(?:\?\.)?\s*\["
+    )
+    return any(structure[match.end() - 1] == "[" for match in pattern.finditer(structure))
+
+
+def playwright_has_destructured_control(
+    structure: str,
+    controls: frozenset[str],
+    receivers: frozenset[str] | None = None,
+) -> bool:
+    """Reject aliased execution controls whose binding cannot be followed soundly."""
+    for declaration in PLAYWRIGHT_DESTRUCTURED_CONTROL.finditer(structure):
+        if receivers is not None and declaration.group("receiver") not in receivers:
+            continue
+        names = {
+            name
+            for binding in declaration.group("bindings").split(",")
+            if (name := binding.split(":", 1)[0].strip())
+        }
+        if names & controls:
+            return True
+    return False
+
+
+def playwright_has_dynamic_destructuring(
+    structure: str,
+    receivers: frozenset[str] | None = None,
+) -> bool:
+    """Detect computed property destructuring whose selected member is unknowable."""
+    return any(
+        "[" in declaration.group("bindings")
+        and (
+            receivers is None
+            or declaration.group("receiver") in receivers
+        )
+        for declaration in PLAYWRIGHT_DESTRUCTURED_CONTROL.finditer(structure)
     )
 
 
@@ -1478,7 +1762,24 @@ def configured_playwright_tests(root: Path) -> tuple[Path, ...]:
     for path in selected:
         text = source_without_comments(path.read_text(encoding="utf-8"))
         text = source_without_javascript_regex_literals(text)
-        if PLAYWRIGHT_FOCUSED.search(source_without_quoted_text(text)):
+        structure = source_without_quoted_text(text)
+        test_identifiers = playwright_imported_identifiers(text, "test")
+        if (
+            PLAYWRIGHT_FOCUSED.search(structure)
+            or playwright_has_computed_control(
+                text,
+                structure,
+                PLAYWRIGHT_COMPUTED_FOCUSED,
+            )
+            or playwright_has_destructured_control(
+                structure,
+                frozenset({"only"}),
+                test_identifiers,
+            )
+            or playwright_has_ambiguous_test_member(text, structure)
+            or playwright_has_dynamic_destructuring(structure, test_identifiers)
+            or PLAYWRIGHT_REFLECT_USAGE.search(structure)
+        ):
             raise ValueError(
                 "focused Playwright .only call prevents complete evidence discovery"
             )
@@ -1490,20 +1791,32 @@ def evidence_markers(
     java_discoverable_types: frozenset[str] | None = None,
     java_shadowed_tag_packages: frozenset[str] | None = None,
     java_package_type_names: frozenset[str] | None = None,
+    java_local_annotation_statuses: dict[str, str] | None = None,
+    java_local_annotation_names: frozenset[str] | None = None,
 ) -> frozenset[str]:
     text = source_without_comments(path.read_text(encoding="utf-8"))
     if path.suffix == ".java":
         structure = source_without_quoted_text(text)
+        package = JAVA_PACKAGE.search(structure)
+        package_name = package.group(1) if package is not None else ""
         package_type_names = java_package_type_names
         if package_type_names is None:
             package_type_names = java_top_level_type_names(structure)
+        local_annotation_statuses = java_local_annotation_statuses
+        local_annotation_names = java_local_annotation_names
+        if local_annotation_statuses is None or local_annotation_names is None:
+            local_annotation_statuses, local_annotation_names = (
+                classify_local_junit_annotations(
+                    [structure], {package_name: package_type_names}
+                )
+            )
         discoverable_types = java_discoverable_types
         if discoverable_types is None:
-            package = JAVA_PACKAGE.search(structure)
-            package_name = package.group(1) if package is not None else ""
             discoverable_types = discoverable_java_types(
                 [structure],
                 {package_name: package_type_names},
+                local_annotation_statuses,
+                local_annotation_names,
             )
         shadowed_tag_packages = java_shadowed_tag_packages
         if shadowed_tag_packages is None:
@@ -1519,13 +1832,31 @@ def evidence_markers(
             discoverable_types,
             shadowed_tag_packages,
             package_type_names,
+            local_annotation_statuses,
+            local_annotation_names,
         )
     if path.suffix == ".ts":
         text = source_without_javascript_regex_literals(text)
         structure = source_without_quoted_text(text)
         # Any member skip/fixme/fail call can make a test non-passing dynamically or
         # disable an enclosing suite. A mixed file supplies no evidence until split.
-        if PLAYWRIGHT_NON_PASSING.search(structure):
+        if (
+            PLAYWRIGHT_NON_PASSING.search(structure)
+            or playwright_has_computed_control(
+                text,
+                structure,
+                PLAYWRIGHT_COMPUTED_NON_PASSING,
+            )
+            or PLAYWRIGHT_DYNAMIC_COMPUTED_CALL.search(structure)
+            or PLAYWRIGHT_DYNAMIC_COMPUTED_ALIAS.search(structure)
+            or playwright_has_destructured_control(
+                structure,
+                frozenset({"skip", "fixme", "fail"}),
+            )
+            or playwright_has_dynamic_destructuring(structure)
+            or PLAYWRIGHT_REFLECT_USAGE.search(structure)
+            or playwright_has_ambiguous_test_member(text, structure)
+        ):
             return frozenset()
         return frozenset(
             marker for title in playwright_test_titles(text) for marker in MARKER.findall(title)
@@ -1542,7 +1873,15 @@ def inventory(root: Path = ROOT) -> MarkerInventory:
         for path in java_paths
     ]
     package_types = java_package_types(java_structures)
-    discoverable_types = discoverable_java_types(java_structures, package_types)
+    local_annotation_statuses, local_annotation_names = (
+        classify_local_junit_annotations(java_structures, package_types)
+    )
+    discoverable_types = discoverable_java_types(
+        java_structures,
+        package_types,
+        local_annotation_statuses,
+        local_annotation_names,
+    )
     shadowed_tag_packages = frozenset(
         java_source(structure).package_name
         for structure in java_structures
@@ -1556,6 +1895,8 @@ def inventory(root: Path = ROOT) -> MarkerInventory:
             discoverable_types,
             shadowed_tag_packages,
             package_types.get(package_name, frozenset()),
+            local_annotation_statuses,
+            local_annotation_names,
         ):
             found.setdefault(marker, set()).add(path.relative_to(root))
     for path in configured_playwright_tests(root):
