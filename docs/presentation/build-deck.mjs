@@ -17,6 +17,11 @@ const candidatePath = path.join(buildDir, "Customer_Activity_Analytics_final.can
 const validationReceiptPath = path.join(buildDir, "Customer_Activity_Analytics_final.validation.json");
 const pptxPath = path.join(outputDir, "Customer_Activity_Analytics_final.pptx");
 const screenshotDir = path.join(sourceDir, "assets", "screenshots", "crops");
+const r5ScreenshotPath = path.join(workspace, "docs", "reviewer", "screenshots", "R5_lmstudio_ensemble_customer_444.png");
+const r5ContextCrop = path.join(buildDir, "R5_context_landscape.png");
+const r5AnalysisCrop = path.join(buildDir, "R5_analysis_landscape.png");
+const r5ForestCrop = path.join(buildDir, "R5_forest_landscape.png");
+const r5ProvenanceCrop = path.join(buildDir, "R5_provenance_landscape.png");
 const runtimeModules = process.env.RUNTIME_NODE_MODULES;
 if (!runtimeModules) throw new Error("RUNTIME_NODE_MODULES is required");
 const runtimeRequire = createRequire(path.join(runtimeModules, "package.json"));
@@ -424,13 +429,13 @@ const legacySlides = [
       line(712, 300, 0, 90, { color: C.line, width: 2, arrow: true }),
       text(930, 176, 270, 34, "The management question", { size: 18, color: C.red, bold: true }),
       text(930, 228, 270, 158, "What can start now, what is blocked, and who owns the next reviewable increment?", { size: 19, color: C.ink, bold: true }),
-      text(930, 414, 270, 158, "The final slide will use the real WorkGraph screenshot. This schematic fixes the crop, annotation and spoken message.", { size: 14, color: C.muted }),
+      text(930, 414, 270, 158, "This conceptual projection explains the management question without disclosing a private Project capture.", { size: 14, color: C.muted }),
       ...footer(9),
     ],
     notes: note(
       "The WorkGraph answers readiness and dependency questions before work begins.",
-      "The final version will show the authentic Project view with a small number of annotations. I will use it to explain which items can start, which are blocked, how stacked work is ordered and where the accountable owner sits. This draft schematic defines the intended crop and narration only.",
-      "Do not present the schematic as a current GitHub screenshot. Replace it before the final freeze.",
+      "The conceptual projection explains which items can start, which are blocked, how stacked work is ordered and where the accountable owner sits without disclosing a private Project capture.",
+      "Do not present the conceptual projection as a current GitHub screenshot.",
       "Other Project views answer different management questions.",
       "00:45",
       "Why is a graph more useful than a backlog list?",
@@ -472,12 +477,12 @@ const legacySlides = [
   },
   {
     shapes: [
-      ...titleBlock("The next capabilities plug into boundaries that already exist", "Conditional slides"),
+      ...titleBlock("Delivered capabilities plug into boundaries that already exist", "Delivered R5"),
       ...[
         [72, 170, "LANDED", C.green, "Bayesian and fuzzy detectors", "Inspectable Stage 1 alternatives emit canonical evidence"],
         [72, 282, "LANDED", C.green, "Composite detector", "Ordered detector leaves preserve child evidence"],
-        [72, 394, "IN PROGRESS", C.amber, "Random Forest and typed backend selection", "Implementation remains bounded by project-owned ports"],
-        [72, 506, "NEXT", C.red, "Fusion, local synthesis and visible provenance", "Promote only when implementation and evidence land"],
+        [72, 394, "DELIVERED", C.green, "Random Forest and typed backend selection", "Implementation remains bounded by project-owned ports"],
+        [72, 506, "EXCLUDED", C.slate, "Calibrated late fusion", "Dataset ceiling prevents an honest comparison"],
       ].flatMap(([x, y, status, color, a, b]) => [
         line(x, y, 0, 72, { color, width: 7 }),
         text(x + 24, y, 158, 28, status, { size: 12, color, bold: true, tracking: 100 }),
@@ -489,8 +494,8 @@ const legacySlides = [
       ...footer(11),
     ],
     notes: note(
-      "Future capability remains credible because it enters through seams already exercised by simpler adapters.",
-      "Bayesian, fuzzy and Composite mechanisms already demonstrate Stage 1 replaceability. Random Forest and typed Stage 3 selection are active work. Calibrated fusion, local synthesis and richer operator-visible provenance remain conditional. A capability moves into the main story only after implementation, tests and retained evidence agree.",
+      "Delivered R5 capability enters through seams already exercised by simpler adapters; calibrated fusion remains excluded.",
+      "Bayesian, fuzzy, Random Forest and Composite demonstrate Stage 1 replaceability. Typed Stage 3 selection, local synthesis and operator-visible provenance are delivered. Calibrated fusion remains excluded because the synthetic fixture cannot support an honest comparison.",
       "Do not call the Random Forest vote share a calibrated probability. Do not claim production AML validity from synthetic data.",
       "The final slide connects the product result to a repeatable organisational model.",
       "00:50",
@@ -613,7 +618,7 @@ const legacySlides = [
     shapes: [
       ...titleBlock("Composite execution preserves child evidence while calibrated fusion remains separate", "Appendix E"),
       text(70, 174, 500, 42, "COMPOSITE, LANDED", { size: 17, color: C.green, bold: true }),
-      text(710, 174, 500, 42, "FUSION, CONDITIONAL", { size: 17, color: C.red, bold: true }),
+      text(710, 174, 500, 42, "FUSION, EXCLUDED", { size: 17, color: C.red, bold: true }),
       ...["Bayesian detector", "Fuzzy detector", "Random Forest when enabled"].flatMap((v, i) => [
         rect(88, 246 + i * 72, 360, 46, { fill: C.pale, line: C.line, radius: 6 }),
         text(108, 254 + i * 72, 320, 30, v, { size: 15, color: C.ink, bold: true, valign: "mid" }),
@@ -632,8 +637,8 @@ const legacySlides = [
   {
     appendix: true,
     shapes: [
-      ...titleBlock("Random Forest remains an in-progress substitution with bounded claims", "Appendix F"),
-      text(70, 164, 1140, 34, "STATUS AT THIS DRAFT: IN PROGRESS", { size: 14, color: C.amber, bold: true, tracking: 120 }),
+      ...titleBlock("The delivered Random Forest substitution keeps bounded claims", "Appendix F"),
+      text(70, 164, 1140, 34, "STATUS: DELIVERED", { size: 14, color: C.green, bold: true, tracking: 120 }),
       ...[
         [90, "INPUT", "Four bounded, non-PII features"],
         [430, "FOREST", "Fixed trained trees behind a project port"],
@@ -647,7 +652,7 @@ const legacySlides = [
       text(90, 474, 1020, 116, "The score is an unweighted forest vote share with no probability calibration. Synthetic training supports architecture and reproducibility work only. It provides no production AML validity.", { size: 17, color: C.white, bold: true, fill: C.ink, margin: 14, align: "center", valign: "mid" }),
       ...footer(18, true),
     ],
-    notes: note("The Random Forest work proves a replaceable detector boundary before it proves model quality.", "The adapter consumes four bounded non-PII features and validates model provenance. The current score means unweighted tree vote share for the REVIEW_ELEVATED class. Synthetic training and the current evaluation ceiling prevent any claim of calibration or production AML effectiveness.", "Never call the vote share a probability. Never imply the synthetic data validates real customers.", "Use this slide only if the reviewer asks about current R5 work or future learned detectors.", "00:45 if asked", "What would make this production credible?", "A governed real-data programme, representative holdout evaluation, calibration, monitoring, documented feature lineage and independent model-risk review.", ["GitHub issue #223", "MEMORY note on Random Forest boundaries", "RandomForestRiskSignalDetectorAdapter and tests in active worktree"]),
+    notes: note("The delivered Random Forest proves a replaceable detector boundary without proving model quality.", "The adapter consumes four bounded non-PII features and validates model provenance. The current score means unweighted tree vote share for the REVIEW_ELEVATED class. Synthetic training and the dataset ceiling prevent any claim of calibration or production AML effectiveness.", "Never call the vote share a probability. Never imply the synthetic data validates real customers.", "Use this slide only if the reviewer asks about the delivered learned detector.", "00:45 if asked", "What would make this production credible?", "A governed real-data programme, representative holdout evaluation, calibration, monitoring, documented feature lineage and independent model-risk review.", ["GitHub issue #223", "docs/analysis/dataset-ceiling.md", "RandomForestRiskSignalDetectorAdapter and tests"]),
   },
   {
     appendix: true,
@@ -660,7 +665,7 @@ const legacySlides = [
       ...[
         [590, 190, "DETERMINISTIC", "Landed baseline", C.green],
         [590, 312, "OPENAI", "Optional external provider", C.blue],
-        [590, 434, "LOCAL MODEL", "Conditional LM Studio adapter", C.amber],
+        [590, 434, "LOCAL MODEL", "Delivered LM Studio adapter", C.green],
       ].flatMap(([x, y, a, b, color]) => [
         rect(x, y, 500, 82, { fill: C.white, line: color, width: 2, radius: 10 }),
         text(x + 20, y + 14, 220, 24, a, { size: 15, color, bold: true }),
@@ -813,14 +818,15 @@ const slides = [
   },
   {
     shapes: [
-      ...titleBlock("The pilot produced a working operator path and a controlled delivery system", "Answer first"),
+      ...titleBlock("R5 proves the full local-model operator path and the controlled delivery system", "Answer first"),
       rect(58, 168, 650, 406, { fill: C.white, line: C.line, width: 1, radius: 0 }),
-      image(70, 180, 626, 390, path.join(screenshotDir, "R4_context_landscape.png")),
+      image(70, 180, 626, 390, r5ContextCrop),
+      text(82, 192, 206, 30, "R5 · AUTHENTIC CI CAPTURE", { size: 11, color: C.white, bold: true, fill: C.redDark, margin: 7, valign: "mid" }),
       line(746, 190, 0, 360, { color: C.line, width: 2 }),
       ellipse(792, 184, 58, 58, { fill: C.red, line: C.red }),
       text(792, 197, 58, 32, "1", { size: 20, color: C.white, bold: true, align: "center", valign: "mid" }),
       text(874, 182, 300, 34, "Product proof", { size: 22, color: C.ink, bold: true }),
-      text(874, 224, 318, 86, "An authenticated operator can inspect source activity, run grounded analysis and reopen persisted history.", { size: 17, color: C.muted }),
+      text(874, 224, 318, 86, "R5 combines authenticated review, three detector artifacts, pgvector grounding and local LM Studio synthesis.", { size: 16, color: C.muted }),
       ellipse(792, 338, 58, 58, { fill: C.blue, line: C.blue }),
       text(792, 351, 58, 32, "2", { size: 20, color: C.white, bold: true, align: "center", valign: "mid" }),
       text(874, 336, 300, 34, "Method proof", { size: 22, color: C.ink, bold: true }),
@@ -831,13 +837,13 @@ const slides = [
     ],
     notes: note(
       "Two results answer the exercise before any architecture detail.",
-      "The first result is visible in the browser. The second is visible in the repository and its GitHub work graph. The two belong together because a financial-services demonstration needs reviewable evidence for both the recommendation and the way the software change was accepted.",
+      "The first result is visible in the R5 browser capture. The authenticated operator can inspect source activity, run all three Stage 1 detectors through Composite, retrieve synthetic policy with pgvector and all-MiniLM-L6-v2, synthesize through the local LM Studio adapter and reopen the persisted result. The second result is visible in the repository and its GitHub work graph.",
       "Do not imply that AI agents accept their own work. The human accepts the change and the operator retains the decision.",
       "I will first show the operator loop, then explain the trust architecture and finally the delivery control plane.",
       "00:45",
       "Why present the engineering process as a result?",
       "The role is a pilot. The repeatable delivery cell matters alongside the application because other engineers could later use the same controlled pattern.",
-      ["docs/assignment/Inception/Inception.md sections 1, 24 and 28", "GitHub issue #229", "Authentic R4 Playwright artifact 9856114241"]
+      ["docs/assignment/Inception/Inception.md sections 1, 24 and 28", "GitHub issue #229", "docs/reviewer/screenshot-manifest.md", "R5 workflow run 34020857953", "R5 source SHA f6b989af9574a8d54249e29ffff2045129d8f127"]
     ),
   },
   {
@@ -883,25 +889,28 @@ const slides = [
   },
   {
     shapes: [
-      ...titleBlock("The browser exposes source facts, retrieved policy and persisted history", "Executable product evidence"),
-      rect(58, 170, 630, 442, { fill: C.white, line: C.line, width: 1, radius: 0 }),
-      image(68, 180, 610, 429, path.join(screenshotDir, "R4_context_landscape.png")),
-      rect(714, 170, 508, 360, { fill: C.white, line: C.line, width: 1, radius: 0 }),
-      image(724, 180, 488, 343, path.join(screenshotDir, "R4_analysis_landscape.png")),
-      text(76, 188, 132, 30, "1  FACTS", { size: 13, color: C.white, bold: true, fill: C.red, margin: 7, valign: "mid" }),
-      text(732, 188, 172, 30, "2  GROUNDING", { size: 13, color: C.white, bold: true, fill: C.blue, margin: 7, valign: "mid" }),
-      text(714, 548, 508, 64, "The same Playwright flow asserts the visible operator, retrieval provenance and later history.", { size: 16, color: C.ink, bold: true, align: "center", valign: "mid", fill: C.blueSoft, margin: 10 }),
+      ...titleBlock("R5 exposes three detector artifacts, policy grounding and local-model provenance", "Executable product evidence"),
+      ...[
+        [58, r5AnalysisCrop, "1  BAYESIAN + FUZZY", C.red],
+        [450, r5ForestCrop, "2  FUZZY + FOREST", C.green],
+        [842, r5ProvenanceCrop, "3  POLICY + LOCAL MODEL", C.blue],
+      ].flatMap(([x, src, label, color]) => [
+        rect(x, 170, 362, 352, { fill: C.white, line: C.line, width: 1, radius: 0 }),
+        image(x + 8, 180, 346, 334, src),
+        text(x + 16, 188, 226, 30, label, { size: 11, color: C.white, bold: true, fill: color, margin: 7, valign: "mid" }),
+      ]),
+      text(58, 548, 1146, 64, "CI uses a deterministic LM Studio contract double. The WatchInfra rehearsal proves the same immutable candidate against the real process and Developer Logs.", { size: 15, color: C.ink, bold: true, align: "center", valign: "mid", fill: C.blueSoft, margin: 10 }),
       ...footer(4),
     ],
     notes: note(
-      "The live demo follows the evidence chain already shown.",
-      "Presenter rail: log in as operator-alpha, search customer 444, inspect CARD, PAYMENT and CRYPTO facts, point to source risk evidence, run deterministic analysis, show pgvector and all-MiniLM-L6-v2 provenance, then reopen the persisted history. Stop after those checkpoints and return to the deck.",
-      "Do not compare every backend during the live path. Do not read UUIDs aloud. Do not leave the rail on the slide. Use the notes as the prompt.",
+      "The retained R5 capture and the manual rehearsal prove complementary boundaries.",
+      "Presenter rail: log in as operator-alpha, search customer 444, inspect the structured activities and source risk evidence, run analysis, show the request in LM Studio Developer Logs, then show the three Stage 1 artifacts, pgvector grounding, backend local, the Ministral model, external transmission no and retained history after reload.",
+      "Do not present the CI contract double as the real LM Studio process. Do not compare every backend during the live path. Do not read UUIDs aloud.",
       "The next slide explains why those visible sections remain distinct inside the application.",
       "04:30 including browser switch",
       "How do I know this path is not a mockup?",
-      "The images come from Playwright execution against the packaged application and real PostgreSQL/pgvector topology. The appendix retains the ring-by-ring captures and artifact provenance.",
-      ["docs/reviewer/screenshot-manifest.md", "docs/reviewer/demo-fallback.md", "R4 workflow run 33653841308", "Artifact 9856114241", "Source SHA 9d44021d95ea052d19ff67152f3af093c4cf8b49"]
+      "The image comes from an authenticated Playwright flow against the packaged R5 topology and its deterministic OpenAI-compatible contract double. The separate WatchInfra rehearsal proves the immutable candidate against the real LM Studio process.",
+      ["docs/reviewer/screenshot-manifest.md", "docs/reviewer/demo-fallback.md", "R5 workflow run 34020857953", "Artifact 9985493952", "Source SHA f6b989af9574a8d54249e29ffff2045129d8f127"]
     ),
   },
   {
@@ -947,7 +956,7 @@ const slides = [
   {
     shapes: [
       ...titleBlock("Bounded mechanisms share one analytical pipeline", "Implementation landscape"),
-      text(60, 143, 300, 20, "STATUS · 5 SEPTEMBER 2026", { size: 10, color: C.muted, bold: true, tracking: 110 }),
+      text(60, 143, 300, 20, "STATUS · 6 SEPTEMBER 2026", { size: 10, color: C.muted, bold: true, tracking: 110 }),
       ellipse(718, 146, 12, 12, { fill: C.green, line: C.green }),
       text(738, 141, 82, 22, "LANDED", { size: 10, color: C.muted, bold: true }),
       ellipse(838, 146, 12, 12, { fill: C.amber, line: C.amber }),
@@ -1004,7 +1013,7 @@ const slides = [
       rect(656, 406, 226, 96, { fill: C.white, line: C.green, width: 1.5, radius: 8 }),
       icon(672, 430, 30, "Database", C.green),
       ellipse(856, 416, 10, 10, { fill: C.green, line: C.green }),
-      text(716, 417, 150, 26, "pgvector + MiniLM", { size: 12.5, color: C.ink, bold: true }),
+      text(716, 417, 150, 26, "pgvector + all-MiniLM-L6-v2", { size: 10.5, color: C.ink, bold: true }),
       text(716, 450, 150, 36, "local semantic retrieval\nwith source metadata", { size: 10.5, color: C.muted }),
       rect(656, 518, 226, 46, { fill: C.blueSoft, line: C.blue, width: 1, radius: 6 }),
       text(672, 526, 194, 28, "PolicyEvidence + provenance", { size: 11, color: C.blue, bold: true, align: "center", valign: "mid" }),
@@ -1023,7 +1032,7 @@ const slides = [
       ...[
         [312, "ShieldCheck", "Deterministic", "offline acceptance baseline", C.green, ""],
         [394, "CloudCog", "OpenAI", "explicit external opt-in", C.green, "https://github.com/jdoe-dev-159753/specgraph-reference-app/pull/221"],
-        [476, "LaptopMinimal", "Local / LM Studio", "delivered private option", C.amber, "https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/251"],
+        [476, "LaptopMinimal", "Local / LM Studio", "R5 interview path", C.green, "https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/251"],
       ].flatMap(([y, asset, heading, detail, status, href]) => [
         rect(924, y, 284, 68, { fill: C.white, line: status, width: 1.5, radius: 8 }),
         icon(940, y + 18, 30, asset, status === C.slate ? C.slate : C.amber),
@@ -1041,7 +1050,7 @@ const slides = [
     ],
     notes: note(
       "The analytical pipeline supports several implementations without becoming several applications.",
-      "Read the slide left to right. Stage 1 includes landed Bayesian, fuzzy, Composite and Random Forest mechanisms. The packaged Tribuo forest contains 31 uniformly weighted trees. Stage 2 offers static and local pgvector plus MiniLM grounding. Stage 3 delivers typed selection across deterministic, opt-in OpenAI and optional private-network LM Studio implementations. Calibrated heterogeneous fusion is excluded because the fixture cannot support an honest performance comparison.",
+      "Read the slide left to right. R5 executes Bayesian, fuzzy and Random Forest through Composite while preserving all three artifacts. The packaged Tribuo forest contains 31 uniformly weighted trees. Stage 2 retrieves only synthetic policy fragments through pgvector and all-MiniLM-L6-v2. Stage 3 uses the local LM Studio adapter as the interview path; deterministic remains the acceptance baseline and OpenAI remains an explicit external opt-in.",
       "Do not call the Composite a calibrated ensemble. Do not call the Random Forest vote share a calibrated probability. The dataset-ceiling analysis reached a no-go for production performance benchmarking.",
       "The next slide shows the ports that make this portfolio replaceable without moving application semantics.",
       "01:15",
@@ -1072,7 +1081,7 @@ const slides = [
         [250, "Customer\nActivityPort", "Hibernate/JPA\nFlyway schema", "Database", C.blue],
         [440, "Risk Signal\nDetectorPort", "No-op · Bayesian · Fuzzy\nRandom Forest", "Radar", C.redDark],
         [630, "Policy\nKnowledge\nPort", "pgvector + MiniLM\nStatic baseline", "BookOpenCheck", C.green],
-        [820, "Analysis\nModelPort", "Deterministic · OpenAI\nLM Studio optional", "BrainCircuit", C.amber],
+        [820, "Analysis\nModelPort", "LM Studio interview path\nDeterministic · OpenAI", "BrainCircuit", C.amber],
         [1010, "Analysis\nHistoryPort", "Hibernate/JPA\nFlyway schema", "History", C.slate],
       ].flatMap(([x, port, adapters, asset, color]) => [
         rect(x, 416, 174, 70, { fill: C.redSoft, line: C.red, width: 2, radius: 8 }),
@@ -1116,8 +1125,8 @@ const slides = [
         [570, 248, "R1", "Synthetic customer review", "First meaningful operator path"],
         [570, 316, "R2", "Relational substitution", "PostgreSQL and source-shaped evidence"],
         [570, 384, "R3", "Analysis and history", "Deterministic end-to-end baseline"],
-        [570, 452, "R4", "Authentication and real retrieval", "Current required capability"],
-        [570, 520, "R5", "Hardening and comparison", "Delivered options with bounded claims"],
+        [570, 452, "R4", "Authentication and real retrieval", "Stable authenticated foundation"],
+        [570, 520, "R5", "Full interview runtime", "Composite + pgvector + local LM Studio"],
       ].flatMap(([x, y, ring, h, b], i) => [
         text(x, y, 48, 30, ring, { size: 15, color: i >= 4 ? C.red : C.ink, bold: true }),
         line(x + 58, y + 14, 44, 0, { color: i >= 4 ? C.red : C.line, width: 2 }),
@@ -1128,7 +1137,7 @@ const slides = [
     ],
     notes: note(
       "Every ring preserved a coherent demonstrable application.",
-      "R0 established the real shell. R1 made the customer review meaningful. R2 changed storage. R3 added deterministic analysis and history. R4 added authentication and real retrieval. R5 delivers bounded hardening and optional differentiation, including the packaged forest and typed model backends. Rings describe capability maturity. J1 to J5 remain the calendar dimension.",
+      "R0 established the real shell. R1 made customer review meaningful. R2 changed storage. R3 added deterministic analysis and history. R4 added authentication and real retrieval. R5 delivers the full interview runtime: all three detectors through Composite, pgvector grounding, local LM Studio synthesis, visible provenance and retained history. Rings describe capability maturity. J1 to J5 remain the calendar dimension.",
       "Do not describe the forest vote share as calibrated or the synthetic fixture as production evidence. Calibrated fusion remains excluded.",
       "The same discipline governed the parallel work through GitHub.",
       "00:50",
@@ -1337,29 +1346,30 @@ const slides = [
   {
     appendix: true,
     shapes: [
-      ...titleBlock("Authentic Playwright captures document the capability growth from R1 to R4", "Appendix A · Browser evidence"),
+      ...titleBlock("Authentic Playwright captures document the capability growth from R1 to R5", "Appendix A · Browser evidence"),
       ...[
-        [60, 166, "R1", "Synthetic review", "R1_strip.png", C.ink],
-        [680, 166, "R2", "PostgreSQL substitution", "R2_strip.png", C.blue],
-        [60, 414, "R3", "Analysis and history", "R3_strip.png", C.green],
-        [680, 414, "R4", "Auth + real retrieval", "R4_strip.png", C.red],
-      ].flatMap(([x,y,ring,label,file,color])=>[
-        rect(x,y,540,232,{fill:C.white,line:C.line,width:1,radius:0}),
-        image(x+6,y+6,528,225,path.join(screenshotDir,file)),
+        [60, 166, "R1", "Synthetic review", path.join(screenshotDir, "R1_strip.png"), C.ink],
+        [460, 166, "R2", "PostgreSQL substitution", path.join(screenshotDir, "R2_strip.png"), C.blue],
+        [860, 166, "R3", "Analysis and history", path.join(screenshotDir, "R3_strip.png"), C.green],
+        [60, 402, "R4", "Auth + real retrieval", path.join(screenshotDir, "R4_strip.png"), C.red],
+        [660, 402, "R5", "Composite + local LM Studio", r5ProvenanceCrop, C.redDark],
+      ].flatMap(([x,y,ring,label,file,color], index)=>[
+        rect(x,y,index < 3 ? 360 : 560,index < 3 ? 196 : 232,{fill:C.white,line:C.line,width:1,radius:0}),
+        image(x+6,y+6,index < 3 ? 348 : 548,index < 3 ? 189 : 225,file),
         text(x+14,y+12,54,28,ring,{size:13,color:C.white,bold:true,fill:color,align:"center",valign:"mid"}),
-        text(x+76,y+12,270,28,label,{size:13,color:C.white,bold:true,fill:color,margin:6,valign:"mid"}),
+        text(x+76,y+12,index < 3 ? 246 : 330,28,label,{size:index < 3 ? 11 : 13,color:C.white,bold:true,fill:color,margin:6,valign:"mid"}),
       ]),
       ...footer("A", true),
     ],
     notes: note(
       "These are crops from authentic Playwright screenshots, not reconstructed mockups.",
-      "R1 shows the synthetic customer review. R2 shows storage substitution through the same visible contract. R3 adds deterministic analysis and history. R4 adds authenticated operator identity and real pgvector retrieval. These retained crops and their manifest form the mandatory fallback when the live path is unavailable; a short recording is optional.",
+      "R1 shows synthetic customer review. R2 shows storage substitution through the same visible contract. R3 adds deterministic analysis and history. R4 adds authenticated operator identity and real pgvector retrieval. R5 adds all three detector artifacts, local-model provenance and retained history. The R5 image is a pixel-preserving crop of the authentic workflow PNG; its manifest keeps the original digest and source identity.",
       "Do not treat image recency as newer than the source SHA in the manifest. Do not present these crops as GitHub Project views.",
       "Return to the relevant main slide or continue to the architecture appendix.",
       "As needed",
       "Why trust these screenshots?",
       "The workflows assert the ring-specific behavior before retaining the Playwright artifact, and the manifest records run, artifact, digest, customer and source revision.",
-      ["docs/reviewer/screenshot-manifest.md", "R1/R2/R3 artifact 9844165175", "R4 artifact 9856114241"]
+      ["docs/reviewer/screenshot-manifest.md", "R1/R2/R3 artifact 9844165175", "R4 artifact 9856114241", "R5 artifact 9985493952", "R5 PNG SHA-256 7503a8da09678241d8d06064d3927961c0ec758a14c0254531f18a2c19411a05"]
     ),
   },
   {
@@ -1438,7 +1448,7 @@ const slides = [
       "These are linear right-shoulder membership functions, not probability distributions.",
       "The implementation calls this function rising. Values at or below a receive zero membership. The interval from a to b gives graded activation. Values at or above b receive full activation. The cross-border plus source-risk rule takes the minimum of both memberships. A monotonic weighted singleton mean then combines the baseline and positive rules.",
       "Do not call fuzzy membership a statistical probability. Do not claim these synthetic thresholds are institutional policy.",
-      "The next conditional slide explains how different detector families could be arbitrated after their semantics become comparable.",
+      "The next slide explains why calibrated arbitration remains outside the final scope.",
       "00:60 if asked",
       "Are the plateau values validated risk thresholds?",
       "No. They are synthetic demonstration parameters chosen to give a bounded monotonic response. A production setting would need policy ownership, empirical evaluation and versioned approval.",
@@ -1558,9 +1568,9 @@ const slides = [
       text(382, 350, 168, 28, "TYPED FACTORY", { size:14,color:C.redDark,bold:true,align:"center" }),
       text(382, 386, 168, 28, "identity and capability checks", { size:10,color:C.ink,align:"center" }),
       ...[
-        [652, 196, C.green, "DETERMINISTIC", "landed baseline", "ListChecks"],
-        [652, 302, C.blue, "OPENAI", "optional adapter", "CloudCog"],
-        [652, 408, C.amber, "LM STUDIO", "optional private adapter", "LaptopMinimal"],
+        [652, 196, C.green, "DETERMINISTIC", "acceptance baseline", "ListChecks"],
+        [652, 302, C.blue, "OPENAI", "explicit external opt-in", "CloudCog"],
+        [652, 408, C.green, "LM STUDIO", "R5 interview path", "LaptopMinimal"],
       ].flatMap(([x,y,color,h,b,asset])=>[
         rect(x,y,250,80,{fill:C.white,line:color,width:2,radius:10}),
         ...iconBadge(x+14,y+15,50,asset,color,C.pale,true),
@@ -1575,12 +1585,13 @@ const slides = [
       rect(934, 488, 326, 100, { fill:C.blueSoft,line:C.blue,width:2,radius:10 }),
       ...iconBadge(954, 512, 52, "ShieldCheck", C.blue, C.white, true),
       text(1024, 506, 210, 62, "Grounding validator\nand persisted history", { size:15,color:C.ink,bold:true,align:"center",valign:"mid" }),
-      text(108, 610, 800, 34, "Default path sends no customer or policy content outside the local system", { size:15,color:C.muted,bold:true }),
+      text(108, 602, 800, 24, "R5 local path sends no customer or policy content to an external provider", { size:14,color:C.muted,bold:true }),
+      text(108, 628, 800, 20, "Token estimate uses CL100K + 25% + margin, not the exact Ministral tokenizer", { size:11,color:C.redDark,bold:true }),
       ...footer("G", true),
     ],
     notes: note(
       "Stage 3 selection is a factory concern, not application semantics.",
-      "The bounded envelope enters one delivered typed selection point. Deterministic execution remains the safe default. OpenAI is an explicit external option. LM Studio is an explicit private-network option with an IP-literal endpoint restriction. Every adapter returns the same structured result and model provenance. The grounding validator and history contract remain unchanged.",
+      "The bounded envelope enters one delivered typed selection point. The R5 interview configuration selects LM Studio on the private network with an IP-literal endpoint restriction. Deterministic execution remains the acceptance baseline and OpenAI remains an explicit external opt-in. Every adapter returns the same structured result and model provenance. The grounding validator and history contract remain unchanged.",
       "Do not imply equivalent output quality across backends. Optional model execution does not change source-fact authority.",
       "The final appendix slide maps behaviors to the evidence level that proves them.",
       "00:55 if asked",
@@ -1769,6 +1780,10 @@ async function build() {
   await fs.mkdir(path.join(packageDir, "ppt", "media"), { recursive: true });
   await fs.mkdir(previewDir, { recursive: true });
   await fs.mkdir(outputDir, { recursive: true });
+  await sharp(r5ScreenshotPath).extract({ left: 0, top: 0, width: 1280, height: 900 }).png().toFile(r5ContextCrop);
+  await sharp(r5ScreenshotPath).extract({ left: 0, top: 1400, width: 1280, height: 900 }).png().toFile(r5AnalysisCrop);
+  await sharp(r5ScreenshotPath).extract({ left: 0, top: 2000, width: 1280, height: 900 }).png().toFile(r5ForestCrop);
+  await sharp(r5ScreenshotPath).extract({ left: 0, top: 2600, width: 1280, height: 900 }).png().toFile(r5ProvenanceCrop);
   await renderLucideAssets();
 
   const overrides = [
