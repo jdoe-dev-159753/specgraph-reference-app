@@ -277,6 +277,12 @@ jobs:
             specgraph-reference-app:r2 \
             specgraph-reference-app:r3 \
             specgraph-reference-app:r4 2>/dev/null || true
+          # The remote proof pulls these immutable upstream dependencies again after
+          # publication. Do not retain the large local-proof images across both rings.
+          docker image rm -f \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            postgres:17-alpine \
+            pgvector/pgvector:0.8.6-pg17 2>/dev/null || true
           docker buildx du --builder "$BUILDER_NAME"
           df -h "$GITHUB_WORKSPACE"
 
@@ -284,7 +290,7 @@ jobs:
         run: |
           available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR==2 {print $4}')"
           minimum_kb=$((8 * 1024 * 1024))
-          echo "Publication headroom after native-image reclamation: $((available_kb / 1024)) MiB"
+          echo "Publication headroom after local-proof image reclamation: $((available_kb / 1024)) MiB"
           if [ "$available_kb" -lt "$minimum_kb" ]; then
             echo "Need at least 8 GiB free before the first registry mutation; only $((available_kb / 1024)) MiB is available." >&2
             exit 1
