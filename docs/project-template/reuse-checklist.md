@@ -3,6 +3,7 @@
 - [ ] Replace every `REPLACE-ME` and `EXAMPLE` identifier with project-owned identities.
 - [ ] Delete guidance that does not apply instead of preserving it ceremonially.
 - [ ] Record the real problem, assumptions, non-goals, and acceptance criteria.
+- [ ] Replace the example ADR with each decision that genuinely constrains the design.
 - [ ] Confirm every design identity refines a known requirement or invariant.
 - [ ] Confirm every normative requirement has a verification obligation.
 - [ ] Create native issue hierarchy and dependencies before populating Project fields.
