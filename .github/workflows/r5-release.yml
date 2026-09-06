@@ -51,6 +51,12 @@ jobs:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       R5_MODEL: ministral-3-8b-instruct-2512
       R5_EMBEDDING_CACHE_VOLUME: specgraph-r5-ci-embedding-cache-${{ github.run_id }}-${{ github.run_attempt }}
+      R5_NETWORK_NAME: specgraph-r5-release-${{ github.run_id }}-${{ github.run_attempt }}
+      R5_STUB_NAME: specgraph-r5-release-stub-${{ github.run_id }}-${{ github.run_attempt }}
+      COMPOSE_PROJECT_NAME: specgraph-r5-release-${{ github.run_id }}-${{ github.run_attempt }}
+      BUILDX_BUILDER: specgraph-r5-${{ github.run_id }}-${{ github.run_attempt }}
+      BUILDKIT_CACHE_MOUNT_NS: specgraph-r5-${{ github.run_id }}-${{ github.run_attempt }}
+      DOCKER_CONFIG: /tmp/specgraph-docker-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Clean container-owned outputs before checkout
@@ -72,8 +78,11 @@ jobs:
 
       - name: Build exact-head R5 and browser dependency images
         run: |
+          mkdir -p "$DOCKER_CONFIG"
+          bash scripts/ci/run-scoped-buildx.sh prepare
           local_image="specgraph-reference-app:r5-${SOURCE_SHA}"
-          docker build -f docker/app.Dockerfile \
+          docker buildx build --builder "$BUILDX_BUILDER" --load -f docker/app.Dockerfile \
+            --build-arg "BUILDKIT_CACHE_MOUNT_NS=$BUILDKIT_CACHE_MOUNT_NS" \
             --build-arg DELIVERY_RING=R5 \
             --label "org.opencontainers.image.revision=$SOURCE_SHA" \
             --label "dev.specgraph.delivery-ring=R5" \
@@ -84,32 +93,29 @@ jobs:
 
       - name: Start isolated OpenAI-compatible contract endpoint
         run: |
-          network_name="specgraph-r5-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          stub_name="specgraph-r5-release-stub-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          app_port=$((30000 + GITHUB_RUN_ID % 10000))
-          stub_port=$((41000 + GITHUB_RUN_ID % 10000))
-          docker network create "$network_name"
+          app_port=$((30000 + (GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT) % 10000))
+          stub_port=$((41000 + (GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT) % 10000))
+          {
+            echo "R5_PORT=$app_port"
+            echo "R5_STUB_PORT=$stub_port"
+          } >> "$GITHUB_ENV"
+          docker network create "$R5_NETWORK_NAME"
           docker volume create "$R5_EMBEDDING_CACHE_VOLUME" >/dev/null
           mkdir -p e2e/test-results
-          docker run -d --name "$stub_name" --network "$network_name" \
+          docker run -d --name "$R5_STUB_NAME" --network "$R5_NETWORK_NAME" \
             -v "$PWD/scripts/ci/lm-studio-contract-stub.py:/stub.py:ro" \
             -v "$PWD/e2e/test-results:/evidence" \
             python:3.13-alpine \
             python /stub.py --port "$stub_port" --model "$R5_MODEL" \
               --request-log /evidence/r5-lm-studio-requests.jsonl
-          stub_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$stub_name")"
+          stub_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$R5_STUB_NAME")"
           for attempt in $(seq 1 30); do
-            docker exec "$stub_name" wget -q -O /dev/null "http://127.0.0.1:${stub_port}/v1/models" && break
+            docker exec "$R5_STUB_NAME" wget -q -O /dev/null "http://127.0.0.1:${stub_port}/v1/models" && break
             [ "$attempt" -lt 30 ] || exit 1
             sleep 1
           done
           {
-            echo "R5_NETWORK_NAME=$network_name"
-            echo "R5_STUB_NAME=$stub_name"
-            echo "R5_PORT=$app_port"
-            echo "R5_STUB_PORT=$stub_port"
             echo "R5_STUB_IP=$stub_ip"
-            echo "COMPOSE_PROJECT_NAME=specgraph-r5-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_ENV"
 
       - name: Start the exact R5 topology
@@ -238,5 +244,7 @@ jobs:
           [ -z "${R5_EMBEDDING_CACHE_VOLUME:-}" ] || docker volume rm -f "$R5_EMBEDDING_CACHE_VOLUME" || true
           [ -z "${LOCAL_R5_IMAGE:-}" ] || docker image rm -f "$LOCAL_R5_IMAGE" || true
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
-            sh -c 'rm -rf /workspace/build' || true
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/e2e/reviewer-evidence /workspace/build' || true
           docker logout ghcr.io || true
+          bash scripts/ci/run-scoped-buildx.sh cleanup
+          rm -rf "$DOCKER_CONFIG"

@@ -134,6 +134,8 @@ jobs:
 
       - name: Verify frontend
         working-directory: frontend
+        env:
+          npm_config_cache: ${{ runner.temp }}/specgraph-npm-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           npm install --prefer-offline --no-audit --no-fund
           npm run build
@@ -144,7 +146,8 @@ jobs:
           docker compose -f compose.oci.yaml config --quiet
           docker compose -f compose.r4.yaml config --quiet
           docker compose -f compose.r5.yaml config --quiet
-          R5_NETWORK_NAME=specgraph-r5-ci docker compose \
+          R5_NETWORK_NAME="specgraph-r5-config-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+          R5_EMBEDDING_CACHE_VOLUME="specgraph-r5-config-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" docker compose \
             -f compose.r5.yaml -f compose.r5.ci.yaml config --quiet
           if OPENAI_API_KEY=must-not-enter-deterministic-r4 \
               docker compose -f compose.r4.yaml config | grep -Fq must-not-enter-deterministic-r4; then
@@ -158,12 +161,21 @@ jobs:
       - name: Verify R5 runtime lifecycle scripts
         run: bash scripts/test-r5-runtime.sh
 
+      - name: Reclaim fast-verification outputs and npm cache
+        if: always()
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams /workspace/build /workspace/scripts/__pycache__'
+          rm -rf "$RUNNER_TEMP/specgraph-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
   verify:
     if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.event_name == 'workflow_dispatch' && inputs.compatibility == true }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       COMPOSE_PROJECT_NAME: specgraph-ci-${{ github.run_id }}-${{ github.run_attempt }}
       MAVEN_CACHE_VOLUME: specgraph-maven-${{ github.run_id }}-${{ github.run_attempt }}
+      BUILDX_BUILDER: specgraph-application-${{ github.run_id }}-${{ github.run_attempt }}
+      BUILDKIT_CACHE_MOUNT_NS: specgraph-application-${{ github.run_id }}-${{ github.run_attempt }}
       R1_PORT: '8081'
       R2_PORT: '8082'
       R3_PORT: '8083'
@@ -291,6 +303,7 @@ jobs:
 
       - name: Reuse or build exact-head R3 and archived R2/R1 images
         run: |
+          bash scripts/ci/run-scoped-buildx.sh prepare
           r3_image="$(bash scripts/ci/ensure-app-image.sh \
             "specgraph-reference-app:r3-ci-${SOURCE_SHA}" . "$SOURCE_SHA")"
           r2_image="$(bash scripts/ci/ensure-app-image.sh \
@@ -456,4 +469,8 @@ jobs:
         run: |
           docker compose down --remove-orphans || true
           docker volume rm "$MAVEN_CACHE_VOLUME" 2>/dev/null || true
+          bash scripts/ci/run-scoped-buildx.sh cleanup
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/build'
+          rm -rf "$RUNNER_TEMP/specgraph-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           df -h "$GITHUB_WORKSPACE" || true

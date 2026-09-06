@@ -55,7 +55,8 @@ if docker image inspect "$image_tag" >/dev/null 2>&1; then
 fi
 
 echo "Building immutable application image ${image_tag} from ${source_root} @ ${source_revision}, recipe ${recipe_sha}" >&2
-DOCKER_BUILDKIT=1 docker build \
+docker buildx build --builder "${BUILDX_BUILDER:?run-scoped builder required}" --load \
+  --build-arg "BUILDKIT_CACHE_MOUNT_NS=${BUILDKIT_CACHE_MOUNT_NS:?run-scoped cache namespace required}" \
   -f docker/app.Dockerfile \
   --build-arg "SOURCE_ROOT=${source_root}" \
   --build-arg "SOURCE_REVISION=${source_revision}" \

@@ -34,6 +34,8 @@ jobs:
       R4_BAYESIAN_PORT: '8085'
       # Retain a small hot cache between rings without allowing five builds to fill a 36 GiB runner.
       BUILDER_CACHE_MAX: '2gb'
+      BUILDKIT_CACHE_MOUNT_NS: specgraph-demo-${{ github.run_id }}-${{ github.run_attempt }}
+      DOCKER_CONFIG: /tmp/specgraph-docker-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Refuse non-main publication dispatch
@@ -140,6 +142,7 @@ jobs:
 
       - name: Create run-scoped Buildx builder
         run: |
+          mkdir -p "$DOCKER_CONFIG"
           # One exact builder owns both native and multi-platform cache, so every prune is scoped.
           docker buildx create --name "$BUILDER_NAME" --driver docker-container
           docker buildx inspect "$BUILDER_NAME" --bootstrap
@@ -151,6 +154,7 @@ jobs:
             ring_upper="$(printf '%s' "$ring" | tr '[:lower:]' '[:upper:]')"
             ring_sha="$(eval "printf '%s' \"\$${ring_upper}_SHA\"")"
             docker buildx build --builder "$BUILDER_NAME" \
+              --build-arg "BUILDKIT_CACHE_MOUNT_NS=$BUILDKIT_CACHE_MOUNT_NS" \
               --platform linux/amd64 \
               --load \
               -f docker/app.Dockerfile \
@@ -182,7 +186,7 @@ jobs:
           APP_R2_IMAGE: specgraph-reference-app:r2
           APP_R3_IMAGE: specgraph-reference-app:r3
           APP_R4_IMAGE: specgraph-reference-app:r4
-          COMPOSE_PROJECT_NAME: specgraph-prepublish-${{ github.run_id }}
+          COMPOSE_PROJECT_NAME: specgraph-prepublish-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           # App checkpoints come from the native builds above. Runtime databases are upstream
           # dependencies, so provision them explicitly before forbidding pulls.
@@ -306,6 +310,7 @@ jobs:
             ring_sha="$(eval "printf '%s' \"\$${ring_upper}_SHA\"")"
             ring_immutable="$(eval "printf '%s' \"\$${ring_upper}_IMMUTABLE\"")"
             docker buildx build --builder "$BUILDER_NAME" \
+              --build-arg "BUILDKIT_CACHE_MOUNT_NS=$BUILDKIT_CACHE_MOUNT_NS" \
               --platform linux/amd64,linux/arm64 \
               -f docker/app.Dockerfile \
               --build-arg "SOURCE_ROOT=checkpoints/$ring" \
@@ -420,7 +425,7 @@ jobs:
       - name: Prove immutable remote Compose deployment pulls from registry
         working-directory: packaging
         env:
-          COMPOSE_PROJECT_NAME: specgraph-remote-proof-${{ github.run_id }}
+          COMPOSE_PROJECT_NAME: specgraph-remote-proof-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           compose_ref="oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
           docker compose -f "$compose_ref" down -v --remove-orphans || true
@@ -577,9 +582,9 @@ jobs:
         if: always()
         working-directory: packaging
         run: |
-          COMPOSE_PROJECT_NAME="specgraph-prepublish-${GITHUB_RUN_ID}" docker compose -f compose.oci.yaml down -v --remove-orphans || true
+          COMPOSE_PROJECT_NAME="specgraph-prepublish-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" docker compose -f compose.oci.yaml down -v --remove-orphans || true
           if [ -n "${COMPOSE_IMMUTABLE:-}" ]; then
-            COMPOSE_PROJECT_NAME="specgraph-remote-proof-${GITHUB_RUN_ID}" docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" down -v --remove-orphans || true
+            COMPOSE_PROJECT_NAME="specgraph-remote-proof-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" docker compose -f "oci://$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE" down -v --remove-orphans || true
           fi
           if [ -n "${BUILDER_NAME:-}" ]; then
             # A failed ring must not strand its run-owned BuildKit container or cache.
@@ -593,4 +598,8 @@ jobs:
             specgraph-reference-app:r3 \
             specgraph-reference-app:r4 2>/dev/null || true
           docker logout ghcr.io || true
+          rm -rf "$DOCKER_CONFIG"
+          cd "$GITHUB_WORKSPACE"
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/checkpoints /workspace/packaging'
           df -h "$GITHUB_WORKSPACE" || true
