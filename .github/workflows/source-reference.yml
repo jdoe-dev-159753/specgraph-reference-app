@@ -63,7 +63,7 @@ jobs:
       - name: Clean generated source reference before checkout
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
-            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules'
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/build'
 
       - uses: actions/checkout@v7
         with:
@@ -95,3 +95,9 @@ jobs:
           path: backend/target/source-reference/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Reclaim container-owned source-reference outputs
+        if: always()
+        run: |
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/build'

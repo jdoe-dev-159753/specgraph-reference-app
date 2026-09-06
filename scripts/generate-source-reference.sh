@@ -42,6 +42,26 @@ else
   exit 1
 fi
 
+# Maven Javadoc report goals append their own stable report paths (`apidocs`
+# and `testapidocs`) beneath outputDirectory. Promote those complete reports to
+# the reviewer-facing names only after proving that each entry point exists.
+promote_javadoc_report() {
+  local generated="$1"
+  local published="$2"
+  if [[ ! -s "$generated/index.html" ]]; then
+    echo "Missing Maven Javadoc report entry point: $generated/index.html" >&2
+    exit 1
+  fi
+  if [[ -e "$published" ]]; then
+    echo "Refusing to replace an existing Javadoc publication path: $published" >&2
+    exit 1
+  fi
+  mv "$generated" "$published"
+}
+
+promote_javadoc_report "$OUTPUT_DIR/java/apidocs" "$OUTPUT_DIR/java/main"
+promote_javadoc_report "$OUTPUT_DIR/java/testapidocs" "$OUTPUT_DIR/java/tests"
+
 bash scripts/render-frontend-reference.sh backend/target/source-reference/frontend
 bash scripts/render-openapi-reference.sh backend/target/source-reference/http-api
 

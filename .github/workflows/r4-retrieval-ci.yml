@@ -18,7 +18,7 @@ jobs:
       - name: Clean container-owned outputs before checkout
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
-            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints'
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/build'
 
       - name: Recover malformed persistent workspace
         run: |
