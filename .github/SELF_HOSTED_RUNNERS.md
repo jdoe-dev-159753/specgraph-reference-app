@@ -51,6 +51,10 @@ must use a new registration and an empty service-owned work directory.
 - Token-bearing reconciliation and WorkGraph workflows check out `github.workflow_sha`,
   never the proposed head. `PROJECTS_TOKEN` is read only from the Actions secret by the
   reconciliation step and is never written to repository or runner files.
+- Compose project names, Buildx builders, writable npm/Maven caches and Docker credential
+  directories include the workflow run and attempt identity. Uploaded artifact names include
+  the same provenance. Final cleanup removes exact run resources and static workspace outputs;
+  global Docker prune is forbidden.
 - Host operators must limit runner credentials and filesystem access to the dedicated
   service and repository. Production credentials and unrestricted network secrets are
   forbidden on these delivery runners; these are requirements, not API-observed facts.
@@ -80,6 +84,6 @@ the active pool.
 
 Rootless Docker remains the preferred future host configuration where Testcontainers and
 Buildx compatibility can be retained. Until that migration is proven, separate VPS hosts,
-same-repository trust, least-privilege service accounts and the global queue are the
+same-repository trust, least-privilege service accounts, exact resource scoping and the global queue are the
 selected compensating controls. Ephemeral VMs are required before
 executing code from an untrusted fork.

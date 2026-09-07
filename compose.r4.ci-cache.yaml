@@ -1,4 +1,4 @@
-# CI overlay reuses only the content-addressed embedding cache created under an external host lock.
+# CI overlay reuses one run-scoped cache only across cold and warm phases of that same run attempt.
 services:
   r4:
     volumes:

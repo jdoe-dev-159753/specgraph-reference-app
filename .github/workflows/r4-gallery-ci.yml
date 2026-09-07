@@ -33,7 +33,9 @@ jobs:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       R4_PROFILES: ${{ matrix.profiles }}
       SPECGRAPH_ANALYSIS_BACKEND: deterministic
-      COMPOSE_PROJECT_NAME: specgraph-r4-gallery-${{ matrix.variant }}-${{ github.run_id }}
+      BUILDX_BUILDER: specgraph-r4-gallery-${{ github.run_id }}-${{ github.run_attempt }}
+      BUILDKIT_CACHE_MOUNT_NS: specgraph-r4-gallery-${{ github.run_id }}-${{ github.run_attempt }}
+      COMPOSE_PROJECT_NAME: specgraph-r4-gallery-${{ matrix.variant }}-${{ github.run_id }}-${{ github.run_attempt }}
       EVIDENCE_NAME: r4-${{ matrix.variant }}
       EXPECT_DETECTOR: ${{ matrix.expected_detector }}
 
@@ -50,7 +52,7 @@ jobs:
 
       - name: Allocate run-isolated gallery port
         run: |
-          port=$((20000 + (GITHUB_RUN_ID % 18000) * 2 + ${{ matrix.port_offset }}))
+          port=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT) % 18000) * 2 + ${{ matrix.port_offset }}))
           if [ "$port" -lt 20000 ] || [ "$port" -gt 55999 ]; then
             echo "Calculated gallery port is outside the reserved CI range: $port" >&2
             exit 1
@@ -69,6 +71,7 @@ jobs:
 
       - name: Reuse or build immutable exact-head application image
         run: |
+          bash scripts/ci/run-scoped-buildx.sh prepare
           image="$(bash scripts/ci/ensure-app-image.sh \
             "specgraph-reference-app:r4-${SOURCE_SHA}" . "$SOURCE_SHA")"
           echo "APP_R4_IMAGE=$image" >> "$GITHUB_ENV"
@@ -128,3 +131,6 @@ jobs:
         if: always()
         run: |
           docker compose -f compose.r4.yaml down -v --remove-orphans 2>/dev/null || true
+          bash scripts/ci/run-scoped-buildx.sh cleanup
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/e2e/reviewer-evidence /workspace/build'

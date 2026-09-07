@@ -42,7 +42,8 @@ if docker image inspect "$image_tag" >/dev/null 2>&1; then
 fi
 
 echo "Building immutable Playwright dependency image ${image_tag}" >&2
-DOCKER_BUILDKIT=1 docker build \
+docker buildx build --builder "${BUILDX_BUILDER:?run-scoped builder required}" --load \
+  --build-arg "BUILDKIT_CACHE_MOUNT_NS=${BUILDKIT_CACHE_MOUNT_NS:?run-scoped cache namespace required}" \
   -f docker/e2e.Dockerfile \
   --build-arg "E2E_INPUTS_SHA256=${inputs_sha}" \
   -t "$image_tag" \
