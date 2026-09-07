@@ -450,6 +450,11 @@ class DurableWorkflowTests(unittest.TestCase):
         self.assertTrue(guard.pr_changes_workflow_contract([guard.DURABLE_WORKFLOW_MANIFEST]))
         self.assertFalse(guard.pr_changes_workflow_contract(["backend/pom.xml"]))
 
+    def test_r5_overlay_validation_binds_both_disposable_resources(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/application-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("R5_NETWORK_NAME=specgraph-r5-ci-${{ github.run_id }}-${{ github.run_attempt }}", workflow)
+        self.assertIn("R5_EMBEDDING_CACHE_VOLUME=specgraph-r5-ci-embedding-cache-${{ github.run_id }}-${{ github.run_attempt }}", workflow)
+
     def test_renamed_previous_paths_are_detected(self):
         changed = guard.changed_file_paths([
             {
@@ -498,7 +503,7 @@ class DurableWorkflowTests(unittest.TestCase):
         workflow_path = ".github/workflows/work-graph-guard-tests.yml"
         workflow = (root / workflow_path).read_text(encoding="utf-8")
         no_op_workflow = workflow.replace(
-            "        run: python3 -m unittest scripts/test_work_graph_guard.py",
+            "        run: python3 -B -m unittest scripts/test_work_graph_guard.py",
             "        run: echo tests-disabled",
         )
         self.assertTrue(guard.protected_asset_violations(workflow_path, no_op_workflow))
