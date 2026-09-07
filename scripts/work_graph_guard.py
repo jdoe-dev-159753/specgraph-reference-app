@@ -604,6 +604,7 @@ def permission_violations(filename: str, lines: list[str]) -> list[str]:
     if sorted(writes) != allowed_writes:
         failures.append(f"{filename}: required-status writers are reserved to the protected guard")
     return failures
+
 def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
     lines = text.splitlines()
     failures = trigger_violations(filename, lines)
@@ -755,6 +756,7 @@ def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
     if any(ONE_SHOT_WORKFLOW.search(re.sub(r"['\"\\]", "", surface)) for surface in surfaces):
         failures.append(f"{filename}: durable source embeds a direct lexical one-shot issue/PR reference")
     return failures
+
 def protected_asset_violations(path: str, text: str) -> list[str]:
     """Pin complete guard-chain assets so overrides and no-op changes fail closed."""
     allowed = PROTECTED_ASSET_SHA256.get(path)
