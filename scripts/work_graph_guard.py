@@ -113,7 +113,7 @@ DIGEST_PERMISSION_NAMES = frozenset(
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 RESERVED_CHECK_NAMES = frozenset({"codex-review-freshness", "work-graph-integrity"})
-YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$])(?:[&*][A-Za-z_][A-Za-z0-9_-]*|![A-Za-z_][A-Za-z0-9_-]*)")
+YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$>])(?:[&*][A-Za-z0-9_][A-Za-z0-9_-]*|![A-Za-z_][A-Za-z0-9_-]*)")
 UNCONDITIONAL_CRITICAL_STEPS = frozenset({
     "Verify guard semantics", "Reject competing prose work-state or stale review evidence",
     "Verify proposed work-graph guard semantics",
@@ -360,7 +360,10 @@ def _unquoted_yaml_surface(text: str) -> str:
         char = text[index]
         if quote:
             result.append("\n" if char == "\n" else " ")
-            if quote == '"' and char == "\\" and not escaped:
+            if char == "\n":
+                quote = None
+                escaped = False
+            elif quote == '"' and char == "\\" and not escaped:
                 escaped = True
             elif char == quote and not escaped:
                 if quote == "'" and index + 1 < len(text) and text[index + 1] == "'":
