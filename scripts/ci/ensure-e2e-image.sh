@@ -42,12 +42,24 @@ if docker image inspect "$image_tag" >/dev/null 2>&1; then
 fi
 
 echo "Building immutable Playwright dependency image ${image_tag}" >&2
-docker buildx build --builder "${BUILDX_BUILDER:?run-scoped builder required}" --load \
-  --build-arg "BUILDKIT_CACHE_MOUNT_NS=${BUILDKIT_CACHE_MOUNT_NS:?run-scoped cache namespace required}" \
-  -f docker/e2e.Dockerfile \
-  --build-arg "E2E_INPUTS_SHA256=${inputs_sha}" \
-  -t "$image_tag" \
-  . >&2
+if [ -n "${BUILDX_BUILDER:-}" ]; then
+  docker buildx build --builder "${BUILDX_BUILDER:?run-scoped builder required}" --load \
+    --build-arg "BUILDKIT_CACHE_MOUNT_NS=${BUILDKIT_CACHE_MOUNT_NS:?run-scoped cache namespace required}" \
+    -f docker/e2e.Dockerfile \
+    --build-arg "E2E_INPUTS_SHA256=${inputs_sha}" \
+    -t "$image_tag" \
+    . >&2
+elif [ "${GITHUB_EVENT_NAME:-}" = pull_request_target ]; then
+  # Compatibility bridge for the first base-trusted workflow transition run.
+  DOCKER_BUILDKIT=1 docker build \
+    -f docker/e2e.Dockerfile \
+    --build-arg "E2E_INPUTS_SHA256=${inputs_sha}" \
+    -t "$image_tag" \
+    . >&2
+else
+  echo "Run-scoped Buildx builder is required outside the transition PR" >&2
+  exit 1
+fi
 
 if ! image_matches; then
   echo "Built E2E image does not retain the requested committed-input provenance" >&2

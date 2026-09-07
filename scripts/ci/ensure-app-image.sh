@@ -55,14 +55,29 @@ if docker image inspect "$image_tag" >/dev/null 2>&1; then
 fi
 
 echo "Building immutable application image ${image_tag} from ${source_root} @ ${source_revision}, recipe ${recipe_sha}" >&2
-docker buildx build --builder "${BUILDX_BUILDER:?run-scoped builder required}" --load \
-  --build-arg "BUILDKIT_CACHE_MOUNT_NS=${BUILDKIT_CACHE_MOUNT_NS:?run-scoped cache namespace required}" \
-  -f docker/app.Dockerfile \
-  --build-arg "SOURCE_ROOT=${source_root}" \
-  --build-arg "SOURCE_REVISION=${source_revision}" \
-  --build-arg "BUILD_RECIPE_SHA256=${recipe_sha}" \
-  -t "$image_tag" \
-  . >&2
+if [ -n "${BUILDX_BUILDER:-}" ]; then
+  docker buildx build --builder "${BUILDX_BUILDER:?run-scoped builder required}" --load \
+    --build-arg "BUILDKIT_CACHE_MOUNT_NS=${BUILDKIT_CACHE_MOUNT_NS:?run-scoped cache namespace required}" \
+    -f docker/app.Dockerfile \
+    --build-arg "SOURCE_ROOT=${source_root}" \
+    --build-arg "SOURCE_REVISION=${source_revision}" \
+    --build-arg "BUILD_RECIPE_SHA256=${recipe_sha}" \
+    -t "$image_tag" \
+    . >&2
+elif [ "${GITHUB_EVENT_NAME:-}" = pull_request_target ]; then
+  # Compatibility bridge: the base-trusted workflow cannot use its candidate
+  # Buildx setup until this workflow change has first landed on the base branch.
+  DOCKER_BUILDKIT=1 docker build \
+    -f docker/app.Dockerfile \
+    --build-arg "SOURCE_ROOT=${source_root}" \
+    --build-arg "SOURCE_REVISION=${source_revision}" \
+    --build-arg "BUILD_RECIPE_SHA256=${recipe_sha}" \
+    -t "$image_tag" \
+    . >&2
+else
+  echo "Run-scoped Buildx builder is required outside the transition PR" >&2
+  exit 1
+fi
 
 if ! image_matches; then
   echo "Built image provenance does not match requested source/build identity: ${image_tag}" >&2
