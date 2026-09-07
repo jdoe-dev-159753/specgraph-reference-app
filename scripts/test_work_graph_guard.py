@@ -22,7 +22,8 @@ class ReviewFreshnessTests(unittest.TestCase):
         reviews = [
             {
                 "commit_id": head,
-                "state": "COMMENTED",
+                "state": "APPROVED",
+                "submitted_at": "2026-09-07T01:00:00Z",
                 "user": {"id": guard.CODEX_USER_ID, "login": "chatgpt-codex-connector[bot]"},
                 "performed_via_github_app": {"id": guard.CODEX_APP_ID},
             }
@@ -33,7 +34,8 @@ class ReviewFreshnessTests(unittest.TestCase):
         reviews = [
             {
                 "commit_id": "a" * 40,
-                "state": "COMMENTED",
+                "state": "APPROVED",
+                "submitted_at": "2026-09-07T01:00:00Z",
                 "user": {"id": guard.CODEX_USER_ID, "login": "chatgpt-codex-connector[bot]"},
                 "performed_via_github_app": {"id": guard.CODEX_APP_ID},
             }
@@ -63,6 +65,7 @@ class ReviewFreshnessTests(unittest.TestCase):
         comments = [{
             "user": {"id": guard.CODEX_USER_ID},
             "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+            "created_at": "2026-09-07T01:00:01Z",
             "body": f"Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `{head}`",
         }]
         self.assertTrue(guard.has_current_head_clean_codex_result(comments, head))
@@ -71,6 +74,7 @@ class ReviewFreshnessTests(unittest.TestCase):
         comments = [{
             "user": {"id": guard.CODEX_USER_ID},
             "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+            "created_at": "2026-09-07T01:00:01Z",
             "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e80d0449e548795dc66154aa18f3815d`",
         }]
         self.assertFalse(
@@ -83,6 +87,7 @@ class ReviewFreshnessTests(unittest.TestCase):
         comments = [{
             "user": {"id": guard.CODEX_USER_ID},
             "performed_via_github_app": {"id": 1},
+            "created_at": "2026-09-07T01:00:01Z",
             "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e80d0449e548795dc66154aa18f3815d`",
         }]
         self.assertFalse(
@@ -97,35 +102,72 @@ class ReviewFreshnessTests(unittest.TestCase):
             comment = {
                 "user": {"id": guard.CODEX_USER_ID},
                 "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+                "created_at": "2026-09-07T01:00:01Z",
                 "body": f"Codex Review: Didn't find any major issues.\n**Reviewed commit:** `{prefix}`",
             }
             self.assertFalse(guard.has_current_head_clean_codex_result([comment], head))
 
+    def test_legacy_seven_hex_summary_is_not_evidence(self):
+        comment = {
+            "user": {"id": guard.CODEX_USER_ID},
+            "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+            "created_at": "2026-09-07T01:00:01Z",
+            "body": "<!-- codex-pull-request-review-summary -->\n| Code Review | Completed | `3f8fc1e` |",
+        }
+        self.assertFalse(guard.has_current_head_clean_codex_result(
+            [comment], "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
+        ))
+
     def test_dismissed_exact_head_review_is_rejected(self):
-        review = {"commit_id": "a" * 40, "state": "DISMISSED", "user": {"id": guard.CODEX_USER_ID},
+        review = {"commit_id": "a" * 40, "state": "DISMISSED",
+                  "submitted_at": "2026-09-07T01:00:00Z", "user": {"id": guard.CODEX_USER_ID},
                   "performed_via_github_app": {"id": guard.CODEX_APP_ID}}
         self.assertFalse(guard.has_current_head_codex_review([review], "a" * 40))
+
+    def test_commented_exact_head_review_is_not_an_approval(self):
+        review = {"commit_id": "a" * 40, "state": "COMMENTED",
+                  "submitted_at": "2026-09-07T01:00:00Z", "user": {"id": guard.CODEX_USER_ID},
+                  "performed_via_github_app": {"id": guard.CODEX_APP_ID}}
+        self.assertFalse(guard.has_current_head_codex_review([review], "a" * 40))
+
+    def test_later_commented_review_invalidates_older_approval(self):
+        approval = {"commit_id": "a" * 40, "state": "APPROVED",
+                    "submitted_at": "2026-09-07T01:00:00Z", "user": {"id": guard.CODEX_USER_ID},
+                    "performed_via_github_app": {"id": guard.CODEX_APP_ID}}
+        commented = {**approval, "state": "COMMENTED"}
+        self.assertEqual("absent", guard.current_head_codex_review_state(
+            [approval, commented], "a" * 40
+        ))
 
     def test_missing_review_is_pending_but_exact_changes_request_fails(self):
         with patch.object(guard, "pages", side_effect=(iter(()), iter(()))):
             self.assertEqual("pending", guard.exact_head_codex_evidence_state(42, "a" * 40))
         finding = {"commit_id": "a" * 40, "state": "CHANGES_REQUESTED",
+                   "submitted_at": "2026-09-07T01:00:00Z",
                    "user": {"id": guard.CODEX_USER_ID},
                    "performed_via_github_app": {"id": guard.CODEX_APP_ID}}
         with patch.object(guard, "pages", side_effect=(iter((finding,)), iter(()))):
             self.assertEqual("failure", guard.exact_head_codex_evidence_state(42, "a" * 40))
 
     def test_latest_exact_head_codex_result_controls_state(self):
-        acceptable = {"commit_id": "a" * 40, "state": "COMMENTED",
+        acceptable = {"commit_id": "a" * 40, "state": "APPROVED",
+                      "submitted_at": "2026-09-07T01:00:00Z",
                       "user": {"id": guard.CODEX_USER_ID},
                       "performed_via_github_app": {"id": guard.CODEX_APP_ID}}
-        finding = {**acceptable, "state": "CHANGES_REQUESTED"}
+        finding = {**acceptable, "state": "CHANGES_REQUESTED",
+                   "submitted_at": "2026-09-07T01:00:02Z"}
         self.assertEqual("finding", guard.current_head_codex_review_state([acceptable, finding], "a" * 40))
         clean_comment = {"user": {"id": guard.CODEX_USER_ID},
                          "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+                         "created_at": "2026-09-07T01:00:01Z",
                          "body": f"Codex Review: Didn't find any major issues.\n**Reviewed commit:** `{'a' * 40}`"}
-        later_finding = {**clean_comment, "body": "Codex found a material issue."}
-        self.assertFalse(guard.has_current_head_clean_codex_result([clean_comment, later_finding], "a" * 40))
+        self.assertEqual("finding", guard.current_head_codex_evidence_state(
+            [acceptable, finding], [clean_comment], "a" * 40
+        ))
+        later_clean = {**clean_comment, "created_at": "2026-09-07T01:00:03Z"}
+        self.assertEqual("acceptable", guard.current_head_codex_evidence_state(
+            [acceptable, finding], [later_clean], "a" * 40
+        ))
 
 
 class MainIntegrationTests(unittest.TestCase):
@@ -134,6 +176,7 @@ class MainIntegrationTests(unittest.TestCase):
         comment = {
             "user": {"id": guard.CODEX_USER_ID},
             "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+            "created_at": "2026-09-07T01:00:01Z",
             "body": f"Codex Review: Didn't find any major issues.\n**Reviewed commit:** `{head}`",
         }
         with (
@@ -170,6 +213,59 @@ class MainIntegrationTests(unittest.TestCase):
             event["pull_request"]["head"]["repo"]["full_name"] = "fork/repo"
             self.assertIsNone(guard.trusted_event_target(event))
 
+    def test_merge_policy_requires_exact_guard_check_and_app_bound_contexts(self):
+        ruleset = {
+            "enforcement": "active", "target": "branch",
+            "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+            "rules": [
+                {"type": "required_status_checks", "parameters": {
+                    "strict_required_status_checks_policy": True,
+                    "required_status_checks": [
+                        {"context": context, "integration_id": guard.GITHUB_ACTIONS_APP_ID}
+                        for context in guard.REQUIRED_STATUS_CONTEXTS
+                    ],
+                }},
+            ],
+        }
+        def fake_api(path):
+            return ({"id": 7, "default_branch": "main", "allow_auto_merge": False}
+                    if path == f"/repos/{guard.REPO}" else ruleset)
+        with (patch.object(guard, "api", side_effect=fake_api),
+              patch.object(guard, "pages", return_value=iter(({"id": 1},)))):
+            self.assertEqual([], guard.repository_merge_policy_violations())
+        ruleset["rules"][0]["parameters"]["required_status_checks"] = [
+            item for item in ruleset["rules"][0]["parameters"]["required_status_checks"]
+            if item["context"] != guard.REQUIRED_WORKFLOW_CHECK
+        ]
+        with (patch.object(guard, "api", side_effect=fake_api),
+              patch.object(guard, "pages", return_value=iter(({"id": 1},)))):
+            self.assertTrue(guard.repository_merge_policy_violations())
+        ruleset["rules"][0]["parameters"]["required_status_checks"].append(
+            {"context": guard.REQUIRED_WORKFLOW_CHECK,
+             "integration_id": guard.GITHUB_ACTIONS_APP_ID}
+        )
+        ruleset["rules"][0]["parameters"]["required_status_checks"][0]["integration_id"] = None
+        with (patch.object(guard, "api", side_effect=fake_api),
+              patch.object(guard, "pages", return_value=iter(({"id": 1},)))):
+            self.assertTrue(guard.repository_merge_policy_violations())
+
+    def test_status_links_to_archived_exact_run_attempt(self):
+        with patch.multiple(guard, RUN_ID="123", RUN_ATTEMPT="2"):
+            self.assertEqual(
+                f"https://github.com/{guard.REPO}/actions/runs/123/attempts/2",
+                guard.status_target_url(),
+            )
+
+    def test_pr_auto_merge_is_rejected_before_candidate_reads(self):
+        pr = {"state": "open", "draft": False, "base": {"ref": "main"},
+              "head": {"sha": "a" * 40}, "auto_merge": {"merge_method": "SQUASH"}}
+        with patch.object(guard, "api", return_value=pr):
+            failures = []
+            guard.require_durable_workflow_surface(42, failures, expected_sha="a" * 40)
+        self.assertEqual([
+            "pull request #42: auto-merge must remain disabled for the final exact-head recheck"
+        ], failures)
+
     def test_main_publishes_both_pending_contexts_before_metadata_reads(self):
         target = {"number": 42, "sha": "a" * 40, "same_repo": True}
         calls = []
@@ -184,6 +280,7 @@ class MainIntegrationTests(unittest.TestCase):
             patch.object(guard, "trusted_event_target", return_value=target),
             patch.object(guard, "active_main_prs", side_effect=active),
             patch.object(guard, "pages", return_value=iter(())),
+            patch.object(guard, "repository_merge_policy_violations", return_value=[]),
             patch.object(guard, "require_durable_workflow_surface"),
             patch.object(guard, "exact_head_codex_evidence_state", return_value="success"),
             patch.object(guard, "snapshot_is_current_and_unique", return_value=True),
@@ -203,6 +300,7 @@ class MainIntegrationTests(unittest.TestCase):
             patch.object(guard, "trusted_event_target", return_value=None),
             patch.object(guard, "active_main_prs", return_value=[target]),
             patch.object(guard, "pages", return_value=iter(())),
+            patch.object(guard, "repository_merge_policy_violations", return_value=[]),
             patch.object(guard, "require_durable_workflow_surface"),
             patch.object(guard, "exact_head_codex_evidence_state", return_value="pending"),
             patch.object(guard, "snapshot_is_current_and_unique", return_value=True),
@@ -242,13 +340,33 @@ class MainIntegrationTests(unittest.TestCase):
             patch.object(guard, "trusted_event_target", return_value=None),
             patch.object(guard, "active_main_prs", return_value=targets),
             patch.object(guard, "pages", return_value=iter(())),
+            patch.object(guard, "repository_merge_policy_violations", return_value=[]),
             patch.object(guard, "require_durable_workflow_surface"),
-            patch.object(guard, "has_exact_head_codex_evidence", return_value=True),
+            patch.object(guard, "exact_head_codex_evidence_state", return_value="success"),
             patch.object(guard, "snapshot_is_current_and_unique", return_value=False),
-            patch.object(guard, "publish_status", side_effect=lambda item, context, state, _: calls.append(state)),
+            patch.object(guard, "publish_status", side_effect=lambda item, context, state, _: calls.append((item["number"], state))),
         ):
             self.assertEqual(1, guard.main())
-        self.assertNotIn("success", calls)
+        self.assertTrue(calls)
+        self.assertTrue(all(number == 2 for number, _ in calls))
+        self.assertNotIn("success", [state for _, state in calls])
+
+    def test_unshared_fork_is_excluded_from_private_audit_and_publish(self):
+        fork = {"number": 1, "sha": "a" * 40, "same_repo": False}
+        with (
+            patch.object(guard, "load_event_payload", return_value={}),
+            patch.object(guard, "trusted_event_target", return_value=None),
+            patch.object(guard, "active_main_prs", return_value=[fork]),
+            patch.object(guard, "pages", return_value=iter(())),
+            patch.object(guard, "repository_merge_policy_violations", return_value=[]),
+            patch.object(guard, "require_durable_workflow_surface") as audit,
+            patch.object(guard, "exact_head_codex_evidence_state") as review,
+            patch.object(guard, "publish_status") as publish,
+        ):
+            self.assertEqual(0, guard.main())
+        audit.assert_not_called()
+        review.assert_not_called()
+        publish.assert_not_called()
 
     def test_real_durable_surface_guard_rejects_deleted_protected_workflows(self):
         pull_request = {
@@ -256,6 +374,7 @@ class MainIntegrationTests(unittest.TestCase):
             "draft": False,
             "base": {"ref": "main"},
             "head": {"sha": "b" * 40},
+            "auto_merge": None,
         }
         manifest_payload = {
             "type": "file",
@@ -308,7 +427,8 @@ class MainIntegrationTests(unittest.TestCase):
         )
 
     def test_truncated_recursive_tree_fails_closed_without_files_listing(self):
-        pr = {"state": "open", "draft": False, "base": {"ref": "main"}, "head": {"sha": "c" * 40}}
+        pr = {"state": "open", "draft": False, "base": {"ref": "main"},
+              "head": {"sha": "c" * 40}, "auto_merge": None}
         manifest = {"type": "file", "encoding": "base64", "content": ""}
         with patch.object(guard, "api", side_effect=[pr, manifest, {"truncated": True, "tree": []}]):
             failures = []
@@ -316,7 +436,8 @@ class MainIntegrationTests(unittest.TestCase):
         self.assertEqual(["pull request #309: recursive Git tree is missing or truncated"], failures)
 
     def test_every_open_main_pr_gets_full_tree_and_guard_source_audit(self):
-        pull_request = {"state": "open", "draft": False, "base": {"ref": "main"}, "head": {"sha": "d" * 40}}
+        pull_request = {"state": "open", "draft": False, "base": {"ref": "main"},
+                        "head": {"sha": "d" * 40}, "auto_merge": None}
         payload = {"type": "file", "encoding": "base64", "content": base64.b64encode(b"placeholder").decode("ascii")}
         calls = []
         def fake_api(path):
@@ -600,7 +721,9 @@ class DurableWorkflowTests(unittest.TestCase):
             workflow + "  parallel:\n" + workflow.split("  verify:\n", 1)[1],
             workflow + "  dependent:\n    needs: verify\n" + workflow.split("    if: ", 1)[1].join(("    if: ", "")),
         )
-        self.assertTrue(all(guard.durable_workflow_policy_violations("proof.yml", item) for item in mutations))
+        for candidate in mutations:
+            with self.subTest(candidate=candidate):
+                self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", candidate))
 
     def test_external_actions_must_use_exact_commit(self):
         workflow = self.valid_workflow()
@@ -630,13 +753,18 @@ class DurableWorkflowTests(unittest.TestCase):
             workflow.replace("on:\n", "run-name: work-graph-integrity\non:\n"),
             workflow.replace("name: proof", "name: work-graph-integrity"),
             workflow.replace("  verify:", "  codex-review-freshness:"),
+            workflow.replace("name: proof", "name: WoRk-GrApH-InTeGrItY"),
+            workflow.replace("  verify:", "  CoDeX-ReViEw-FrEsHnEsS:"),
+            workflow.replace("  verify:", "  ReQuIrEd-WoRk-GrApH-GuArD:"),
             workflow.replace("  contents: read", "  contents: read\n  statuses: write"),
             workflow.replace("  contents: read", "  contents: read\n  checks: write"),
             workflow.replace("    runs-on:", "    continue-on-error: true\n    runs-on:"),
             workflow.replace("      - run:", "      - continue-on-error: true\n        run:"),
             workflow.replace("      - run: 'true'", "      - name: bypass\n        if: false\n        run: 'true'"),
         )
-        self.assertTrue(all(guard.durable_workflow_policy_violations("proof.yml", item) for item in mutations))
+        for candidate in mutations:
+            with self.subTest(candidate=candidate):
+                self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", candidate))
         protected = (Path(__file__).resolve().parents[1] / ".github/workflows/work-graph-guard.yml").read_text(encoding="utf-8")
         disabled = protected.replace("      - name: Verify guard semantics\n", "      - name: Verify guard semantics\n        if: failure()\n")
         self.assertTrue(

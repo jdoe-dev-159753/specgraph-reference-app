@@ -68,20 +68,28 @@ kill; an operator must reclaim any orphan before returning that host to service.
 ## Native merge statuses
 
 The protected WorkGraph guard publishes `work-graph-integrity` and
-`codex-review-freshness` separately on the immutable PR head. It first moves both contexts
-to pending, then audits every open main PR and the global open issue/PR corpus. A global
-integrity failure invalidates that context on every active head; duplicate open PRs sharing
-one head SHA cannot pass either context. Review freshness accepts only a Codex review object
-whose full 40-hex `commit_id` equals the head, or the authenticated clean Codex bot comment
-that explicitly names that same full SHA. It separately requires every review thread to be
-resolved, so freshness is not presented as a clean approval or as resolution of findings.
+`codex-review-freshness` separately on each internal PR's immutable head. It first moves both
+contexts to pending, then audits every internal open main PR and the global open issue/PR
+corpus. Fork heads are retained only for duplicate-SHA detection; the private runner never
+fetches their candidate tree or reviews and never publishes to their commits. A global integrity
+failure invalidates that context on every internal active head.
 
-The default-branch `pull_request_target` lifecycle plus the hourly sweep heals edits,
-closure, dismissal, and force-push changes without running candidate workflow code. GitHub
-API failure is fail-closed when the status channel remains reachable; a total API outage can
-also prevent replacement of an earlier success and is the residual limitation of commit
-statuses. The final ruleset therefore requires both contexts, strict up-to-date branches,
-and exact-head merge rechecks. Merge queue is not enabled or supported by this workflow.
+Review freshness accepts only an authenticated Codex `APPROVED` review object whose full
+40-hex `commit_id` equals the head, or the authenticated terminal clean Codex bot comment
+that explicitly names that same full SHA. The chronologically latest authenticated result
+wins, and every review thread must be resolved. `COMMENTED`, shortened SHAs, stale results,
+dismissals and later change requests do not satisfy the gate.
+
+Commit statuses alone are not PR-scoped. The active default-branch ruleset must therefore
+require the protected workflow's exact `required-work-graph-guard` job check as well as both
+GitHub-Actions-bound status contexts in strict up-to-date mode. The exact check run is the
+PR-scoped archived workflow evidence; each published status links back to its run attempt.
+Repository and PR auto-merge stay disabled so the operator can recheck the immutable head,
+green required workflow, resolved threads and mergeability immediately before an
+`expected_head_sha` merge. The default-branch `pull_request_target` lifecycle plus hourly
+sweep heals edits, closure, dismissal and force-push changes without executing candidate
+workflow code. A total GitHub API outage remains fail-closed. Merge queue is not enabled or
+supported by this workflow.
 
 ## Host attestation and replacement checklist
 
