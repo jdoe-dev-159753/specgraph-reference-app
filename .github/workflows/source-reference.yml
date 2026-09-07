@@ -9,6 +9,7 @@ on:
       - 'backend/pom.xml'
       - 'backend/src/main/java/**'
       - 'backend/src/test/java/**'
+      - 'backend/src/test/resources/**'
       - 'backend/src/main/resources/application*.yml'
       - 'backend/src/main/resources/db/**/*.sql'
       - 'backend/src/main/resources/**/*.properties'
@@ -31,6 +32,7 @@ on:
       - 'backend/pom.xml'
       - 'backend/src/main/java/**'
       - 'backend/src/test/java/**'
+      - 'backend/src/test/resources/**'
       - 'backend/src/main/resources/application*.yml'
       - 'backend/src/main/resources/db/**/*.sql'
       - 'backend/src/main/resources/**/*.properties'
@@ -73,6 +75,15 @@ jobs:
 
       - name: Assert exact source revision
         run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - name: Verify immutable container image supply chain
+        run: |
+          docker run --rm --network none \
+            --user "$(id -u):$(id -g)" \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "$PWD:/workspace:ro" -w /workspace \
+            python:3.13-alpine@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a \
+            sh -c 'python -m unittest scripts.test_verify_container_images && python scripts/verify_container_images.py'
 
       - uses: actions/setup-node@v7
         with:
