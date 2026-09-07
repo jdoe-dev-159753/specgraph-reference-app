@@ -2,7 +2,7 @@ name: source-reference
 # Builds one exact-head, navigable artifact from maintained intent comments and contracts.
 
 on:
-  pull_request:
+  pull_request_target:
     paths:
       - '.github/workflows/*.yml'
       - '.github/workflows/*.yaml'
@@ -48,14 +48,16 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: source-reference-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ (!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422)) && 'specgraph-repository-queue' || format('specgraph-bypassed-{0}', github.run_id) }}
+  cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
 
 jobs:
   generate:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -63,9 +65,9 @@ jobs:
       - name: Clean generated source reference before checkout
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
-            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/build'
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/docs/tooling/frontend-reference/node_modules /workspace/build'
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 1
@@ -74,12 +76,33 @@ jobs:
       - name: Assert exact source revision
         run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
           package-manager-cache: false
 
+      - name: Verify repository metrics generator ephemerally
+        env:
+          TMPDIR: ${{ runner.temp }}/specgraph-metrics-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          rm -rf "$TMPDIR"
+          mkdir -p "$TMPDIR/repository"
+          python3 -B -m unittest scripts/test_repository_metrics.py
+          git archive --format=tar HEAD | tar -xf - -C "$TMPDIR/repository"
+          cd "$TMPDIR/repository"
+          git init --quiet
+          git config user.name 'Repository Metrics CI'
+          git config user.email 'repository-metrics@example.invalid'
+          git add .
+          git commit --quiet -m 'ephemeral exact-source fixture'
+          bash scripts/repository-metrics.sh generate
+          bash scripts/repository-metrics.sh check
+
       - name: Generate implementation and HTTP API reference
+        env:
+          npm_config_cache: ${{ runner.temp }}/specgraph-npm-${{ github.run_id }}-${{ github.run_attempt }}
+          MAVEN_CACHE_DIR: ${{ runner.temp }}/specgraph-maven-${{ github.run_id }}-${{ github.run_attempt }}
+          MAVEN_OPTS: -Dmaven.repo.local=${{ runner.temp }}/specgraph-maven-${{ github.run_id }}-${{ github.run_attempt }}/repository
         run: bash scripts/generate-source-reference.sh
 
       - name: Record artifact provenance
@@ -89,9 +112,9 @@ jobs:
             > backend/target/source-reference/provenance.txt
 
       - name: Upload navigable source reference
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: source-reference-${{ env.SOURCE_SHA }}
+          name: source-reference-${{ env.SOURCE_SHA }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: backend/target/source-reference/
           if-no-files-found: error
           retention-days: 30
@@ -100,4 +123,8 @@ jobs:
         if: always()
         run: |
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
-            sh -c 'rm -rf /workspace/backend/target /workspace/build'
+            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/docs/tooling/frontend-reference/node_modules /workspace/build'
+          rm -rf \
+            "$RUNNER_TEMP/specgraph-metrics-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            "$RUNNER_TEMP/specgraph-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            "$RUNNER_TEMP/specgraph-maven-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
