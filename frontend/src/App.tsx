@@ -148,6 +148,19 @@ export type RuntimeSession = { kind: 'LEGACY' } | { kind: 'SECURED'; session: Se
 export type LoginRequest = { username: string; password: string; csrf: CsrfView }
 /** Analysis command; CSRF is required only when the runtime activated security. */
 export type RunAnalysisRequest = { customerId: string; csrf?: CsrfView }
+/** Seeded demonstration families remain visibly non-authoritative and replayable. */
+export type ScenarioFamily = 'ORDINARY_LOCAL' | 'CROSS_BORDER_GROWTH' | 'MIXED_RED_FLAGS'
+/** Server-confirmed identity and provenance for one materialized demonstration scenario. */
+export type GeneratedScenario = {
+  customerId: string
+  seed: string
+  family: ScenarioFamily
+  generatorIdentity: string
+  activityCount: number
+  riskEvidenceCount: number
+}
+/** Demo generation command; string transport preserves the complete signed 64-bit seed. */
+export type GenerateScenarioRequest = { seed: string; family: ScenarioFamily; requestId: number; csrf?: CsrfView }
 
 /** Repository-owned seed that makes the first reviewer interaction immediately demonstrable. */
 const SEEDED_CUSTOMER = '11111111-1111-1111-1111-111111111111'
@@ -397,6 +410,28 @@ export async function runAnalysis(request: RunAnalysisRequest): Promise<Analysis
   return response.json()
 }
 
+/** Materializes one optional replayable story without changing the fixed regression catalogue. */
+export async function generateScenario(request: GenerateScenarioRequest): Promise<GeneratedScenario> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (request.csrf) headers[request.csrf.headerName] = request.csrf.token
+  const response = await fetch('/api/demo/scenarios', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ seed: request.seed, family: request.family }),
+  })
+  if (response.status === 404) throw new Error('Optional scenario generation is disabled in this runtime')
+  if (response.status === 400) throw new Error('Seed must be a signed 64-bit integer')
+  if (!response.ok) throw new Error(`Scenario generation failed (${response.status})`)
+  return response.json()
+}
+
+/** Discovers the optional runtime capability without coupling visibility to a delivery-ring label. */
+export async function loadScenarioAvailability() {
+  const response = await fetch('/api/demo/scenarios', { method: 'OPTIONS', credentials: 'same-origin' })
+  if (response.status === 404 || response.status === 405) return false
+  if (!response.ok) throw new Error(`Scenario availability request failed (${response.status})`)
+  return response.headers.get('Allow')?.split(',').some(method => method.trim() === 'POST') === true
+}
 /** Maps the bounded demonstration risk vocabulary to a consistent visual severity. */
 export function RiskLevelChip({ level }: { level: Analysis['riskLevel'] }) {
   const color = level === 'HIGH' ? 'error' : level === 'MEDIUM' ? 'warning' : 'success'
@@ -435,12 +470,18 @@ export default function App() {
   const [username, setUsername] = useState('')
   /** Ephemeral password cleared after successful login. */
   const [password, setPassword] = useState('')
+  /** Editable replay seed; the server parses the exact signed 64-bit value. */
+  const [scenarioSeed, setScenarioSeed] = useState('20260906')
+  /** Selected coherent demonstration story family. */
+  const [scenarioFamily, setScenarioFamily] = useState<ScenarioFamily>('CROSS_BORDER_GROWTH')
   /** Monotonic discriminator that makes otherwise identical explicit searches distinct query keys. */
   const submission = useRef(0)
   /** Synchronous duplicate-click guard released by the customer query's `finally` path. */
   const customerSubmissionInFlight = useRef(false)
   /** Synchronous duplicate-analysis guard released on settle and explicitly across logout. */
   const analysisSubmissionInFlight = useRef(false)
+  /** Monotonic intent token prevents late scenario completions from replacing newer reviewer navigation. */
+  const scenarioRequestId = useRef(0)
   /** Shared cache authority used for scoped invalidation and protected-data removal. */
   const queryClient = useQueryClient()
 
@@ -460,6 +501,8 @@ export default function App() {
     : null
   /** Protected workspace gate: legacy compatibility or positively authenticated secured session. */
   const applicationEnabled = runtimeSession.data?.kind === 'LEGACY' || authenticatedSession !== null
+  /** Runtime discovery exposes the optional lab only when the protected POST endpoint is available. */
+  const scenarioAvailability = useQuery({ queryKey: ['demo-scenario-availability'], queryFn: loadScenarioAvailability, enabled: authenticatedSession !== null, retry: false })
 
   /** Submitted customer server state; disabled until both session and request gates are satisfied. */
   const customer = useQuery({
@@ -491,6 +534,28 @@ export default function App() {
       await queryClient.invalidateQueries({ queryKey: ['analysis-history', analyzed.customerId] })
     },
   })
+  /** Generated identity becomes the submitted customer only after the server confirms persistence. */
+  const scenario = useMutation({
+    mutationFn: generateScenario,
+    onSuccess: (generated, request) => {
+      if (request.requestId !== scenarioRequestId.current) return
+      analysisSubmissionInFlight.current = false
+      setCustomerId(generated.customerId)
+      setHistoryPage(0)
+      analysis.reset()
+      submission.current += 1
+      setRequest({
+        customerId: generated.customerId,
+        submission: submission.current,
+        page: 0,
+        pageSize: DEFAULT_ACTIVITY_PAGE_SIZE,
+        activityType: '',
+        status: '',
+        createdFrom: '',
+        createdTo: '',
+      })
+    },
+  })
   /** Login refreshes the session authority and erases the password after success. */
   const login = useMutation({
     mutationFn: loginOperator,
@@ -505,9 +570,11 @@ export default function App() {
     onSuccess: async () => {
       customerSubmissionInFlight.current = false
       analysisSubmissionInFlight.current = false
+      scenarioRequestId.current += 1
       setRequest(null)
       setHistoryPage(0)
       analysis.reset()
+      scenario.reset()
       queryClient.removeQueries({ queryKey: ['customer'] })
       queryClient.removeQueries({ queryKey: ['analysis-history'] })
       await queryClient.invalidateQueries({ queryKey: ['runtime-session'] })
@@ -519,6 +586,8 @@ export default function App() {
     event.preventDefault()
     if (customerSubmissionInFlight.current) return
     customerSubmissionInFlight.current = true
+    scenarioRequestId.current += 1
+    if (scenario.data?.customerId !== customerId) scenario.reset()
     analysisSubmissionInFlight.current = false
     analysis.reset()
     setHistoryPage(0)
@@ -636,6 +705,45 @@ export default function App() {
 
         {applicationEnabled && (
           <>
+            {scenarioAvailability.error && <Alert severity="error" data-testid="scenario-availability-error">{scenarioAvailability.error.message}</Alert>}
+            {scenarioAvailability.data === true && <Paper
+              component="form"
+              onSubmit={event => {
+                event.preventDefault()
+                if (analysisSubmissionInFlight.current || scenario.isPending) return
+                scenarioRequestId.current += 1
+                scenario.mutate({ seed: scenarioSeed, family: scenarioFamily, requestId: scenarioRequestId.current, csrf: authenticatedSession?.csrf })
+              }}
+              data-testid="scenario-lab"
+              sx={{ p: { xs: 2, md: 3 } }}
+            >
+              <Typography variant="h5">Replayable scenario lab</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Optional synthetic demo input; it is not production data or evidence of criminal conduct.
+              </Typography>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 2 }}>
+                <TextField label="Scenario seed" value={scenarioSeed} onChange={event => setScenarioSeed(event.target.value)} size="small" />
+                <TextField
+                  select
+                  label="Scenario family"
+                  value={scenarioFamily}
+                  onChange={event => setScenarioFamily(event.target.value as ScenarioFamily)}
+                  size="small"
+                  sx={{ minWidth: 230 }}
+                >
+                  <MenuItem value="ORDINARY_LOCAL">Ordinary local activity</MenuItem>
+                  <MenuItem value="CROSS_BORDER_GROWTH">Growing cross-border activity</MenuItem>
+                  <MenuItem value="MIXED_RED_FLAGS">Mixed red-flag pattern</MenuItem>
+                </TextField>
+                <Button type="submit" variant="outlined" disabled={scenario.isPending || analysis.isPending}>Generate and load</Button>
+              </Stack>
+              {scenario.error && <Alert severity="error" sx={{ mt: 2 }}>{scenario.error.message}</Alert>}
+              {scenario.data && customer.data?.customerId === scenario.data.customerId && (
+                <Alert severity="info" sx={{ mt: 2 }} data-testid="scenario-provenance">
+                  {scenario.data.family} · seed {scenario.data.seed} · {scenario.data.generatorIdentity} · customer {scenario.data.customerId}
+                </Alert>
+              )}
+            </Paper>}
             <Paper component="form" onSubmit={submit} sx={{ p: { xs: 2, md: 3 } }}>
               <Stack spacing={2}>
                 <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'stretch' }}>

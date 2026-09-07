@@ -65,6 +65,10 @@ Open [http://10.77.0.31:8088/](http://10.77.0.31:8088/), then sign in with eithe
 | `operator-alpha` | `alpha-demo-2026` |
 | `operator-beta` | `beta-demo-2026` |
 
+The optional **Replayable scenario lab** accepts a signed 64-bit seed and an ordinary, cross-border, or mixed-red-flag family. Its returned identity makes the synthetic input exactly replayable without changing the four fixed regression personas; generated patterns are neither production statistics nor evidence of crime.
+
+Its browser proof is deliberately separate from the fixed-persona regression suite: invoke `npx playwright test generated-scenario-demo.spec.ts` only against an R4/R5 runtime prepared for optional scenario generation.
+
 Search for customer `44444444-4444-4444-4444-444444444444` and select **Run analysis**. LM Studio Developer Logs must show the OpenAI-compatible request; the browser must then show the generated analysis, all three detector artifacts, pgvector grounding, `backend: local`, the Ministral model identity, and `external transmission: no`. Reload the page to confirm retained history.
 
 Stop and reset the R5 demo with the same OCI Compose package:

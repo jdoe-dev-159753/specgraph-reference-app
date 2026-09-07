@@ -42,16 +42,16 @@ def main() -> None:
             with args.request_log.open("a", encoding="utf-8") as log:
                 log.write(request_body)
                 log.write("\n")
+            request_payload = json.loads(request_body)
+            ordinary = "fullHistorySourceRiskCount=0" in json.dumps(request_payload)
             analysis = {
-                "riskLevel": "HIGH",
+                "riskLevel": "LOW" if ordinary else "HIGH",
                 "findingsSummary": (
-                    "The synthetic scenario combines repeated declines, high-value cross-border "
-                    "payments, crypto activity, retained source-risk evidence and applicable policy."
+                    "The synthetic ordinary scenario contains no retained source risk assessments."
+                    if ordinary
+                    else "The synthetic mixed scenario contains multiple retained review signals."
                 ),
-                "recommendations": [
-                    "Review the retained source transactions and policy evidence.",
-                    "Escalate the synthetic case for documented operator review.",
-                ],
+                "recommendations": ["Review the supplied synthetic evidence under the retrieved demo policy."],
             }
             self._json(
                 200,
