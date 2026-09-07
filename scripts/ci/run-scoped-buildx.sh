@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Creates and reclaims the Buildx builder owned by one workflow run attempt.
 set -euo pipefail
 
 builder="${BUILDX_BUILDER:?BUILDX_BUILDER must identify this run attempt}"
