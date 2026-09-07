@@ -41,13 +41,13 @@ PROTECTED_ASSET_SHA256 = {
     ),
     "scripts/test_work_graph_guard.py": frozenset(
         {
-            "8872cc02adc450e1c6641d1d5747c6ea0dd09901c5c376d59ffce48d638810ce",
             "718a4bf3a8ccbc5e0cc8e67907195db09892c4f7923df1f4d38e5b82fb2c04a5",
+            "9c9ecf3df8d3efb7915eebbce17aa011b1c059679cc807682af3e27989afa363",
         }
     ),
 }
 APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset(
-    {"c7121323cda5fe7248c689a108fb344eecd79c2fb9fdcdd71cb9d3a20c935f9e"}
+    {"c67dfdf5285ead6d10fd389ae3492d2b989f779ecf928ec0c29e9925f583ef47"}
 )
 
 PREFIX = re.compile(
@@ -401,7 +401,8 @@ def _frozenset_literals(node: ast.AST) -> frozenset[str]:
 
 
 def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], str]:
-    tree = ast.parse(text)
+    parsed = text.replace("\r\n", "\n").replace("\r", "\n")
+    tree = ast.parse(parsed)
     assignments: dict[str, ast.Assign] = {}
     for node in tree.body:
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
@@ -413,10 +414,10 @@ def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], st
             assignments[target.id] = node
     if set(assignments) != DIGEST_PERMISSION_NAMES:
         raise ValueError("guard source must define both reviewed digest permission assignments")
-    source_lines = text.splitlines()
+    source_lines = parsed.splitlines()
     for name, node in assignments.items():
         physical = "\n".join(source_lines[node.lineno - 1 : node.end_lineno]).strip()
-        segment = (ast.get_source_segment(text, node) or "").strip()
+        segment = (ast.get_source_segment(parsed, node) or "").strip()
         if node.col_offset != 0 or physical != segment:
             raise ValueError(f"{name} assignment must be the only statement on its lines")
     protected_node = assignments["PROTECTED_ASSET_SHA256"].value
@@ -448,15 +449,14 @@ def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], st
 
 
 def protected_guard_source_violations(text: str) -> list[str]:
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-    current = Path(__file__).read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    actual = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    current = Path(__file__).read_bytes().decode("utf-8")
     current_hash = hashlib.sha256(current.encode("utf-8")).hexdigest()
     if actual == current_hash or actual in APPROVED_GUARD_SUCCESSOR_SHA256:
         return []
     try:
         current_policy, current_skeleton = _guard_policy_and_skeleton(current)
-        candidate_policy, candidate_skeleton = _guard_policy_and_skeleton(normalized)
+        candidate_policy, candidate_skeleton = _guard_policy_and_skeleton(text)
     except (SyntaxError, ValueError) as exc:
         return [f"{GUARD_SOURCE}: invalid digest permission policy: {exc}"]
     if candidate_skeleton == current_skeleton:
@@ -542,23 +542,22 @@ def changed_file_paths(changed_items: list[dict]) -> list[str]:
 
 def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> None:
     pr = api(f"/repos/{REPO}/pulls/{pr_number}")
-    base_ref = pr.get("base", {}).get("ref")
-    if pr.get("state") != "open" or pr.get("draft") or base_ref not in {None, "main"}:
+    if pr.get("state") != "open" or pr.get("draft") or pr.get("base", {}).get("ref") != "main":
         return
 
     head_sha = pr["head"]["sha"]
+    try:
+        guard_text = read_regular_git_blob(head_sha, GUARD_SOURCE)
+    except RuntimeError as exc:
+        failures.append(f"pull request #{pr_number}: {exc}")
+        return
+    guard_failures = protected_guard_source_violations(guard_text)
+    if guard_failures:
+        failures.extend(f"pull request #{pr_number}: {finding}" for finding in guard_failures)
+        return
+
     changed_items = list(pages(f"/repos/{REPO}/pulls/{pr_number}/files"))
     changed_paths = changed_file_paths(changed_items)
-    if base_ref == "main" or GUARD_SOURCE in changed_paths:
-        try:
-            guard_text = read_regular_git_blob(head_sha, GUARD_SOURCE)
-        except RuntimeError as exc:
-            failures.append(f"pull request #{pr_number}: {exc}")
-            return
-        guard_failures = protected_guard_source_violations(guard_text)
-        if guard_failures:
-            failures.extend(f"pull request #{pr_number}: {finding}" for finding in guard_failures)
-            return
     if not pr_changes_workflow_contract(changed_paths):
         return
 
