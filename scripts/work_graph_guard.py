@@ -30,8 +30,8 @@ UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
 PROTECTED_ASSET_SHA256 = {
     ".github/workflows/work-graph-guard.yml": frozenset(
         {
-            "dce4bdafcc8183eccf80c43c51cad5004d626472252e0b1e1f1eec30aa5b9751",
             "6abee2ccbd9fd282393160640ccd4ac5717e7423defc560243c9a1588e4e7c8c",
+            "9b06a73aac2512d6069e2d5ff8f098728f66c59ceac15d66afac419ee87cdf97",
         }
     ),
     ".github/workflows/work-graph-guard-tests.yml": frozenset(
@@ -42,10 +42,13 @@ PROTECTED_ASSET_SHA256 = {
     "scripts/test_work_graph_guard.py": frozenset(
         {
             "9c9ecf3df8d3efb7915eebbce17aa011b1c059679cc807682af3e27989afa363",
+            "790ef4ac3e557d18c9983735ff0b91254872a3a1a85fb0f7f895ca866deaa597",
         }
     ),
 }
-APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset()
+APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset(
+    {"08166a66bfaf85997b3ac65685166ac8bc8c56b07b1267b3c390d6c65726d750"}
+)
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
