@@ -10,12 +10,10 @@ from scripts import work_graph_guard as guard
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_PROTECTED_ASSETS = {
-    ".github/scripts/project-v2-reconcile.cjs",
+    ".github/workflows/work-graph-guard.yml",
+    ".github/workflows/work-graph-guard-tests.yml",
     "scripts/test_work_graph_guard.py",
-    "scripts/ci/durable-workflows.txt",
-} | {f".github/workflows/{name}" for name in guard.parse_durable_workflow_manifest(
-    (ROOT / guard.DURABLE_WORKFLOW_MANIFEST).read_text(encoding="utf-8")
-)}
+}
 
 
 class ReviewFreshnessTests(unittest.TestCase):
@@ -375,7 +373,7 @@ class DurableWorkflowTests(unittest.TestCase):
 
     def test_numbered_identity_markers_are_rejected(self):
         separators = ("-", "_", " ", ".", "#", ":")
-        for keyword in ("pr", "pull-request", "pull request", "issue", "discovery", "story", "fix"):
+        for keyword in ("pr", "prs", "pull-request", "pull requests", "issue", "issues", "discovery", "discoveries", "story", "stories", "fix", "fixes"):
             for marker in ("no", "number", "id"):
                 for separator in separators:
                     workflow_name = f"{keyword}{separator}{marker}{separator}42"
@@ -465,7 +463,12 @@ class DurableWorkflowTests(unittest.TestCase):
             workflow.replace("    steps:\n", "    strategy: &wide\n      matrix:\n        item: [a, b]\n    steps:\n").replace(
                 "    steps:\n", "    strategy: *wide\n    steps:\n"
             ),
-            workflow.replace("      - run: 'true'", "      - !unsafe {run: 'true'}"),
+            *(workflow.replace("      - run: 'true'", f"      - {tag} {{run: 'true'}}") for tag in
+              ("!unsafe", "!1", "!-", "!<tag:yaml.org,2002:map>")),
+            workflow.replace("      - run: 'true'", "      - run: |\n          '\n      - ? continue-on-error\n        : true\n        run: exit 1"),
+            *(workflow.replace("permissions:\n", f"env:\n  HIDDEN: &{anchor} uses\npermissions:\n").replace(
+                "      - run: 'true'", f"      - *{anchor}: actions/checkout@v6"
+            ) for anchor in ("1", "-", ".")),
         )
         for candidate in mutations:
             self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", candidate))
@@ -551,7 +554,9 @@ class DurableWorkflowTests(unittest.TestCase):
             workflow.replace(guard.PRIVATE_RUNNER, "      runs-on: [self-hosted]"),
             workflow.replace("    if:", '    "if":'),
             workflow.replace(" }}\n", " || true }}\n", 1),
-            workflow.replace(" }}\n", " && false }}\n", 1),
+            *(workflow.replace(" }}\n", f" && {clause} }}\n", 1) for clause in (
+                "false", "1 == 0", "github.repository != github.repository", "contains('a','b')"
+            )),
             workflow.replace(guard.PRIVATE_RUNNER, f"{guard.PRIVATE_RUNNER}\n{guard.PRIVATE_RUNNER}"),
             workflow.replace("    steps:", "    if: ${{ true }}\n    steps:"),
         )

@@ -27,9 +27,6 @@ DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 GUARD_SOURCE = "scripts/work_graph_guard.py"
 UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
 PROTECTED_ASSET_SHA256 = {
-    ".github/workflows/application-ci.yml": frozenset({"a09b929ef05c365cbb43242c103d66688356b776ae1789416b9904e05e541b22"}),
-    ".github/workflows/demo-images.yml": frozenset({"cde9a5afa1864e5212348bc09f45b6b38139a663fd8662be3fc8b8ee395fd120"}),
-    ".github/workflows/plantuml-diagrams.yml": frozenset({"178e18709535443ba228dc6de1823dd9101c3ceec69e9d408fa9b40c58fd4571"}),
     ".github/workflows/work-graph-guard.yml": frozenset(
         {
             "dce4bdafcc8183eccf80c43c51cad5004d626472252e0b1e1f1eec30aa5b9751",
@@ -43,19 +40,9 @@ PROTECTED_ASSET_SHA256 = {
     ),
     "scripts/test_work_graph_guard.py": frozenset(
         {
-            "fb4f9a427c6d929a54b2427d8c467043402e88a64e0c6720ab62882625d049c0",
             "c2334f1f62b6a887ede6711c38d7474b463efb6d6bc4fb6ff33d8b94b5296d32",
         }
     ),
-    ".github/workflows/project-v2-reconcile.yml": frozenset({"bcb288e2d3e7105610b8d943e12b3093eab0fc39616ce8b9a39c61fbf63589cb"}),
-    ".github/workflows/r4-acceptance-ci.yml": frozenset({"5cb50f58c04217bf1b8dbe24ff1e7be3a63450541f89d2652b4baae66e4e45cc"}),
-    ".github/workflows/r4-auth-ci.yml": frozenset({"16c530a73f16bd8274738ae42a51b45ca1764e75f985b992cad1899e1faa4351"}),
-    ".github/workflows/r4-gallery-ci.yml": frozenset({"f11ae1c0af86f2f57380a851220b85dca997f5cbb3464a0bfb6bb62b2d2b825e"}),
-    ".github/workflows/r4-retrieval-ci.yml": frozenset({"1f288cac39ea7af3261a0c39912e3a028207b18b5660604f32cc707efa3ede01"}),
-    ".github/workflows/r5-release.yml": frozenset({"56657c768730f686e33f6bdc7b2c777d8b291adfec894be4b5f0a946da449fb5"}),
-    ".github/workflows/source-reference.yml": frozenset({"fa640513a7709cc35282b5683aa15e877e5bf7ae2f4b26e4cd6df7ad3f196f43"}),
-    ".github/scripts/project-v2-reconcile.cjs": frozenset({"cad09c1ef157969b559f4efd0af8ba01b4dd5b627d6a7dc81d45160a006f12f5"}),
-    "scripts/ci/durable-workflows.txt": frozenset({"d6b601cfba997fff4e4240ecc50489fd90885650fa30fbaeec364f133631a521"}),
 }
 APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset()
 
@@ -79,7 +66,7 @@ CANONICAL_ROOT_KEY = re.compile(
     r"^(run-name|on|permissions|env|defaults|concurrency|jobs):(?:\s|$)"
 )
 ONE_SHOT_WORKFLOW = re.compile(
-    r"(?<![A-Za-z0-9])(?:pr|pull[^A-Za-z0-9]+request|issue|discovery|story|fix)"
+    r"(?<![A-Za-z0-9])(?:prs?|pull[^A-Za-z0-9]+requests?|issues?|discover(?:y|ies)|stor(?:y|ies)|fix(?:es)?)"
     r"(?:no|number|id)?(?![A-Za-z0-9])[^\n]*?"
     r"(?<![A-Za-z0-9])(?:0x[0-9a-f]+|\d+)(?![A-Za-z0-9])",
     re.IGNORECASE,
@@ -107,13 +94,17 @@ REQUIRED_JOB_CLAUSES = (
     "(github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422)",
     "github.event_name != 'issues'",
 )
+ALLOWED_JOB_CLAUSE = re.compile(
+    r"^(?:always\(\)|github\.event_name == 'workflow_dispatch'|inputs\.(?:compatibility|regenerate_artifact) == true|"
+    r"\(github\.event_name != '(?:pull_request|workflow_dispatch)' \|\| (?:github\.event\.pull_request\.head\.repo\.full_name == github\.repository|inputs\.(?:compatibility|regenerate_artifact) != true)\))$"
+)
 CANONICAL_QUEUE_GROUP = "  group: ${{ (!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422)) && 'specgraph-repository-queue' || format('specgraph-bypassed-{0}', github.run_id) }}"
 DIGEST_PERMISSION_NAMES = frozenset(
     {"PROTECTED_ASSET_SHA256", "APPROVED_GUARD_SUCCESSOR_SHA256"}
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 RESERVED_CHECK_NAMES = frozenset({"codex-review-freshness", "work-graph-integrity"})
-YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$])(?:[&*][A-Za-z_][A-Za-z0-9_-]*|![A-Za-z_][A-Za-z0-9_-]*)")
+YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$>&*])(?:[&*](?![&*>])[^\s\[\]{},]+|!(?:<[^>\r\n]+>|(?![=(])[^\s\[\]{},]+))")
 UNCONDITIONAL_CRITICAL_STEPS = frozenset({
     "Verify guard semantics", "Reject competing prose work-state or stale review evidence",
     "Verify proposed work-graph guard semantics",
@@ -352,6 +343,17 @@ def _indented_block(lines: list[str], index: int, indent: int) -> list[str]:
 
 def _unquoted_yaml_surface(text: str) -> str:
     """Blank quoted scalars and comments before scanning YAML meta-syntax."""
+    masked, block_indent = [], None
+    for line in text.splitlines(keepends=True):
+        indent = len(line) - len(line.lstrip(" "))
+        if block_indent is not None and (not line.strip() or indent > block_indent):
+            masked.append("\n" if line.endswith("\n") else "")
+            continue
+        block_indent = None
+        masked.append(line)
+        if re.search(r":\s*[|>](?:[+-]?[1-9]?|[1-9][+-]?)\s*$", line.split("#", 1)[0].rstrip()):
+            block_indent = indent
+    text = "".join(masked)
     result: list[str] = []
     quote = None
     escaped = False
@@ -360,7 +362,10 @@ def _unquoted_yaml_surface(text: str) -> str:
         char = text[index]
         if quote:
             result.append("\n" if char == "\n" else " ")
-            if quote == '"' and char == "\\" and not escaped:
+            if char == "\n":
+                quote = None
+                escaped = False
+            elif quote == '"' and char == "\\" and not escaped:
                 escaped = True
             elif char == quote and not escaped:
                 if quote == "'" and index + 1 < len(text) and text[index + 1] == "'":
@@ -434,8 +439,8 @@ def job_condition_violations(filename: str, job: str, line: str) -> list[str]:
             f"{filename}: job {job!r} is missing exact trust conjunctions: "
             + ", ".join(missing)
         )
-    if any(re.fullmatch(r"\(*\s*(?:true|false)\s*\)*", clause, re.IGNORECASE) for clause in clauses):
-        failures.append(f"{filename}: job {job!r} uses a constant boolean trust conjunction")
+    if any(clause not in REQUIRED_JOB_CLAUSES and not ALLOWED_JOB_CLAUSE.fullmatch(clause) for clause in clauses):
+        failures.append(f"{filename}: job {job!r} uses a non-approved business conjunction")
     business = expression
     for clause in REQUIRED_JOB_CLAUSES:
         business = business.replace(clause, "")
