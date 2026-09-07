@@ -19,10 +19,9 @@ REPO = os.environ.get("GITHUB_REPOSITORY", "jdoe-dev-159753/specgraph-reference-
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
 EVENT_PATH = os.environ.get("GITHUB_EVENT_PATH", "")
 EVENT_NAME = os.environ.get("GITHUB_EVENT_NAME", "")
+WORKFLOW_SHA = os.environ.get("WORKFLOW_SHA", "")
 CODEX_USER_ID = 199175422
 CODEX_APP_ID = 1144995
-MIN_REVIEWED_SHA_PREFIX = 10
-MIN_SUMMARY_SHA_PREFIX = 7
 WORKFLOW_DIR = ".github/workflows"
 DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 GUARD_SOURCE = "scripts/work_graph_guard.py"
@@ -30,7 +29,6 @@ UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
 PROTECTED_ASSET_SHA256 = {
     ".github/workflows/work-graph-guard.yml": frozenset(
         {
-            "6abee2ccbd9fd282393160640ccd4ac5717e7423defc560243c9a1588e4e7c8c",
             "9b06a73aac2512d6069e2d5ff8f098728f66c59ceac15d66afac419ee87cdf97",
         }
     ),
@@ -41,14 +39,11 @@ PROTECTED_ASSET_SHA256 = {
     ),
     "scripts/test_work_graph_guard.py": frozenset(
         {
-            "9c9ecf3df8d3efb7915eebbce17aa011b1c059679cc807682af3e27989afa363",
             "790ef4ac3e557d18c9983735ff0b91254872a3a1a85fb0f7f895ca866deaa597",
         }
     ),
 }
-APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset(
-    {"08166a66bfaf85997b3ac65685166ac8bc8c56b07b1267b3c390d6c65726d750"}
-)
+APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset()
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -57,14 +52,7 @@ PREFIX = re.compile(
 )
 LEGACY_TOKEN = re.compile(r"\b(?:IN_SCOPE|FOLLOW_UP|ALREADY_TRACKED|NON_ACTIONABLE)\b")
 CLEAN_CODEX_REVIEW = re.compile(r"Codex Review:\s*Didn't find any major issues\.", re.IGNORECASE)
-REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{10,40})`")
-COMPLETED_CODEX_SUMMARY = re.compile(
-    r"<!--\s*codex-pull-request-review-summary\s*-->.*?"
-    r"\|\s*[^|\n]*\*\*Code Review\*\*\s*\|"
-    r"\s*[^|\n]*\*\*Completed\*\*[^|\n]*\|"
-    r"\s*`([0-9a-fA-F]{7,40})`\s*\|",
-    re.DOTALL,
-)
+REVIEWED_COMMIT = re.compile(r"\*\*Reviewed commit:\*\*\s*`([0-9a-fA-F]{40})`")
 CANONICAL_WORKFLOW_NAME = re.compile(r"^name: ([a-z][a-z0-9]*(?:-[a-z0-9]+)*)$")
 CANONICAL_ROOT_KEY = re.compile(
     r"^(run-name|on|permissions|env|defaults|concurrency|jobs):(?:\s|$)"
@@ -98,22 +86,33 @@ DIGEST_PERMISSION_NAMES = frozenset(
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 GIT_OBJECT_SHA = re.compile(r"^[0-9a-f]{40}$")
+SHA40 = re.compile(r"^[0-9a-f]{40}$")
+RESERVED_CHECK_NAMES = frozenset({"codex-review-freshness", "work-graph-integrity"})
+REVIEW_STATUS_CONTEXT = "codex-review-freshness"
+INTEGRITY_STATUS_CONTEXT = "work-graph-integrity"
 YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$>])&[^\s\[\]{},]+|(?<![A-Za-z0-9_$])\*[^\s\[\]{},]+|(?<![A-Za-z0-9_$])!(?:<[^>\r\n]+>|[^\s\[\]{},]*)")
 UNCONDITIONAL_CRITICAL_STEPS = frozenset({"Verify guard semantics", "Reject competing prose work-state or stale review evidence", "Verify proposed work-graph guard semantics"})
 
 
-def api(path: str):
-    req = request.Request(f"{API}{path}")
+def api_request(path: str, method: str = "GET", payload: dict | None = None):
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    req = request.Request(f"{API}{path}", data=data, method=method)
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("X-GitHub-Api-Version", "2026-03-10")
     if TOKEN:
         req.add_header("Authorization", f"Bearer {TOKEN}")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
     try:
         with request.urlopen(req, timeout=30) as response:
             return json.loads(response.read())
     except error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")
-        raise RuntimeError(f"GitHub API GET {path} failed: {exc.code} {detail}") from exc
+        raise RuntimeError(f"GitHub API {method} {path} failed: {exc.code} {detail}") from exc
+
+
+def api(path: str):
+    return api_request(path)
 
 
 def pages(path: str):
@@ -121,6 +120,8 @@ def pages(path: str):
     while True:
         separator = "&" if "?" in path else "?"
         items = api(f"{path}{separator}per_page=100&page={page}")
+        if not isinstance(items, list):
+            raise RuntimeError(f"GitHub API pagination for {path} did not return a list")
         if not items:
             return
         yield from items
@@ -156,35 +157,59 @@ def scan_surface(kind: str, identifier: str, text: str, failures: list[str]) -> 
         failures.append(f"{kind} {identifier}: {finding}")
 
 
-def event_pr_number_from_payload(event: dict) -> int | None:
-    pull_request = event.get("pull_request")
-    if pull_request:
-        return pull_request.get("number") or event.get("number")
-    issue = event.get("issue") or {}
-    if issue.get("pull_request"):
-        return issue.get("number")
-    return None
-
-
-def event_pr_number() -> int | None:
+def load_event_payload() -> dict:
     if not EVENT_PATH or not os.path.exists(EVENT_PATH):
-        return None
+        return {}
     with open(EVENT_PATH, encoding="utf-8") as handle:
-        return event_pr_number_from_payload(json.load(handle))
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise RuntimeError("GitHub event payload must be an object")
+    return payload
+
+
+def trusted_event_target(event: dict) -> dict | None:
+    if EVENT_NAME != "pull_request_target" or event.get("action") == "closed":
+        return None
+    pr = event.get("pull_request") or {}
+    head, base = pr.get("head") or {}, pr.get("base") or {}
+    number = pr.get("number") or event.get("number")
+    head_sha, base_sha = (head.get("sha") or "").lower(), (base.get("sha") or "").lower()
+    if (head.get("repo") or {}).get("full_name") != REPO or base.get("ref") != "main":
+        return None
+    if not isinstance(number, int) or not SHA40.fullmatch(head_sha):
+        raise RuntimeError("pull_request_target payload lacks an immutable PR head")
+    if not SHA40.fullmatch(base_sha) or WORKFLOW_SHA.lower() != base_sha:
+        raise RuntimeError("trusted workflow SHA does not equal the event base SHA")
+    return {"number": number, "sha": head_sha}
 
 
 def is_codex_review(review: dict) -> bool:
-    return (review.get("user") or {}).get("id") == CODEX_USER_ID
-
-
-def has_current_head_codex_review(reviews, head_sha: str) -> bool:
-    return any(
-        is_codex_review(review) and review.get("commit_id") == head_sha
-        for review in reviews
+    return (
+        (review.get("user") or {}).get("id") == CODEX_USER_ID
+        and (review.get("performed_via_github_app") or {}).get("id") == CODEX_APP_ID
     )
 
 
-def clean_codex_reviewed_prefix(comment: dict) -> str | None:
+def current_head_codex_review_state(reviews, head_sha: str) -> str:
+    if not SHA40.fullmatch(head_sha):
+        return "absent"
+    states = [
+        review.get("state")
+        for review in reviews
+        if is_codex_review(review) and review.get("commit_id") == head_sha
+    ]
+    if not states or states[-1] == "DISMISSED":
+        return "absent"
+    if states[-1] in {"APPROVED", "COMMENTED"}:
+        return "acceptable"
+    return "finding" if states[-1] == "CHANGES_REQUESTED" else "absent"
+
+
+def has_current_head_codex_review(reviews, head_sha: str) -> bool:
+    return current_head_codex_review_state(reviews, head_sha) == "acceptable"
+
+
+def clean_codex_reviewed_sha(comment: dict) -> str | None:
     if (comment.get("user") or {}).get("id") != CODEX_USER_ID:
         return None
     if (comment.get("performed_via_github_app") or {}).get("id") != CODEX_APP_ID:
@@ -195,74 +220,97 @@ def clean_codex_reviewed_prefix(comment: dict) -> str | None:
     match = REVIEWED_COMMIT.search(body)
     if not match:
         return None
-    prefix = match.group(1).lower()
-    return prefix if len(prefix) >= MIN_REVIEWED_SHA_PREFIX else None
+    return match.group(1).lower()
 
 
 def has_current_head_clean_codex_result(comments, head_sha: str) -> bool:
     normalized = head_sha.lower()
-    return any(
-        (prefix := clean_codex_reviewed_prefix(comment)) is not None
-        and normalized.startswith(prefix)
-        for comment in comments
+    codex_comments = [
+        comment for comment in comments
+        if (comment.get("user") or {}).get("id") == CODEX_USER_ID
+        and (comment.get("performed_via_github_app") or {}).get("id") == CODEX_APP_ID
+    ]
+    return bool(codex_comments) and clean_codex_reviewed_sha(codex_comments[-1]) == normalized
+
+
+def review_threads_resolved(pr_number: int) -> bool:
+    owner, name = REPO.split("/", 1)
+    query = """query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved}pageInfo{hasNextPage}}}}}"""
+    payload = api_request(
+        "/graphql", method="POST",
+        payload={"query": query, "variables": {"owner": owner, "name": name, "number": pr_number}},
     )
+    if payload.get("errors"):
+        raise RuntimeError(f"review-thread query failed: {payload['errors']}")
+    pr = ((payload.get("data") or {}).get("repository") or {}).get("pullRequest")
+    threads = pr.get("reviewThreads") if isinstance(pr, dict) else None
+    nodes = threads.get("nodes") if isinstance(threads, dict) else None
+    page_info = threads.get("pageInfo") if isinstance(threads, dict) else None
+    if not isinstance(nodes, list) or not isinstance(page_info, dict):
+        raise RuntimeError("review-thread query returned an incomplete payload")
+    if page_info.get("hasNextPage") is not False:
+        raise RuntimeError("review-thread audit exceeds the bounded 100-thread corpus")
+    return all(isinstance(thread, dict) and thread.get("isResolved") is True for thread in nodes)
 
 
-def clean_codex_summary_prefix(comment: dict) -> str | None:
-    if (comment.get("user") or {}).get("id") != CODEX_USER_ID:
-        return None
-    if (comment.get("performed_via_github_app") or {}).get("id") != CODEX_APP_ID:
-        return None
-    match = COMPLETED_CODEX_SUMMARY.search(comment.get("body") or "")
-    if not match:
-        return None
-    prefix = match.group(1).lower()
-    return prefix if len(prefix) >= MIN_SUMMARY_SHA_PREFIX else None
-
-
-def is_codex_approval_reaction(reaction: dict) -> bool:
-    return (
-        reaction.get("content") == "+1"
-        and (reaction.get("user") or {}).get("id") == CODEX_USER_ID
+def exact_head_codex_evidence_state(pr_number: int, head_sha: str) -> str:
+    review_state = current_head_codex_review_state(
+        list(pages(f"/repos/{REPO}/pulls/{pr_number}/reviews")), head_sha
     )
-
-
-def has_current_head_clean_codex_summary(comments, reactions, head_sha: str) -> bool:
-    normalized = head_sha.lower()
-    has_current_summary = any(
-        (prefix := clean_codex_summary_prefix(comment)) is not None
-        and normalized.startswith(prefix)
-        for comment in comments
-    )
-    return has_current_summary and any(is_codex_approval_reaction(reaction) for reaction in reactions)
-
-
-def require_current_head_codex_review(pr_number: int, failures: list[str]) -> None:
-    pr = api(f"/repos/{REPO}/pulls/{pr_number}")
-    if pr.get("state") != "open" or pr.get("draft"):
-        return
-    if (pr.get("base") or {}).get("ref") != "main":
-        return
-
-    head_sha = pr["head"]["sha"]
-    reviews = pages(f"/repos/{REPO}/pulls/{pr_number}/reviews")
-    if has_current_head_codex_review(reviews, head_sha):
-        print(f"pull request #{pr_number}: Codex review object covers current head {head_sha[:12]}")
-        return
-
     comments = list(pages(f"/repos/{REPO}/issues/{pr_number}/comments"))
-    if has_current_head_clean_codex_result(comments, head_sha):
-        print(f"pull request #{pr_number}: clean Codex result covers current head {head_sha[:12]}")
-        return
+    if review_state != "acceptable" and not has_current_head_clean_codex_result(comments, head_sha):
+        return "failure" if review_state == "finding" else "pending"
+    return "success" if review_threads_resolved(pr_number) else "failure"
 
-    reactions = pages(f"/repos/{REPO}/issues/{pr_number}/reactions")
-    if has_current_head_clean_codex_summary(comments, reactions, head_sha):
-        print(f"pull request #{pr_number}: clean Codex summary covers current head {head_sha[:12]}")
-        return
 
-    failures.append(
-        f"pull request #{pr_number}: no Codex review evidence is anchored to current head {head_sha[:12]}"
-    )
+def has_exact_head_codex_evidence(pr_number: int, head_sha: str) -> bool:
+    return exact_head_codex_evidence_state(pr_number, head_sha) == "success"
+
+
+def active_main_prs() -> list[dict]:
+    active = []
+    for pr in pages(f"/repos/{REPO}/pulls?state=open&base=main"):
+        if pr.get("draft"):
+            continue
+        head, number = pr.get("head") or {}, pr.get("number")
+        sha, repo = (head.get("sha") or "").lower(), (head.get("repo") or {}).get("full_name")
+        if not isinstance(number, int) or not SHA40.fullmatch(sha) or not isinstance(repo, str):
+            raise RuntimeError("active main PR list contains incomplete identity metadata")
+        active.append({"number": number, "sha": sha, "same_repo": repo == REPO})
+    return active
+
+
+def publish_status(target: dict, context: str, state: str, description: str) -> None:
+    api_request(f"/repos/{REPO}/statuses/{target['sha']}", method="POST", payload={
+        "state": state, "context": context, "description": description[:140],
+    })
+
+
+def best_effort_status(targets: list[dict], context: str, state: str, description: str) -> None:
+    for target in targets:
+        try:
+            publish_status(target, context, state, description)
+        except Exception as exc:
+            print(f"unable to publish {context} on {target['sha'][:12]}: {exc}", file=sys.stderr)
+
+
+def snapshot_is_current_and_unique(targets: list[dict]) -> bool:
+    live = active_main_prs()
+    owners: dict[str, list[int]] = {}
+    for pr in live:
+        owners.setdefault(pr["sha"], []).append(pr["number"])
+    expected = {target["number"]: target["sha"] for target in targets}
+    actual = {pr["number"]: pr["sha"] for pr in live if pr["number"] in expected}
+    return actual == expected and all(owners.get(sha) == [number] for number, sha in expected.items())
+
+
+def publish_success_if_current(targets: list[dict], context: str, description: str) -> bool:
+    for target in targets:
+        if not snapshot_is_current_and_unique(targets):
+            best_effort_status(targets, context, "failure", "Head changed or is shared by multiple PRs")
+            return False
+        publish_status(target, context, "success", description)
+    return True
 
 
 def decode_contents_payload(payload: dict, path: str) -> str:
@@ -527,7 +575,7 @@ def trigger_violations(filename: str, lines: list[str]) -> list[str]:
         failures.append(f"{filename}: workflow must declare at least one trusted trigger")
     return failures
 def permission_violations(filename: str, lines: list[str]) -> list[str]:
-    failures = []
+    failures, writes = [], []
     for line in lines:
         if re.fullmatch(r"(?:    )?permissions\s*:.*", line) and line not in {
             "permissions:", "    permissions:"
@@ -549,6 +597,11 @@ def permission_violations(filename: str, lines: list[str]) -> list[str]:
             if name in seen:
                 failures.append(f"{filename}: duplicate permission is forbidden: {name}")
             seen.add(name)
+            if value == "write" and name in {"statuses", "checks"}:
+                writes.append(name)
+    allowed_writes = ["statuses"] if filename == "work-graph-guard.yml" else []
+    if sorted(writes) != allowed_writes:
+        failures.append(f"{filename}: required-status writers are reserved to the protected guard")
     return failures
 
 def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
@@ -597,6 +650,11 @@ def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
         return failures
     if len(names) != len(set(names)):
         failures.append(f"{filename}: duplicate job key is forbidden")
+    workflow_name = extract_workflow_name(text)
+    if workflow_name.casefold() in RESERVED_CHECK_NAMES or any(
+        name.casefold() in RESERVED_CHECK_NAMES for name in names
+    ):
+        failures.append(f"{filename}: required status/check identity is reserved")
 
     has_root_permissions = lines.count("permissions:") == 1
     for position, (start, job) in enumerate(job_starts):
@@ -654,7 +712,7 @@ def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
         if "runs-on:" in line and line != PRIVATE_RUNNER:
             failures.append(f"{filename}: non-canonical runner placement is forbidden: {line!r}")
         uses = re.fullmatch(r"\s+(?:-\s+)?uses:\s+(.+)", line)
-        if re.search(r"[\"']?uses[\"']?\s*:", line) and not uses:
+        if re.fullmatch(r"\s+(?:-\s+)?[\"']?uses[\"']?\s*:.*", line) and not uses:
             failures.append(f"{filename}: non-canonical uses key is forbidden: {line!r}")
         elif uses and uses.group(1).startswith("docker://") and not PINNED_DOCKER_ACTION.fullmatch(uses.group(1)):
             failures.append(f"{filename}: Docker action must use an exact sha256 digest")
@@ -873,12 +931,19 @@ def changed_file_paths(changed_items: list[dict]) -> list[str]:
     return paths
 
 
-def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> None:
+def require_durable_workflow_surface(
+    pr_number: int, failures: list[str], expected_sha: str | None = None
+) -> None:
     pr = api(f"/repos/{REPO}/pulls/{pr_number}")
+    head_sha = ((pr.get("head") or {}).get("sha") or "").lower()
+    if expected_sha is not None and head_sha != expected_sha:
+        failures.append(f"pull request #{pr_number}: head moved from {expected_sha[:12]}")
+        return
     if pr.get("state") != "open" or pr.get("draft") or pr.get("base", {}).get("ref") != "main":
+        if expected_sha is not None:
+            failures.append(f"pull request #{pr_number}: target is no longer an active main PR")
         return
 
-    head_sha = pr["head"]["sha"]
     ref = parse.quote(head_sha, safe="")
     try:
         guard_text = read_regular_git_blob(head_sha, GUARD_SOURCE)
@@ -935,37 +1000,81 @@ def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> Non
 
 
 def main() -> int:
-    failures: list[str] = []
-    open_items = list(pages(f"/repos/{REPO}/issues?state=open"))
-    for item in open_items:
-        number = item["number"]
-        kind = "pull request" if "pull_request" in item else "issue"
-        scan_surface(kind, f"#{number} title", item.get("title") or "", failures)
-        scan_surface(kind, f"#{number} body", item.get("body") or "", failures)
+    targets: list[dict] = []
+    try:
+        event_target = trusted_event_target(load_event_payload())
+        if event_target:
+            targets = [event_target]
+            publish_status(event_target, REVIEW_STATUS_CONTEXT, "pending", "Checking exact-head Codex review")
+            publish_status(event_target, INTEGRITY_STATUS_CONTEXT, "pending", "Checking global work-graph integrity")
 
-    # Conversation and review comments are discussion, not controlled work-state
-    # descriptions. Review freshness uses immutable Codex bot/App identity and the
-    # SHA GitHub/Codex records for the reviewed head. Finding-bearing reviews expose
-    # PullRequestReview.commit_id; clean Codex reviews are emitted as bot comments
-    # that explicitly name the reviewed commit prefix.
-    pr_number = event_pr_number()
-    if pr_number is not None:
-        require_durable_workflow_surface(pr_number, failures)
-        require_current_head_codex_review(pr_number, failures)
-    elif EVENT_NAME in {"schedule", "workflow_dispatch"}:
-        for item in open_items:
-            if "pull_request" in item:
-                require_durable_workflow_surface(item["number"], failures)
-                require_current_head_codex_review(item["number"], failures)
+        active = active_main_prs()
+        if event_target and not any(
+            target["number"] == event_target["number"] and target["sha"] == event_target["sha"]
+            for target in active
+        ):
+            best_effort_status(targets, REVIEW_STATUS_CONTEXT, "failure", "Event head is no longer current")
+            best_effort_status(targets, INTEGRITY_STATUS_CONTEXT, "failure", "Event head is no longer current")
+            return 1
+        targets = active
+        for target in targets:
+            publish_status(target, REVIEW_STATUS_CONTEXT, "pending", "Checking exact-head Codex review")
+            publish_status(target, INTEGRITY_STATUS_CONTEXT, "pending", "Checking global work-graph integrity")
 
-    if failures:
-        print("Work-graph/review guard failed:", file=sys.stderr)
-        for finding in failures:
-            print(f"- {finding}", file=sys.stderr)
+        integrity_failures: list[str] = []
+        for item in pages(f"/repos/{REPO}/issues?state=open"):
+            number = item["number"]
+            kind = "pull request" if "pull_request" in item else "issue"
+            scan_surface(kind, f"#{number} title", item.get("title") or "", integrity_failures)
+            scan_surface(kind, f"#{number} body", item.get("body") or "", integrity_failures)
+        for target in targets:
+            if target["same_repo"]:
+                require_durable_workflow_surface(
+                    target["number"], integrity_failures, expected_sha=target["sha"]
+                )
+            else:
+                integrity_failures.append(f"pull request #{target['number']}: fork heads are not trusted")
+
+        review_failures, review_pending = [], []
+        for target in targets:
+            if not target["same_repo"]:
+                state = "failure"
+            else:
+                state = exact_head_codex_evidence_state(target["number"], target["sha"])
+            if state == "failure":
+                review_failures.append(f"pull request #{target['number']}: exact-head Codex evidence is absent or unresolved")
+                best_effort_status([target], REVIEW_STATUS_CONTEXT, "failure", "Exact-head Codex review absent or unresolved")
+            elif state == "pending":
+                review_pending.append(target["number"])
+                best_effort_status([target], REVIEW_STATUS_CONTEXT, "pending", "Awaiting exact-head Codex review")
+            elif not publish_success_if_current(
+                [target], REVIEW_STATUS_CONTEXT, "Exact-head Codex review is current and resolved"
+            ):
+                review_failures.append(f"pull request #{target['number']}: head changed or is shared")
+
+        if integrity_failures:
+            best_effort_status(targets, INTEGRITY_STATUS_CONTEXT, "failure", "Global work-graph integrity failed")
+        elif not publish_success_if_current(
+            targets, INTEGRITY_STATUS_CONTEXT, "Global work graph and workflow surface are clean"
+        ):
+            integrity_failures.append("PR heads changed or a head SHA is shared")
+
+        failures = integrity_failures + review_failures
+        if failures:
+            print("Work-graph/review guard failed:", file=sys.stderr)
+            for finding in failures:
+                print(f"- {finding}", file=sys.stderr)
+            return 1
+        if review_pending:
+            print(f"global work-graph integrity is clean; exact-head Codex review pending for PRs {review_pending}")
+        else:
+            print("global work-graph integrity and exact-head Codex evidence are clean")
+        return 0
+    except Exception as exc:
+        best_effort_status(targets, REVIEW_STATUS_CONTEXT, "failure", "Guard failed before review was proven")
+        best_effort_status(targets, INTEGRITY_STATUS_CONTEXT, "failure", "Guard failed before integrity was proven")
+        print(f"Work-graph/review guard failed closed: {exc}", file=sys.stderr)
         return 1
-
-    print("controlled GitHub work descriptions, durable workflows, and current-head Codex review evidence are clean")
-    return 0
 
 
 if __name__ == "__main__":
