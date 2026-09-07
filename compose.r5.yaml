@@ -1,7 +1,7 @@
 # R5 reviewer topology composes all three Stage-1 detectors, pgvector grounding, and local LM Studio.
 services:
   postgres:
-    image: "${PGVECTOR_IMAGE:-pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f}"
+    image: pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
     environment:
       POSTGRES_DB: specgraph
       POSTGRES_USER: specgraph
@@ -14,7 +14,7 @@ services:
       start_period: 5s
 
   r5-cache-init:
-    image: "${ALPINE_IMAGE:-alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce}"
+    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
     command: ["sh", "-c", "chown -R 10001:10001 /cache"]
     volumes:
       - r5-embedding-cache:/cache
