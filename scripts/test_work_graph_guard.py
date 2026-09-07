@@ -19,76 +19,49 @@ REQUIRED_PROTECTED_ASSETS = {
 
 
 class ReviewFreshnessTests(unittest.TestCase):
-    @staticmethod
-    def clean_summary(prefix="3f8fc1e"):
-        return {
-            "user": {"id": guard.CODEX_USER_ID},
-            "performed_via_github_app": {"id": guard.CODEX_APP_ID},
-            "body": (
-                "<!-- codex-pull-request-review-summary -->\n\n"
-                "| Review | Status | Commit | Review trigger |\n"
-                "| --- | --- | --- | --- |\n"
-                f"| 📝 **Code Review** | ✅ **Completed** now | `{prefix}` | Draft marked ready |"
-            ),
-        }
-
-    @staticmethod
-    def codex_approval(user_id=guard.CODEX_USER_ID):
-        return {"content": "+1", "user": {"id": user_id}}
-
-    def test_pull_request_event_resolves_pr_number(self):
-        event = {"number": 42, "pull_request": {"number": 42}}
-        self.assertEqual(42, guard.event_pr_number_from_payload(event))
-
-    def test_bot_issue_comment_on_pull_request_resolves_pr_number(self):
-        event = {"issue": {"number": 43, "pull_request": {"url": "pr"}}}
-        self.assertEqual(43, guard.event_pr_number_from_payload(event))
-
-    def test_plain_issue_event_has_no_pr_number(self):
-        self.assertIsNone(guard.event_pr_number_from_payload({"issue": {"number": 44}}))
-
     def test_current_head_codex_review_is_accepted(self):
+        head = "a" * 40
         reviews = [
             {
-                "commit_id": "abc123",
+                "commit_id": head,
                 "user": {"id": guard.CODEX_USER_ID, "login": "chatgpt-codex-connector[bot]"},
             }
         ]
-        self.assertTrue(guard.has_current_head_codex_review(reviews, "abc123"))
+        self.assertTrue(guard.has_current_head_codex_review(reviews, head))
 
     def test_superseded_codex_review_is_rejected(self):
         reviews = [
             {
-                "commit_id": "old123",
+                "commit_id": "a" * 40,
                 "user": {"id": guard.CODEX_USER_ID, "login": "chatgpt-codex-connector[bot]"},
             }
         ]
-        self.assertFalse(guard.has_current_head_codex_review(reviews, "new456"))
+        self.assertFalse(guard.has_current_head_codex_review(reviews, "b" * 40))
 
     def test_prefix_collision_reviewer_is_rejected(self):
         reviews = [
             {
-                "commit_id": "abc123",
+                "commit_id": "a" * 40,
                 "user": {"id": 123456, "login": "chatgpt-codex-connector-fake"},
             }
         ]
-        self.assertFalse(guard.has_current_head_codex_review(reviews, "abc123"))
+        self.assertFalse(guard.has_current_head_codex_review(reviews, "a" * 40))
 
     def test_human_review_on_current_head_does_not_substitute_for_codex(self):
         reviews = [
             {
-                "commit_id": "abc123",
+                "commit_id": "a" * 40,
                 "user": {"id": 9963055, "login": "repository-owner"},
             }
         ]
-        self.assertFalse(guard.has_current_head_codex_review(reviews, "abc123"))
+        self.assertFalse(guard.has_current_head_codex_review(reviews, "a" * 40))
 
     def test_clean_codex_comment_on_current_head_is_accepted(self):
         head = "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
         comments = [{
             "user": {"id": guard.CODEX_USER_ID},
             "performed_via_github_app": {"id": guard.CODEX_APP_ID},
-            "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e8`",
+            "body": f"Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `{head}`",
         }]
         self.assertTrue(guard.has_current_head_clean_codex_result(comments, head))
 
@@ -96,7 +69,7 @@ class ReviewFreshnessTests(unittest.TestCase):
         comments = [{
             "user": {"id": guard.CODEX_USER_ID},
             "performed_via_github_app": {"id": guard.CODEX_APP_ID},
-            "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e8`",
+            "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e80d0449e548795dc66154aa18f3815d`",
         }]
         self.assertFalse(
             guard.has_current_head_clean_codex_result(
@@ -108,7 +81,7 @@ class ReviewFreshnessTests(unittest.TestCase):
         comments = [{
             "user": {"id": guard.CODEX_USER_ID},
             "performed_via_github_app": {"id": 1},
-            "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e8`",
+            "body": "Codex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `3f8fc1e6e80d0449e548795dc66154aa18f3815d`",
         }]
         self.assertFalse(
             guard.has_current_head_clean_codex_result(
@@ -116,128 +89,121 @@ class ReviewFreshnessTests(unittest.TestCase):
             )
         )
 
-    def test_completed_codex_summary_with_approval_is_accepted(self):
-        head = "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
-        self.assertTrue(
-            guard.has_current_head_clean_codex_summary(
-                [self.clean_summary()], [self.codex_approval()], head
-            )
-        )
+    def test_short_reviewed_commit_prefix_is_rejected(self):
+        comment = {
+            "user": {"id": guard.CODEX_USER_ID},
+            "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+            "body": "Codex Review: Didn't find any major issues.\n**Reviewed commit:** `3f8fc1e6e8`",
+        }
+        self.assertFalse(guard.has_current_head_clean_codex_result(
+            [comment], "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
+        ))
 
-    def test_running_codex_summary_is_rejected(self):
-        summary = self.clean_summary()
-        summary["body"] = summary["body"].replace("**Completed**", "**Running**")
-        self.assertFalse(
-            guard.has_current_head_clean_codex_summary(
-                [summary], [self.codex_approval()], "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
-            )
-        )
-
-    def test_stale_codex_summary_is_rejected(self):
-        self.assertFalse(
-            guard.has_current_head_clean_codex_summary(
-                [self.clean_summary("aaaaaaaa")],
-                [self.codex_approval()],
-                "3f8fc1e6e80d0449e548795dc66154aa18f3815d",
-            )
-        )
-
-    def test_completed_summary_without_codex_approval_is_rejected(self):
-        self.assertFalse(
-            guard.has_current_head_clean_codex_summary(
-                [self.clean_summary()], [], "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
-            )
-        )
-
-    def test_completed_summary_with_wrong_user_approval_is_rejected(self):
-        self.assertFalse(
-            guard.has_current_head_clean_codex_summary(
-                [self.clean_summary()],
-                [self.codex_approval(user_id=123456)],
-                "3f8fc1e6e80d0449e548795dc66154aa18f3815d",
-            )
-        )
-
-    def test_completed_summary_from_wrong_app_is_rejected(self):
-        summary = self.clean_summary()
-        summary["performed_via_github_app"]["id"] = 1
-        self.assertFalse(
-            guard.has_current_head_clean_codex_summary(
-                [summary],
-                [self.codex_approval()],
-                "3f8fc1e6e80d0449e548795dc66154aa18f3815d",
-            )
-        )
+    def test_dismissed_exact_head_review_is_rejected(self):
+        review = {"commit_id": "a" * 40, "state": "DISMISSED", "user": {"id": guard.CODEX_USER_ID}}
+        self.assertFalse(guard.has_current_head_codex_review([review], "a" * 40))
 
 
 class MainIntegrationTests(unittest.TestCase):
-    def test_real_review_guard_accepts_current_clean_summary_reaction(self):
+    def test_exact_clean_comment_requires_resolved_threads(self):
         head = "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
-        pull_request = {
-            "state": "open",
-            "draft": False,
-            "base": {"ref": "main"},
-            "head": {"sha": head},
+        comment = {
+            "user": {"id": guard.CODEX_USER_ID},
+            "performed_via_github_app": {"id": guard.CODEX_APP_ID},
+            "body": f"Codex Review: Didn't find any major issues.\n**Reviewed commit:** `{head}`",
         }
-        page_results = iter((
-            iter(()),
-            iter((ReviewFreshnessTests.clean_summary(),)),
-            iter((ReviewFreshnessTests.codex_approval(),)),
-        ))
-
         with (
-            patch.object(guard, "api", return_value=pull_request),
-            patch.object(guard, "pages", side_effect=lambda _path: next(page_results)),
+            patch.object(guard, "pages", side_effect=(iter(()), iter((comment,)))),
+            patch.object(guard, "review_threads_resolved", return_value=True),
         ):
-            failures = []
-            guard.require_current_head_codex_review(326, failures)
-
-        self.assertEqual([], failures)
-
-    def test_main_runs_both_pr_guards_and_propagates_each_failure(self):
-        injectors = (
-            "require_durable_workflow_surface",
-            "require_current_head_codex_review",
-        )
-        for failing_guard in injectors:
-            with self.subTest(failing_guard=failing_guard):
-                def inject_failure(pr_number, failures):
-                    self.assertEqual(308, pr_number)
-                    failures.append(f"{failing_guard} injected failure")
-
-                with (
-                    patch.object(guard, "pages", return_value=iter(())),
-                    patch.object(guard, "event_pr_number", return_value=308),
-                    patch.object(guard, "require_durable_workflow_surface") as durable,
-                    patch.object(guard, "require_current_head_codex_review") as review,
-                ):
-                    selected = {
-                        "require_durable_workflow_surface": durable,
-                        "require_current_head_codex_review": review,
-                    }
-                    selected[failing_guard].side_effect = inject_failure
-                    self.assertEqual(1, guard.main())
-                    durable.assert_called_once()
-                    review.assert_called_once()
-
-
-    def test_real_review_guard_rejects_missing_exact_head_review(self):
-        pull_request = {
-            "state": "open",
-            "draft": False,
-            "base": {"ref": "main"},
-            "head": {"sha": "a" * 40},
-        }
-
+            self.assertTrue(guard.has_exact_head_codex_evidence(326, head))
         with (
-            patch.object(guard, "api", return_value=pull_request),
+            patch.object(guard, "pages", side_effect=(iter(()), iter((comment,)))),
+            patch.object(guard, "review_threads_resolved", return_value=False),
+        ):
+            self.assertFalse(guard.has_exact_head_codex_evidence(326, head))
+
+    def test_review_thread_query_fails_closed_on_unresolved_or_paginated(self):
+        base = {"data": {"repository": {"pullRequest": {"reviewThreads": {
+            "nodes": [{"isResolved": False}], "pageInfo": {"hasNextPage": False}
+        }}}}}
+        with patch.object(guard, "api_request", return_value=base):
+            self.assertFalse(guard.review_threads_resolved(326))
+        base["data"]["repository"]["pullRequest"]["reviewThreads"]["pageInfo"]["hasNextPage"] = True
+        with patch.object(guard, "api_request", return_value=base):
+            with self.assertRaises(RuntimeError):
+                guard.review_threads_resolved(326)
+
+    def test_trusted_event_target_requires_exact_base_and_same_repository(self):
+        event = {"number": 42, "pull_request": {"number": 42,
+            "head": {"sha": "a" * 40, "repo": {"full_name": guard.REPO}},
+            "base": {"sha": "b" * 40, "ref": "main"}}}
+        with patch.multiple(guard, EVENT_NAME="pull_request_target", WORKFLOW_SHA="b" * 40):
+            self.assertEqual({"number": 42, "sha": "a" * 40}, guard.trusted_event_target(event))
+            event["pull_request"]["head"]["repo"]["full_name"] = "fork/repo"
+            self.assertIsNone(guard.trusted_event_target(event))
+
+    def test_main_publishes_both_pending_contexts_before_metadata_reads(self):
+        target = {"number": 42, "sha": "a" * 40, "same_repo": True}
+        calls = []
+        def publish(item, context, state, _description):
+            calls.append((item["sha"], context, state))
+        def active():
+            self.assertEqual([guard.REVIEW_STATUS_CONTEXT, guard.INTEGRITY_STATUS_CONTEXT],
+                             [item[1] for item in calls[:2]])
+            return [target]
+        with (
+            patch.object(guard, "load_event_payload", return_value={}),
+            patch.object(guard, "trusted_event_target", return_value=target),
+            patch.object(guard, "active_main_prs", side_effect=active),
             patch.object(guard, "pages", return_value=iter(())),
+            patch.object(guard, "require_durable_workflow_surface"),
+            patch.object(guard, "has_exact_head_codex_evidence", return_value=True),
+            patch.object(guard, "snapshot_is_current_and_unique", return_value=True),
+            patch.object(guard, "publish_status", side_effect=publish),
         ):
-            failures = []
-            guard.require_current_head_codex_review(308, failures)
+            self.assertEqual(0, guard.main())
+        self.assertTrue(any(context == guard.REVIEW_STATUS_CONTEXT and state == "success"
+                            for _, context, state in calls))
+        self.assertTrue(any(context == guard.INTEGRITY_STATUS_CONTEXT and state == "success"
+                            for _, context, state in calls))
 
-        self.assertEqual(1, len(failures))
-        self.assertIn("no Codex review evidence", failures[0])
+    def test_exception_after_pending_invalidates_both_contexts(self):
+        target = {"number": 42, "sha": "a" * 40, "same_repo": True}
+        calls = []
+        with (
+            patch.object(guard, "load_event_payload", return_value={}),
+            patch.object(guard, "trusted_event_target", return_value=target),
+            patch.object(guard, "active_main_prs", side_effect=RuntimeError("API down")),
+            patch.object(guard, "publish_status", side_effect=lambda item, context, state, _: calls.append((context, state))),
+        ):
+            self.assertEqual(1, guard.main())
+        self.assertIn((guard.REVIEW_STATUS_CONTEXT, "pending"), calls)
+        self.assertIn((guard.INTEGRITY_STATUS_CONTEXT, "pending"), calls)
+        self.assertIn((guard.REVIEW_STATUS_CONTEXT, "failure"), calls)
+        self.assertIn((guard.INTEGRITY_STATUS_CONTEXT, "failure"), calls)
+
+    def test_fork_and_shared_heads_never_receive_success(self):
+        shared = "a" * 40
+        targets = [
+            {"number": 1, "sha": shared, "same_repo": False},
+            {"number": 2, "sha": shared, "same_repo": True},
+        ]
+        with patch.object(guard, "active_main_prs", return_value=targets):
+            self.assertFalse(guard.snapshot_is_current_and_unique([targets[1]]))
+        calls = []
+        with (
+            patch.object(guard, "load_event_payload", return_value={}),
+            patch.object(guard, "trusted_event_target", return_value=None),
+            patch.object(guard, "active_main_prs", return_value=targets),
+            patch.object(guard, "pages", return_value=iter(())),
+            patch.object(guard, "require_durable_workflow_surface"),
+            patch.object(guard, "has_exact_head_codex_evidence", return_value=True),
+            patch.object(guard, "snapshot_is_current_and_unique", return_value=False),
+            patch.object(guard, "publish_status", side_effect=lambda item, context, state, _: calls.append(state)),
+        ):
+            self.assertEqual(1, guard.main())
+        self.assertNotIn("success", calls)
 
     def test_real_durable_surface_guard_rejects_deleted_protected_workflows(self):
         pull_request = {
