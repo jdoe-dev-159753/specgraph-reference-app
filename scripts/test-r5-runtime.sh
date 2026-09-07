@@ -416,7 +416,8 @@ grep -Fq 'command: ["sh", "-c", "chown -R 10001:10001 /cache"]' \
   "${repo_root}/compose.r5.yaml"
 grep -Fq 'condition: service_completed_successfully' "${repo_root}/compose.r5.yaml"
 grep -Fq 'r5-embedding-cache:' "${repo_root}/compose.r5.yaml"
-grep -Fq 'name: "${R5_EMBEDDING_CACHE_VOLUME}"' "${repo_root}/compose.r5.ci.yaml"
+grep -Fq 'name: "${R5_EMBEDDING_CACHE_VOLUME:?R5_EMBEDDING_CACHE_VOLUME must identify this run attempt}"' "${repo_root}/compose.r5.ci.yaml"
+grep -Fq 'name: "${R5_NETWORK_NAME:?R5_NETWORK_NAME must identify this run attempt}"' "${repo_root}/compose.r5.ci.yaml"
 grep -Fq 'R5_EMBEDDING_CACHE_VOLUME: specgraph-r5-ci-embedding-cache-${{ github.run_id }}-${{ github.run_attempt }}' \
   "${repo_root}/.github/workflows/r5-release.yml"
 grep -Fq 'docker volume rm -f "$R5_EMBEDDING_CACHE_VOLUME"' \

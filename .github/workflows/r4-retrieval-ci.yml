@@ -18,8 +18,10 @@ jobs:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      COMPOSE_PROJECT_NAME: specgraph-r4-retrieval-${{ github.run_id }}
-      R4_PORT: '18084'
+      COMPOSE_PROJECT_NAME: specgraph-r4-retrieval-${{ github.run_id }}-${{ github.run_attempt }}
+      R4_PORT: '0'
+      BUILDX_BUILDER: specgraph-r4-retrieval-${{ github.run_id }}-${{ github.run_attempt }}
+      BUILDKIT_CACHE_MOUNT_NS: specgraph-r4-retrieval-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Clean container-owned outputs before checkout
         run: |
@@ -54,6 +56,7 @@ jobs:
 
       - name: Reuse or build immutable exact-head application image
         run: |
+          bash scripts/ci/run-scoped-buildx.sh prepare
           image="$(bash scripts/ci/ensure-app-image.sh \
             "specgraph-reference-app:r4-${SOURCE_SHA}" . "$SOURCE_SHA")"
           echo "APP_R4_IMAGE=$image" >> "$GITHUB_ENV"
@@ -92,6 +95,16 @@ jobs:
             | xargs -r docker volume rm -f || true
 
           docker compose -f compose.r4.yaml up -d --no-build
+
+          application="$(docker compose -f compose.r4.yaml ps -q r4)"
+          endpoint="$(docker port "$application" 8080/tcp | head -n 1)"
+          R4_PORT="${endpoint##*:}"
+          case "$R4_PORT" in
+            ''|*[!0-9]*)
+              echo "Docker did not return a numeric retrieval port: $endpoint" >&2
+              exit 1
+              ;;
+          esac
 
           for attempt in $(seq 1 120); do
             if curl -fsS "http://127.0.0.1:${R4_PORT}/actuator/health" >/dev/null; then
@@ -219,3 +232,11 @@ jobs:
           if not any(item.get("sourceIdentity") and item.get("content") for item in pgvector):
               raise SystemExit("R4 analysis retained no concrete pgvector evidence chunk")
           PY
+
+      - name: Reclaim isolated retrieval runtime
+        if: always()
+        run: |
+          docker compose -f compose.r4.yaml down -v --remove-orphans 2>/dev/null || true
+          bash scripts/ci/run-scoped-buildx.sh cleanup
+          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+            sh -c 'rm -rf /workspace/backend/target /workspace/build'
