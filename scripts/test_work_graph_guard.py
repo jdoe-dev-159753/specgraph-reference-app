@@ -468,7 +468,7 @@ class DurableWorkflowTests(unittest.TestCase):
             workflow.replace("      - run: 'true'", "      - run: |\n          '\n      - ? continue-on-error\n        : true\n        run: exit 1"),
             *(workflow.replace("permissions:\n", f"env:\n  HIDDEN: &{anchor} uses\npermissions:\n").replace(
                 "      - run: 'true'", f"      - *{anchor}: actions/checkout@v6"
-            ) for anchor in ("1", "-", ".")),
+            ) for anchor in ("1", "-", ".", ">", "*", "&")),
         )
         for candidate in mutations:
             self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", candidate))

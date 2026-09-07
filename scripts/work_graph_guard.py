@@ -104,7 +104,7 @@ DIGEST_PERMISSION_NAMES = frozenset(
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 RESERVED_CHECK_NAMES = frozenset({"codex-review-freshness", "work-graph-integrity"})
-YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$>&*])(?:[&*](?![&*>])[^\s\[\]{},]+|!(?:<[^>\r\n]+>|(?![=(])[^\s\[\]{},]+))")
+YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$>])&[^\s\[\]{},]+|(?<![A-Za-z0-9_$])\*[^\s\[\]{},]+|(?<![A-Za-z0-9_$])!(?:<[^>\r\n]+>|(?![=(])[^\s\[\]{},]+)")
 UNCONDITIONAL_CRITICAL_STEPS = frozenset({
     "Verify guard semantics", "Reject competing prose work-state or stale review evidence",
     "Verify proposed work-graph guard semantics",
@@ -350,9 +350,14 @@ def _unquoted_yaml_surface(text: str) -> str:
             masked.append("\n" if line.endswith("\n") else "")
             continue
         block_indent = None
-        masked.append(line)
+        bare_line = line.rstrip("\r\n")
         if re.search(r":\s*[|>](?:[+-]?[1-9]?|[1-9][+-]?)\s*$", line.split("#", 1)[0].rstrip()):
             block_indent = indent
+        if (bare_line == CANONICAL_QUEUE_GROUP or bare_line.startswith("    if: ${{ ")
+                or re.match(r"^\s+(?:run|if):(?:\s|$)", bare_line)):
+            masked.append("\n" if line.endswith("\n") else "")
+            continue
+        masked.append(line)
     text = "".join(masked)
     result: list[str] = []
     quote = None
