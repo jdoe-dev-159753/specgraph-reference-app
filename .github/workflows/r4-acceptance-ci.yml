@@ -55,10 +55,36 @@ jobs:
 
       - name: Reuse or build immutable exact-head application image
         run: |
+          set -euo pipefail
+          : "${RUNNER_TEMP:?RUNNER_TEMP is required for the OCI handoff}"
           bash scripts/ci/run-scoped-buildx.sh prepare
-          image="$(bash scripts/ci/ensure-app-image.sh \
+          app_oci_archive="$RUNNER_TEMP/r4-app-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.oci.tar"
+          app_oci_layout="$RUNNER_TEMP/r4-app-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.oci"
+          rm -rf "$app_oci_layout"
+          mkdir -p "$app_oci_layout"
+          image="$(APP_IMAGE_OCI_ARCHIVE="$app_oci_archive" bash scripts/ci/ensure-app-image.sh \
             "specgraph-reference-app:r4-${SOURCE_SHA}" . "$SOURCE_SHA")"
+          tar -xf "$app_oci_archive" -C "$app_oci_layout"
+          app_oci_digest="$(python3 - "$app_oci_layout/index.json" <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+
+          index = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          manifests = index.get("manifests")
+          if not isinstance(manifests, list) or len(manifests) != 1:
+              raise SystemExit("application OCI handoff must contain exactly one top-level descriptor")
+          digest = manifests[0].get("digest")
+          if not isinstance(digest, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
+              raise SystemExit("application OCI handoff has no valid sha256 descriptor")
+          print(digest)
+          PY
+          )"
           echo "APP_R4_IMAGE=$image" >> "$GITHUB_ENV"
+          echo "APP_R4_OCI_ARCHIVE=$app_oci_archive" >> "$GITHUB_ENV"
+          echo "APP_R4_OCI_LAYOUT=$app_oci_layout" >> "$GITHUB_ENV"
+          echo "APP_R4_OCI_DIGEST=$app_oci_digest" >> "$GITHUB_ENV"
 
       - name: Reuse or build immutable Playwright dependency image
         run: |
@@ -131,8 +157,8 @@ jobs:
           degradation_image="${APP_R4_IMAGE}-degradation"
           docker buildx build --builder "$BUILDX_BUILDER" --load \
             --build-arg "BUILDKIT_CACHE_MOUNT_NS=$BUILDKIT_CACHE_MOUNT_NS" \
+            --build-context "exact-head-image=oci-layout://${APP_R4_OCI_LAYOUT}@${APP_R4_OCI_DIGEST}" \
             -f docker/r4-degradation.Dockerfile \
-            --build-arg "APP_R4_IMAGE=${APP_R4_IMAGE}" \
             -t "$degradation_image" \
             .
           echo "APP_R4_DEGRADATION_IMAGE=$degradation_image" >> "$GITHUB_ENV"
@@ -253,8 +279,14 @@ jobs:
       - name: Reclaim isolated R4 Compose topology and run cache
         if: always()
         run: |
+          set -euo pipefail
+          : "${RUNNER_TEMP:?RUNNER_TEMP is required for OCI cleanup}"
+          app_oci_archive="$RUNNER_TEMP/r4-app-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.oci.tar"
+          app_oci_layout="$RUNNER_TEMP/r4-app-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.oci"
           docker compose -f compose.r4.yaml -f compose.r4.ci-cache.yaml down --volumes --remove-orphans 2>/dev/null || true
           docker volume rm -f "$R4_EMBEDDING_CACHE_VOLUME" 2>/dev/null || true
           bash scripts/ci/run-scoped-buildx.sh cleanup
+          rm -f "$app_oci_archive"
+          rm -rf "$app_oci_layout"
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/build'

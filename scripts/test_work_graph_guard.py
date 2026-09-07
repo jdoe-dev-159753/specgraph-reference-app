@@ -592,10 +592,7 @@ class RunnerResourceIsolationTests(unittest.TestCase):
         self.assertIn("R4_EMBEDDING_CACHE_VOLUME: specgraph-r4-ci-embedding-cache-${{ github.run_id }}-${{ github.run_attempt }}", r4)
         self.assertLess(r4.index('docker volume rm -f "$R4_EMBEDDING_CACHE_VOLUME"'), r4.index("docker volume create"))
         self.assertIn('docker volume rm -f "$R4_EMBEDDING_CACHE_VOLUME"', r4)
-        # The helper remains only as a trusted-base compatibility bridge while
-        # pull_request_target still executes the pre-transition R4 workflow.
-        # Candidate workflows must already use the attempt-scoped volume path.
-        self.assertTrue((self.ROOT / "scripts" / "ci" / "ensure-r4-embedding-cache.sh").exists())
+        self.assertFalse((self.ROOT / "scripts" / "ci" / "ensure-r4-embedding-cache.sh").exists())
         for name in ("r4-acceptance-ci.yml", "r5-release.yml"):
             self.assertNotIn("ensure-r4-embedding-cache.sh", self.workflow(name))
         overlay = (self.ROOT / "compose.r5.ci.yaml").read_text(encoding="utf-8")
