@@ -285,6 +285,13 @@ class MainIntegrationTests(unittest.TestCase):
 
 
 class DurableWorkflowTests(unittest.TestCase):
+    def test_guard_source_digest_is_line_ending_exact(self):
+        source = Path(guard.__file__).read_bytes().decode("utf-8")
+        self.assertEqual([], guard.protected_guard_source_violations(source))
+        alternate = source.replace("\r\n", "\n").replace("\r", "\n")
+        alternate = alternate.replace("\n", "\r\n") if alternate == source else alternate
+        self.assertTrue(guard.protected_guard_source_violations(alternate))
+
     def test_parse_manifest_ignores_comments_and_blank_lines(self):
         manifest = "# durable\napplication-ci.yml\n\n r4-acceptance-ci.yml \n"
         self.assertEqual(

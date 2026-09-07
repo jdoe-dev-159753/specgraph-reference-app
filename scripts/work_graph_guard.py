@@ -40,13 +40,13 @@ PROTECTED_ASSET_SHA256 = {
     ),
     "scripts/test_work_graph_guard.py": frozenset(
         {
-            "fb4f9a427c6d929a54b2427d8c467043402e88a64e0c6720ab62882625d049c0",
             "ec863abafd85df6da36493ba004a297bc447d266173e089e3271dcdc2bce92d1",
+            "09181bf6753b4db1ad39ecc1a9992ca2c6b6a449e8e23eecb3227ecaa121f16d",
         }
     ),
 }
 APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset(
-    {"b22db03db80268a55495b31dd2438d9b0b63ddcb62fc37d9efea1931d7bb68e0"}
+    {"3c1e735a4d3d28ffb784186ea79f14a3710424ff85864684b8aef87a48d8e3b2"}
 )
 
 PREFIX = re.compile(
@@ -337,7 +337,8 @@ def _frozenset_literals(node: ast.AST) -> frozenset[str]:
 
 
 def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], str]:
-    tree = ast.parse(text)
+    parsed = text.replace("\r\n", "\n").replace("\r", "\n")
+    tree = ast.parse(parsed)
     assignments: dict[str, ast.Assign] = {}
     for node in tree.body:
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
@@ -349,10 +350,10 @@ def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], st
             assignments[target.id] = node
     if set(assignments) != DIGEST_PERMISSION_NAMES:
         raise ValueError("guard source must define both reviewed digest permission assignments")
-    source_lines = text.splitlines()
+    source_lines = parsed.splitlines()
     for name, node in assignments.items():
         physical = "\n".join(source_lines[node.lineno - 1 : node.end_lineno]).strip()
-        segment = (ast.get_source_segment(text, node) or "").strip()
+        segment = (ast.get_source_segment(parsed, node) or "").strip()
         if node.col_offset != 0 or physical != segment:
             raise ValueError(f"{name} assignment must be the only statement on its lines")
     protected_node = assignments["PROTECTED_ASSET_SHA256"].value
@@ -384,15 +385,14 @@ def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], st
 
 
 def protected_guard_source_violations(text: str) -> list[str]:
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-    current = Path(__file__).read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    actual = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    current = Path(__file__).read_bytes().decode("utf-8")
     current_hash = hashlib.sha256(current.encode("utf-8")).hexdigest()
     if actual == current_hash or actual in APPROVED_GUARD_SUCCESSOR_SHA256:
         return []
     try:
         current_policy, current_skeleton = _guard_policy_and_skeleton(current)
-        candidate_policy, candidate_skeleton = _guard_policy_and_skeleton(normalized)
+        candidate_policy, candidate_skeleton = _guard_policy_and_skeleton(text)
     except (SyntaxError, ValueError) as exc:
         return [f"{GUARD_SOURCE}: invalid digest permission policy: {exc}"]
     if candidate_skeleton == current_skeleton:
