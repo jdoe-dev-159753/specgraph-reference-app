@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/*.yml'
       - '.github/workflows/*.yaml'
+      - 'README.md'
       - 'backend/pom.xml'
       - 'backend/src/main/java/**'
       - 'backend/src/test/java/**'
@@ -16,6 +17,7 @@ on:
       - 'compose*.yaml'
       - 'docker/*Dockerfile'
       - 'docs/reviewer/frontend-source-inventory.json'
+      - 'docs/reviewer/repository-metrics.md'
       - 'docs/tooling/frontend-reference/**'
       - 'e2e/**'
       - 'frontend/**'
@@ -28,6 +30,7 @@ on:
     paths:
       - '.github/workflows/*.yml'
       - '.github/workflows/*.yaml'
+      - 'README.md'
       - 'backend/pom.xml'
       - 'backend/src/main/java/**'
       - 'backend/src/test/java/**'
@@ -38,6 +41,7 @@ on:
       - 'compose*.yaml'
       - 'docker/*Dockerfile'
       - 'docs/reviewer/frontend-source-inventory.json'
+      - 'docs/reviewer/repository-metrics.md'
       - 'docs/tooling/frontend-reference/**'
       - 'e2e/**'
       - 'frontend/**'
@@ -81,12 +85,48 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
+      - name: Verify repository metrics generator ephemerally
+        env:
+          TMPDIR: ${{ runner.temp }}/specgraph-metrics-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          rm -rf "$TMPDIR"
+          mkdir -p "$TMPDIR/repository"
+          python3 -B -m unittest scripts/test_repository_metrics.py
+          git archive --format=tar HEAD | tar -xf - -C "$TMPDIR/repository"
+          cd "$TMPDIR/repository"
+          git init --quiet
+          git config user.name 'Repository Metrics CI'
+          git config user.email 'repository-metrics@example.invalid'
+          git add .
+          git commit --quiet -m 'ephemeral exact-source fixture'
+          bash scripts/repository-metrics.sh generate
+          bash scripts/repository-metrics.sh check
+
+      - name: Verify committed repository metrics
+        env:
+          TMPDIR: ${{ runner.temp }}/specgraph-metrics-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          rm -rf "$TMPDIR"
+          mkdir -p "$TMPDIR"
+          bash scripts/repository-metrics.sh check
+
       - name: Generate implementation and HTTP API reference
         env:
           npm_config_cache: ${{ runner.temp }}/specgraph-npm-${{ github.run_id }}-${{ github.run_attempt }}
           MAVEN_CACHE_DIR: ${{ runner.temp }}/specgraph-maven-${{ github.run_id }}-${{ github.run_attempt }}
           MAVEN_OPTS: -Dmaven.repo.local=${{ runner.temp }}/specgraph-maven-${{ github.run_id }}-${{ github.run_attempt }}/repository
         run: bash scripts/generate-source-reference.sh
+
+      - name: Attach exact-head repository metrics
+        run: |
+          cp docs/reviewer/repository-metrics.md \
+            backend/target/source-reference/repository-metrics.md
+          {
+            printf '\n## Exact-head verification\n\n'
+            printf -- '- source SHA: `%s`\n' "$SOURCE_SHA"
+            printf -- '- workflow run: `%s`\n' "$GITHUB_RUN_ID"
+            printf -- '- workflow attempt: `%s`\n' "$GITHUB_RUN_ATTEMPT"
+          } >> backend/target/source-reference/repository-metrics.md
 
       - name: Record artifact provenance
         run: |
@@ -108,5 +148,6 @@ jobs:
           docker run --rm -v "$PWD:/workspace" alpine:3.22 \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/docs/tooling/frontend-reference/node_modules /workspace/build'
           rm -rf \
+            "$RUNNER_TEMP/specgraph-metrics-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             "$RUNNER_TEMP/specgraph-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             "$RUNNER_TEMP/specgraph-maven-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
