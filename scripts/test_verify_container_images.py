@@ -141,6 +141,26 @@ class ContainerImageAuditTests(unittest.TestCase):
             self.assertTrue(any("docker run" in finding and "busybox" in finding for finding in findings))
             self.assertTrue(any("BuildKit worker image" in finding and "WORKER_IMAGE" in finding for finding in findings))
 
+    def test_allows_exact_named_build_context_without_weakening_registry_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            images, _ = load_manifest(self.manifest(root))
+            self.write(root, "docker/r4-degradation.Dockerfile", "FROM exact-head-image AS exact-head\nFROM exact-head\n")
+            self.write(root, ".github/workflows/proof.yml", """jobs:
+  proof:
+    runs-on: self-hosted
+    steps:
+      - run: docker buildx build --build-context "exact-head-image=oci-layout://${APP_R4_OCI_LAYOUT}@${APP_R4_OCI_DIGEST}" .
+""")
+            checked, findings = audit_sources(root, images)
+            self.assertEqual(checked, 0)
+            self.assertEqual(findings, [])
+
+            self.write(root, "docker/untrusted.Dockerfile", "FROM arbitrary-build-context\n")
+            _, findings = audit_sources(root, images)
+            self.assertEqual(len(findings), 1)
+            self.assertIn("arbitrary-build-context", findings[0])
+
     def test_allows_only_explicit_first_party_and_local_image_names(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

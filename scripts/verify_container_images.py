@@ -18,6 +18,9 @@ FIRST_PARTY = frozenset({
     "specgraph-reference-app",
 })
 BUILTIN_IMAGES = frozenset({"scratch"})
+# Dockerfile FROM can also name a build context supplied by the repository-owned
+# build command. Keep this allowance exact; arbitrary context-like names still fail.
+DOCKERFILE_EXTERNAL_CONTEXTS = frozenset({"exact-head-image"})
 # These selectors are production-owned local/GHCR images. Their names are part of the
 # deployment contract; every other unresolved selector fails closed.
 FIRST_PARTY_VARIABLES = frozenset({
@@ -286,7 +289,7 @@ def candidates(path: Path, text: str) -> tuple[list[Candidate], set[str]]:
             result.append(Candidate(run_value, number, "docker run"))
         for match in re.finditer(r"\bdocker\s+(?:pull|create)\s+(\S+)", line):
             result.append(Candidate(match.group(1), number, "docker image command"))
-        for match in re.finditer(r"(?:--driver-opt\s+|\b)image=([^\s\"']+)", line):
+        for match in re.finditer(r"--driver-opt(?:=|\s+)[\"']?image=([^\s\"']+)", line):
             result.append(Candidate(match.group(1), number, "BuildKit worker image"))
     for number, line in enumerate(text.splitlines(), 1):
         assignment = re.match(
@@ -334,6 +337,8 @@ def audit_candidate(
 ) -> tuple[int, list[str]]:
     value = _unquote(candidate.value)
     if value in stages or value in BUILTIN_IMAGES:
+        return 0, []
+    if candidate.context == "Dockerfile FROM" and value in DOCKERFILE_EXTERNAL_CONTEXTS:
         return 0, []
     variable = re.fullmatch(r"\$([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:-|:\?)(.*))?\}", value)
     if variable:
