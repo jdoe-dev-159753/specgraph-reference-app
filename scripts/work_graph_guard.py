@@ -35,6 +35,7 @@ PROTECTED_ASSET_SHA256 = {
     ".github/workflows/work-graph-guard-tests.yml": frozenset(
         {
             "22fe48af6a8ee4418643ea1f68dad53c8d5c589af0e1dedbe7573ae88e91f30c",
+            "716a38d52195328dc2689b880d099c6841381da1cdf7ca9a574404f9bf8a586e",
         }
     ),
     "scripts/test_work_graph_guard.py": frozenset(
@@ -441,6 +442,7 @@ def _indented_block(lines: list[str], index: int, indent: int) -> list[str]:
                 break
         block.append(line)
     return block
+
 def _unquoted_yaml_surface(text: str) -> str:
     """Blank quoted scalars and comments before scanning YAML meta-syntax."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -494,6 +496,7 @@ def _unquoted_yaml_surface(text: str) -> str:
             result.append(char)
         index += 1
     return "".join(result)
+
 def _top_level_conjunctions(expression: str) -> list[str]:
     clauses: list[str] = []
     start = depth = index = 0
@@ -527,6 +530,7 @@ def _top_level_conjunctions(expression: str) -> list[str]:
     if any(not clause for clause in clauses):
         raise ValueError("empty top-level conjunction")
     return clauses
+
 def job_condition_violations(filename: str, job: str, line: str) -> list[str]:
     prefix, suffix = "    if: ${{ ", " }}"
     if not line.startswith(prefix) or not line.endswith(suffix):
@@ -551,6 +555,7 @@ def job_condition_violations(filename: str, job: str, line: str) -> list[str]:
     if ONE_SHOT_WORKFLOW.search(business):
         failures.append(f"{filename}: job {job!r} embeds a one-shot issue/PR reference")
     return failures
+
 def trigger_violations(filename: str, lines: list[str]) -> list[str]:
     indexes = [i for i, line in enumerate(lines) if line == "on:"]
     if len(indexes) != 1:
@@ -574,6 +579,7 @@ def trigger_violations(filename: str, lines: list[str]) -> list[str]:
     if not seen:
         failures.append(f"{filename}: workflow must declare at least one trusted trigger")
     return failures
+
 def permission_violations(filename: str, lines: list[str]) -> list[str]:
     failures, writes = [], []
     for line in lines:
@@ -860,6 +866,7 @@ def protected_guard_source_violations(text: str) -> list[str]:
             return []
         return [f"{GUARD_SOURCE}: digest-only preauthorization must be additive and bounded"]
     return [f"{GUARD_SOURCE}: protected guard source changed without an exact reviewed successor permission (got {actual})"]
+
 def workflow_inventory_violations(
     workflow_texts: dict[str, str],
     manifest_text: str,
