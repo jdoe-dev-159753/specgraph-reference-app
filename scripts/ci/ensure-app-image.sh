@@ -17,6 +17,15 @@ recipe_sha="$({
   cat .dockerignore
 } | sha256sum | awk '{print $1}')"
 image_tag="${requested_tag}-recipe-${recipe_sha:0:12}"
+oci_archive="${APP_IMAGE_OCI_ARCHIVE:-}"
+
+if [ -n "$oci_archive" ]; then
+  : "${RUNNER_TEMP:?RUNNER_TEMP is required for an OCI handoff}"
+  case "$oci_archive" in
+    "$RUNNER_TEMP"/*) ;;
+    *) echo "Application OCI archive must stay inside RUNNER_TEMP: $oci_archive" >&2; exit 2 ;;
+  esac
+fi
 
 image_matches() {
   docker image inspect "$image_tag" >/dev/null 2>&1 || return 1
@@ -30,7 +39,7 @@ image_matches() {
     && [ "$actual_recipe" = "$recipe_sha" ]
 }
 
-if image_matches; then
+if image_matches && [ -z "$oci_archive" ]; then
   echo "Reusing immutable application image ${image_tag}" >&2
   printf '%s\n' "$image_tag"
   exit 0
@@ -43,41 +52,31 @@ flock 9
 
 # Another runner service sharing this Docker daemon may have completed the
 # exact immutable build while we waited for the host lock.
-if image_matches; then
+if image_matches && [ -z "$oci_archive" ]; then
   echo "Reusing immutable application image ${image_tag} after peer build" >&2
   printf '%s\n' "$image_tag"
   exit 0
 fi
 
-if docker image inspect "$image_tag" >/dev/null 2>&1; then
+if docker image inspect "$image_tag" >/dev/null 2>&1 && ! image_matches; then
   echo "Replacing stale local tag whose provenance does not match source/build identity: ${image_tag}" >&2
   docker image rm -f "$image_tag" >/dev/null
 fi
 
 echo "Building immutable application image ${image_tag} from ${source_root} @ ${source_revision}, recipe ${recipe_sha}" >&2
-if [ -n "${BUILDX_BUILDER:-}" ]; then
-  docker buildx build --builder "${BUILDX_BUILDER:?run-scoped builder required}" --load \
-    --build-arg "BUILDKIT_CACHE_MOUNT_NS=${BUILDKIT_CACHE_MOUNT_NS:?run-scoped cache namespace required}" \
-    -f docker/app.Dockerfile \
-    --build-arg "SOURCE_ROOT=${source_root}" \
-    --build-arg "SOURCE_REVISION=${source_revision}" \
-    --build-arg "BUILD_RECIPE_SHA256=${recipe_sha}" \
-    -t "$image_tag" \
-    . >&2
-elif [ "${GITHUB_EVENT_NAME:-}" = pull_request_target ]; then
-  # Compatibility bridge: the base-trusted workflow cannot use its candidate
-  # Buildx setup until this workflow change has first landed on the base branch.
-  DOCKER_BUILDKIT=1 docker build \
-    -f docker/app.Dockerfile \
-    --build-arg "SOURCE_ROOT=${source_root}" \
-    --build-arg "SOURCE_REVISION=${source_revision}" \
-    --build-arg "BUILD_RECIPE_SHA256=${recipe_sha}" \
-    -t "$image_tag" \
-    . >&2
-else
-  echo "Run-scoped Buildx builder is required outside the transition PR" >&2
-  exit 1
+extra_outputs=()
+if [ -n "$oci_archive" ]; then
+  rm -f "$oci_archive"
+  extra_outputs+=(--output "type=oci,dest=${oci_archive}")
 fi
+docker buildx build --builder "${BUILDX_BUILDER:?run-scoped builder required}" --load "${extra_outputs[@]}" \
+  --build-arg "BUILDKIT_CACHE_MOUNT_NS=${BUILDKIT_CACHE_MOUNT_NS:?run-scoped cache namespace required}" \
+  -f docker/app.Dockerfile \
+  --build-arg "SOURCE_ROOT=${source_root}" \
+  --build-arg "SOURCE_REVISION=${source_revision}" \
+  --build-arg "BUILD_RECIPE_SHA256=${recipe_sha}" \
+  -t "$image_tag" \
+  . >&2
 
 if ! image_matches; then
   echo "Built image provenance does not match requested source/build identity: ${image_tag}" >&2
