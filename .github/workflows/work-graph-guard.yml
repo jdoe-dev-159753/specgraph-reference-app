@@ -2,7 +2,7 @@ name: work-graph-guard
 
 on:
   pull_request_target:
-    types: [opened, edited, synchronize, reopened, ready_for_review]
+    types: [opened, closed, edited, synchronize, reopened, ready_for_review]
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
@@ -11,6 +11,7 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+  statuses: write
 
 concurrency:
   group: ${{ (!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422)) && 'specgraph-repository-queue' || format('specgraph-bypassed-{0}', github.run_id) }}
@@ -36,6 +37,7 @@ jobs:
         working-directory: .workgraph-trusted
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: python3 -B scripts/work_graph_guard.py
       - name: Reclaim trusted-checkout bytecode
         if: always()
