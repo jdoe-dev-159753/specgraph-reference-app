@@ -65,6 +65,24 @@ are pinned to commits, but tagged container base/build images remain an upstream
 supply-chain dependency. Cleanup is best effort and cannot run after a host crash or hard
 kill; an operator must reclaim any orphan before returning that host to service.
 
+## Native merge statuses
+
+The protected WorkGraph guard publishes `work-graph-integrity` and
+`codex-review-freshness` separately on the immutable PR head. It first moves both contexts
+to pending, then audits every open main PR and the global open issue/PR corpus. A global
+integrity failure invalidates that context on every active head; duplicate open PRs sharing
+one head SHA cannot pass either context. Review freshness accepts only a Codex review object
+whose full 40-hex `commit_id` equals the head, or the authenticated clean Codex bot comment
+that explicitly names that same full SHA. It separately requires every review thread to be
+resolved, so freshness is not presented as a clean approval or as resolution of findings.
+
+The default-branch `pull_request_target` lifecycle plus the hourly sweep heals edits,
+closure, dismissal, and force-push changes without running candidate workflow code. GitHub
+API failure is fail-closed when the status channel remains reachable; a total API outage can
+also prevent replacement of an earlier success and is the residual limitation of commit
+statuses. The final ruleset therefore requires both contexts, strict up-to-date branches,
+and exact-head merge rechecks. Merge queue is not enabled or supported by this workflow.
+
 ## Host attestation and replacement checklist
 
 Before registering or returning a service to the pool, the operator records the following
