@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "scope": "All maintained browser application and Playwright TypeScript/configuration sources",
   "files": [
+    {"path": "e2e/generated-scenario-demo.spec.ts", "kind": "browser-scenario", "authority": "VFY-REPRODUCIBILITY-001"},
     {"path": "e2e/high-volume-review.ts", "kind": "browser-fixture", "authority": "VFY-CUSTOMER-READ-001, FR-ACT-001, FR-HIST-002"},
     {"path": "e2e/package.json", "kind": "tooling-config", "authority": "V&V browser evidence toolchain"},
     {"path": "e2e/playwright.config.ts", "kind": "browser-config", "authority": "V&V delivery evidence policy"},

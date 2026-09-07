@@ -57,6 +57,32 @@ paths:
           description: No authenticated operator session is available.
         '403':
           description: CSRF token is missing or invalid.
+  /api/demo/scenarios:
+    post:
+      operationId: generateDemoScenario
+      summary: Materialize a replayable non-authoritative demonstration scenario
+      description: Available only when the explicit demo-scenario capability is enabled. Fixed regression personas are unchanged.
+      security:
+        - SessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateScenarioRequest'
+      responses:
+        '200':
+          description: Scenario materialized through the normal relational customer boundary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratedScenario'
+        '400': { description: Seed or scenario family is invalid. }
+        '401': { description: No authenticated operator session is available. }
+        '403': { description: CSRF token is missing or invalid. }
+        '404': { description: Optional demo-scenario generation is disabled. }
   /api/customers/{customerId}:
     get:
       operationId: getCustomerReviewPage
@@ -306,6 +332,22 @@ components:
         maximum: 100
         default: 20
   schemas:
+    GenerateScenarioRequest:
+      type: object
+      required: [seed, family]
+      properties:
+        seed: { type: string, pattern: '^-?[0-9]+$' }
+        family: { type: string, enum: [ORDINARY_LOCAL, CROSS_BORDER_GROWTH, MIXED_RED_FLAGS] }
+    GeneratedScenario:
+      type: object
+      required: [customerId, seed, family, generatorIdentity, activityCount, riskEvidenceCount]
+      properties:
+        customerId: { type: string, format: uuid }
+        seed: { type: string }
+        family: { type: string, enum: [ORDINARY_LOCAL, CROSS_BORDER_GROWTH, MIXED_RED_FLAGS] }
+        generatorIdentity: { type: string }
+        activityCount: { type: integer, minimum: 1 }
+        riskEvidenceCount: { type: integer, minimum: 0 }
     CsrfView:
       type: object
       required: [headerName, parameterName, token]

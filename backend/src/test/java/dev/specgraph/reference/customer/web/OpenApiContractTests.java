@@ -36,6 +36,7 @@ class OpenApiContractTests {
                 "/api/session",
                 "/api/session/login",
                 "/api/session/logout",
+                "/api/demo/scenarios",
                 "/api/customers/{customerId}",
                 "/api/customers/{customerId}/analyses",
                 "/api/customers/{customerId}/analyses/{analysisId}");
@@ -56,6 +57,11 @@ class OpenApiContractTests {
         assertThat(logout).isNotNull();
         assertThat(logout.getSecurity()).isNotEmpty();
         assertThat(logout.getResponses()).containsKeys("204", "401", "403");
+
+        var scenarios = api.getPaths().get("/api/demo/scenarios").getPost();
+        assertThat(scenarios.getSecurity()).isNotEmpty();
+        assertThat(scenarios.getResponses()).containsKeys("200", "400", "401", "403", "404");
+        assertThat(api.getComponents().getSchemas()).containsKeys("GenerateScenarioRequest", "GeneratedScenario");
 
         assertThat(api.getComponents().getSecuritySchemes()).containsKey("SessionCookie");
         var sessionCookie = api.getComponents().getSecuritySchemes().get("SessionCookie");

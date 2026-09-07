@@ -3,6 +3,9 @@ spring:
   flyway:
     locations: classpath:db/migration,classpath:db/r4-migration
 specgraph:
+  demo:
+    scenarios:
+      enabled: true
   policy:
     corpus-index: classpath:policy/synthetic/index.txt
     top-k: 3
