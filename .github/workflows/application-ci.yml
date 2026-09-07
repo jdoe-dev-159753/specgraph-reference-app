@@ -13,6 +13,7 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
+      - 'docker/app.Dockerfile'
       - 'compose.yaml'
       - 'compose.oci.yaml'
       - 'compose.r4.yaml'
@@ -23,6 +24,8 @@ on:
       - 'scripts/test-r4-gallery.sh'
       - 'scripts/test-r5-runtime.sh'
       - 'scripts/ci/lm-studio-contract-stub.py'
+      - 'scripts/ci/ensure-app-image.sh'
+      - 'scripts/test_frontend_lock_contract.py'
       - 'e2e/r4-complete-flow.spec.ts'
       - '.github/workflows/r5-release.yml'
       - 'scripts/analyze_dataset_ceiling.py'
@@ -40,6 +43,7 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
+      - 'docker/app.Dockerfile'
       - 'compose.yaml'
       - 'compose.oci.yaml'
       - 'compose.r4.yaml'
@@ -50,6 +54,8 @@ on:
       - 'scripts/test-r4-gallery.sh'
       - 'scripts/test-r5-runtime.sh'
       - 'scripts/ci/lm-studio-contract-stub.py'
+      - 'scripts/ci/ensure-app-image.sh'
+      - 'scripts/test_frontend_lock_contract.py'
       - 'e2e/r4-complete-flow.spec.ts'
       - '.github/workflows/r5-release.yml'
       - 'scripts/analyze_dataset_ceiling.py'
@@ -98,6 +104,9 @@ jobs:
       - name: Ratchet normative SRS to design-map coverage
         run: python3 scripts/validate_design_map.py
 
+      - name: Verify frontend dependency lock contract
+        run: python3 -B -m unittest scripts/test_frontend_lock_contract.py
+
       - name: Verify executable V&V marker inventory
         run: |
           python3 -B -m unittest scripts/test_validate_verification_markers.py
@@ -137,7 +146,7 @@ jobs:
         env:
           npm_config_cache: ${{ runner.temp }}/specgraph-npm-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
-          npm install --prefer-offline --no-audit --no-fund
+          npm ci --prefer-offline --no-audit --no-fund
           npm run build
 
       - name: Validate deployment topology syntax without starting runtime
@@ -240,6 +249,9 @@ jobs:
       - name: Ratchet normative SRS to design-map coverage
         run: python3 scripts/validate_design_map.py
 
+      - name: Verify frontend dependency lock contract
+        run: python3 -B -m unittest scripts/test_frontend_lock_contract.py
+
       - name: Checkout immutable R2 checkpoint for compatibility evidence
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -295,11 +307,11 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
-      - name: Verify frontend with persistent npm download cache
+      - name: Verify frontend with run-scoped npm download cache
         working-directory: frontend
         run: |
           npm_config_cache="$RUNNER_TEMP/specgraph-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
-            npm install --prefer-offline --no-audit --no-fund
+            npm ci --prefer-offline --no-audit --no-fund
           npm run build
 
       - name: Reuse or build exact-head R3 and archived R2/R1 images

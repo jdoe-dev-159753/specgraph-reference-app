@@ -15,6 +15,10 @@ recipe_sha="$({
   cat docker/app.Dockerfile
   printf '%s\0' '.dockerignore'
   cat .dockerignore
+  printf '%s\0' 'frontend/package.json'
+  cat frontend/package.json
+  printf '%s\0' 'frontend/package-lock.json'
+  cat frontend/package-lock.json
 } | sha256sum | awk '{print $1}')"
 image_tag="${requested_tag}-recipe-${recipe_sha:0:12}"
 oci_archive="${APP_IMAGE_OCI_ARCHIVE:-}"
