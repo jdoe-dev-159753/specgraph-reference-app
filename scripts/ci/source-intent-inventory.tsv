@@ -8,6 +8,7 @@ docs/tooling/frontend-reference/tsconfig.json	Defines the strict compilation bou
 docs/tooling/frontend-reference/typedoc.json	Defines deterministic entry points and warning policy for the navigable frontend reference.
 e2e/package.json	Pins the browser verification runtime used to measure end-to-end behavior.
 frontend/package.json	Owns browser runtime dependencies and the application build workflow.
+frontend/package-lock.json	Locks the complete browser dependency graph for deterministic clean CI installation.
 frontend/tsconfig.json	Enforces the strict browser compilation boundary without emitting duplicate assets.
 frontend/tsconfig.node.json	Constrains the Vite configuration build boundary and Node runtime assumptions.
 scripts/test_work_graph_guard.py	Measures protected workflow inventory and exact-head review policy without network execution.

@@ -11,9 +11,14 @@ ARG SOURCE_ROOT
 ARG DELIVERY_RING=R4
 ENV VITE_DELIVERY_RING=${DELIVERY_RING}
 WORKDIR /frontend
+# R0-R4 share this exact dependency manifest. Compare the selected source before
+# reusing the repository-owned lock so a future checkpoint drift fails closed.
+COPY frontend/package.json frontend/package-lock.json /frontend-dependencies/
 COPY ${SOURCE_ROOT}/frontend/package.json ./package.json
 RUN --mount=type=cache,id=specgraph-frontend-npm,target=/root/.npm \
-    npm install
+    cmp -s package.json /frontend-dependencies/package.json \
+    && cp /frontend-dependencies/package-lock.json ./package-lock.json \
+    && npm ci --prefer-offline --no-audit --no-fund
 COPY ${SOURCE_ROOT}/frontend/ ./
 RUN npm run build
 
