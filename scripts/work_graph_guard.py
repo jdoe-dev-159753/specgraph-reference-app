@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import hashlib
 import json
 import os
 import re
 import sys
+from pathlib import Path
 from urllib import error, parse, request
 
 API = "https://api.github.com"
@@ -22,27 +24,30 @@ MIN_REVIEWED_SHA_PREFIX = 10
 MIN_SUMMARY_SHA_PREFIX = 7
 WORKFLOW_DIR = ".github/workflows"
 DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
+GUARD_SOURCE = "scripts/work_graph_guard.py"
 UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
 PROTECTED_ASSET_SHA256 = {
     ".github/workflows/work-graph-guard.yml": frozenset(
         {
-            "e3cf5195153dfcc30b207bab34f88c649b0b8b21987adf5d0178fac96558fcb0",
             "dce4bdafcc8183eccf80c43c51cad5004d626472252e0b1e1f1eec30aa5b9751",
+            "6abee2ccbd9fd282393160640ccd4ac5717e7423defc560243c9a1588e4e7c8c",
         }
     ),
     ".github/workflows/work-graph-guard-tests.yml": frozenset(
         {
-            "a7b76378be9f809f69185785b29e9d4ab134ddd0f8a2f446b74804133dca9f80",
             "22fe48af6a8ee4418643ea1f68dad53c8d5c589af0e1dedbe7573ae88e91f30c",
         }
     ),
     "scripts/test_work_graph_guard.py": frozenset(
         {
-            "8d186bc0c7619ec94b5e7fddbb31182b91348fbdbca13488914fb2935a014e9a",
             "18b210b94a8597c65e84ba45a9fe045f46dd406db3e659c6fae1c14e5c8bec8d",
+            "481f855838afb3e22b5ad0cea5573d52e5c13891dfb17e894beac1a25c29f08f",
         }
     ),
 }
+APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset(
+    {"4ce2a1637e81b60644011dbacbf153b6c11813d70f5a8ebb347725ad0a1b398c"}
+)
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -68,6 +73,10 @@ ONE_SHOT_WORKFLOW = re.compile(
     r"[^A-Za-z0-9]+(?:(?:no|number|id)(?=[^A-Za-z0-9])[^A-Za-z0-9]*)?\d+(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
+DIGEST_PERMISSION_NAMES = frozenset(
+    {"PROTECTED_ASSET_SHA256", "APPROVED_GUARD_SUCCESSOR_SHA256"}
+)
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def api(path: str):
@@ -311,6 +320,86 @@ def protected_asset_violations(path: str, text: str) -> list[str]:
     ]
 
 
+def _frozenset_literals(node: ast.AST) -> frozenset[str]:
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "frozenset" and not node.args and not node.keywords):
+        return frozenset()
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "frozenset" and len(node.args) == 1
+            and not node.keywords and isinstance(node.args[0], ast.Set)):
+        raise ValueError("digest permission must be a literal frozenset")
+    values = [element.value for element in node.args[0].elts if isinstance(element, ast.Constant)]
+    if len(values) != len(node.args[0].elts) or not all(
+        isinstance(value, str) and SHA256.fullmatch(value) for value in values
+    ):
+        raise ValueError("digest permissions must contain only lowercase SHA-256 values")
+    return frozenset(values)
+
+
+def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], str]:
+    tree = ast.parse(text)
+    assignments: dict[str, ast.Assign] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if isinstance(target, ast.Name) and target.id in DIGEST_PERMISSION_NAMES:
+            if target.id in assignments:
+                raise ValueError(f"duplicate digest permission assignment: {target.id}")
+            assignments[target.id] = node
+    if set(assignments) != DIGEST_PERMISSION_NAMES:
+        raise ValueError("guard source must define both reviewed digest permission assignments")
+    source_lines = text.splitlines()
+    for name, node in assignments.items():
+        physical = "\n".join(source_lines[node.lineno - 1 : node.end_lineno]).strip()
+        segment = (ast.get_source_segment(text, node) or "").strip()
+        if node.col_offset != 0 or physical != segment:
+            raise ValueError(f"{name} assignment must be the only statement on its lines")
+    protected_node = assignments["PROTECTED_ASSET_SHA256"].value
+    if not isinstance(protected_node, ast.Dict):
+        raise ValueError("protected asset permissions must be a literal dictionary")
+    protected: dict[str, frozenset[str]] = {}
+    for key_node, value_node in zip(protected_node.keys, protected_node.values, strict=True):
+        if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+            raise ValueError("protected asset paths must be literal strings")
+        if key_node.value in protected:
+            raise ValueError("duplicate protected asset path")
+        protected[key_node.value] = _frozenset_literals(value_node)
+    if set(protected) != set(PROTECTED_ASSET_SHA256):
+        raise ValueError("protected asset path set cannot change through a digest-only rotation")
+    if any(not 1 <= len(values) <= 2 for values in protected.values()):
+        raise ValueError("each protected asset must retain one or two reviewed digests")
+    successors = _frozenset_literals(assignments["APPROVED_GUARD_SUCCESSOR_SHA256"].value)
+    if len(successors) > 1:
+        raise ValueError("guard source may preauthorize at most one exact successor")
+    spans = sorted((node.lineno - 1, node.end_lineno or node.lineno, name)
+                   for name, node in assignments.items())
+    lines, skeleton, cursor = text.splitlines(keepends=True), [], 0
+    for start, end, name in spans:
+        skeleton.extend(lines[cursor:start])
+        skeleton.append(f"<{name}>\n")
+        cursor = end
+    skeleton.extend(lines[cursor:])
+    return {**protected, GUARD_SOURCE: successors}, "".join(skeleton)
+
+
+def protected_guard_source_violations(text: str) -> list[str]:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    current = Path(__file__).read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    current_hash = hashlib.sha256(current.encode("utf-8")).hexdigest()
+    if actual == current_hash or actual in APPROVED_GUARD_SUCCESSOR_SHA256:
+        return []
+    try:
+        _, current_skeleton = _guard_policy_and_skeleton(current)
+        _, candidate_skeleton = _guard_policy_and_skeleton(normalized)
+    except (SyntaxError, ValueError) as exc:
+        return [f"{GUARD_SOURCE}: invalid digest permission policy: {exc}"]
+    if candidate_skeleton == current_skeleton:
+        return []
+    return [f"{GUARD_SOURCE}: protected guard source changed without an exact reviewed successor permission (got {actual})"]
+
+
 def workflow_inventory_violations(
     workflow_texts: dict[str, str],
     manifest_text: str,
@@ -362,6 +451,7 @@ def workflow_inventory_violations(
 def pr_changes_workflow_contract(changed_paths) -> bool:
     return any(
         path == DURABLE_WORKFLOW_MANIFEST
+        or path == GUARD_SOURCE
         or path.startswith(f"{WORKFLOW_DIR}/")
         or path in PROTECTED_ASSET_SHA256
         for path in changed_paths
@@ -386,7 +476,8 @@ def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> Non
         return
 
     changed_items = list(pages(f"/repos/{REPO}/pulls/{pr_number}/files"))
-    if not pr_changes_workflow_contract(changed_file_paths(changed_items)):
+    changed_paths = changed_file_paths(changed_items)
+    if not pr_changes_workflow_contract(changed_paths):
         return
 
     head_sha = pr["head"]["sha"]
@@ -416,6 +507,10 @@ def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> Non
         inventory_failures.extend(
             protected_asset_violations(protected_path, protected_text)
         )
+    if GUARD_SOURCE in changed_paths:
+        payload = api(f"/repos/{REPO}/contents/{GUARD_SOURCE}?ref={ref}")
+        guard_text = decode_contents_payload(payload, GUARD_SOURCE)
+        inventory_failures.extend(protected_guard_source_violations(guard_text))
     for finding in inventory_failures:
         failures.append(f"pull request #{pr_number}: {finding}")
 
