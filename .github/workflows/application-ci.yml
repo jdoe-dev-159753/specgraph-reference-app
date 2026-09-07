@@ -170,7 +170,8 @@ jobs:
           rm -rf "$RUNNER_TEMP/specgraph-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
   verify:
-    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.event_name == 'workflow_dispatch' && inputs.compatibility == true }}
+    needs: fast-verify
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && always() && github.event_name == 'workflow_dispatch' && inputs.compatibility == true }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       COMPOSE_PROJECT_NAME: specgraph-ci-${{ github.run_id }}-${{ github.run_attempt }}
