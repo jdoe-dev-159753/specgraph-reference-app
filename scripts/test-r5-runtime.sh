@@ -416,6 +416,11 @@ grep -Fq 'command: ["sh", "-c", "chown -R 10001:10001 /cache"]' \
   "${repo_root}/compose.r5.yaml"
 grep -Fq 'condition: service_completed_successfully' "${repo_root}/compose.r5.yaml"
 grep -Fq 'r5-embedding-cache:' "${repo_root}/compose.r5.yaml"
+grep -Fq 'name: "${R5_EMBEDDING_CACHE_VOLUME}"' "${repo_root}/compose.r5.ci.yaml"
+grep -Fq 'R5_EMBEDDING_CACHE_VOLUME: specgraph-r5-ci-embedding-cache-${{ github.run_id }}-${{ github.run_attempt }}' \
+  "${repo_root}/.github/workflows/r5-release.yml"
+grep -Fq 'docker volume rm -f "$R5_EMBEDDING_CACHE_VOLUME"' \
+  "${repo_root}/.github/workflows/r5-release.yml"
 grep -Fq 'response_model="$(json_string_value modelIdentity)"' "${script_dir}/r5-runtime-up.sh"
 grep -Fq 'response_prompt="$(json_string_value promptIdentity)"' "${script_dir}/r5-runtime-up.sh"
 grep -Fq 'response_runtime="$(json_string_value runtime)"' "${script_dir}/r5-runtime-up.sh"

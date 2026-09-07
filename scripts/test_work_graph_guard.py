@@ -498,7 +498,7 @@ class DurableWorkflowTests(unittest.TestCase):
         workflow_path = ".github/workflows/work-graph-guard-tests.yml"
         workflow = (root / workflow_path).read_text(encoding="utf-8")
         no_op_workflow = workflow.replace(
-            "        run: python3 -m unittest scripts/test_work_graph_guard.py",
+            "        run: python3 -B -m unittest scripts/test_work_graph_guard.py",
             "        run: echo tests-disabled",
         )
         self.assertTrue(guard.protected_asset_violations(workflow_path, no_op_workflow))
