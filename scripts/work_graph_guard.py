@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject competing prose work-state, stale Codex review evidence, and one-shot workflows."""
+"""Enforce canonical work state, trusted workflows, and exact-head review evidence."""
 
 from __future__ import annotations
 
@@ -27,6 +27,9 @@ DURABLE_WORKFLOW_MANIFEST = "scripts/ci/durable-workflows.txt"
 GUARD_SOURCE = "scripts/work_graph_guard.py"
 UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
 PROTECTED_ASSET_SHA256 = {
+    ".github/workflows/application-ci.yml": frozenset({"a09b929ef05c365cbb43242c103d66688356b776ae1789416b9904e05e541b22"}),
+    ".github/workflows/demo-images.yml": frozenset({"cde9a5afa1864e5212348bc09f45b6b38139a663fd8662be3fc8b8ee395fd120"}),
+    ".github/workflows/plantuml-diagrams.yml": frozenset({"178e18709535443ba228dc6de1823dd9101c3ceec69e9d408fa9b40c58fd4571"}),
     ".github/workflows/work-graph-guard.yml": frozenset(
         {
             "dce4bdafcc8183eccf80c43c51cad5004d626472252e0b1e1f1eec30aa5b9751",
@@ -44,10 +47,17 @@ PROTECTED_ASSET_SHA256 = {
             "c21dcca8b646f64d7a22485fef1fbb20fdfd4b8563b4ab966892316eebf37b10",
         }
     ),
+    ".github/workflows/project-v2-reconcile.yml": frozenset({"bcb288e2d3e7105610b8d943e12b3093eab0fc39616ce8b9a39c61fbf63589cb"}),
+    ".github/workflows/r4-acceptance-ci.yml": frozenset({"5cb50f58c04217bf1b8dbe24ff1e7be3a63450541f89d2652b4baae66e4e45cc"}),
+    ".github/workflows/r4-auth-ci.yml": frozenset({"16c530a73f16bd8274738ae42a51b45ca1764e75f985b992cad1899e1faa4351"}),
+    ".github/workflows/r4-gallery-ci.yml": frozenset({"f11ae1c0af86f2f57380a851220b85dca997f5cbb3464a0bfb6bb62b2d2b825e"}),
+    ".github/workflows/r4-retrieval-ci.yml": frozenset({"1f288cac39ea7af3261a0c39912e3a028207b18b5660604f32cc707efa3ede01"}),
+    ".github/workflows/r5-release.yml": frozenset({"56657c768730f686e33f6bdc7b2c777d8b291adfec894be4b5f0a946da449fb5"}),
+    ".github/workflows/source-reference.yml": frozenset({"fa640513a7709cc35282b5683aa15e877e5bf7ae2f4b26e4cd6df7ad3f196f43"}),
+    ".github/scripts/project-v2-reconcile.cjs": frozenset({"cad09c1ef157969b559f4efd0af8ba01b4dd5b627d6a7dc81d45160a006f12f5"}),
+    "scripts/ci/durable-workflows.txt": frozenset({"d6b601cfba997fff4e4240ecc50489fd90885650fa30fbaeec364f133631a521"}),
 }
-APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset(
-    {"682dbcd08f3b88d44ed0c970fcecaf16ccfc54299620bd4ca6e7d9f7099b9b2a"}
-)
+APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset()
 
 PREFIX = re.compile(
     r"^\s*(?:Classification|Parent|Children|Depends on|Blocked by|Blocking|"
@@ -69,14 +79,45 @@ CANONICAL_ROOT_KEY = re.compile(
     r"^(run-name|on|permissions|env|defaults|concurrency|jobs):(?:\s|$)"
 )
 ONE_SHOT_WORKFLOW = re.compile(
-    r"(?<![A-Za-z0-9])(?:pr|pull(?:[^A-Za-z0-9]+request)?|issue|discovery|story|fix)"
-    r"[^A-Za-z0-9]+(?:(?:no|number|id)(?=[^A-Za-z0-9])[^A-Za-z0-9]*)?\d+(?![A-Za-z0-9])",
+    r"(?<![A-Za-z0-9])(?:pr|pull[^A-Za-z0-9]+request|issue|discovery|story|fix)"
+    r"(?:no|number|id)?(?![A-Za-z0-9])[^\n]*?"
+    r"(?<![A-Za-z0-9])(?:0x[0-9a-f]+|\d+)(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
+EVENT_NUMBER_REFERENCE = re.compile(
+    r"\bgithub\.event(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.number\b", re.IGNORECASE
+)
+CANONICAL_JOB_KEY = re.compile(r"^  ([_A-Za-z][_A-Za-z0-9-]*):(?:\s+#.*)?$")
+CANONICAL_JOB_PROPERTY = re.compile(r"^    ([A-Za-z][A-Za-z0-9_-]*):(.*)$")
+CANONICAL_TRIGGER = re.compile(r"^  ([a-z_]+):(.*)$")
+CANONICAL_PERMISSION = re.compile(r"^(  |      )([a-z][a-z-]*): (read|write|none)$")
+PRIVATE_RUNNER = "    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]"
+ALLOWED_TRIGGERS = frozenset({"push", "pull_request_target", "schedule", "workflow_dispatch"})
+PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}(?:\s+#.*)?$")
+PINNED_DOCKER_ACTION = re.compile(r"^docker://[^\s@]+@sha256:[0-9a-f]{64}$")
+REFERENCE_NUMBER = re.compile(
+    r"\b(?:pull[_ -]?request|pr|issue)[^A-Za-z0-9]+"
+    r"(?:(?:no|number|id)(?=[^A-Za-z0-9])[^A-Za-z0-9]*)?\d+\b",
+    re.IGNORECASE,
+)
+REQUIRED_JOB_CLAUSES = (
+    "!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)",
+    "!(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository)",
+    "!(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository)",
+    "(github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422)",
+    "github.event_name != 'issues'",
+)
+CANONICAL_QUEUE_GROUP = "  group: ${{ (!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422)) && 'specgraph-repository-queue' || format('specgraph-bypassed-{0}', github.run_id) }}"
 DIGEST_PERMISSION_NAMES = frozenset(
     {"PROTECTED_ASSET_SHA256", "APPROVED_GUARD_SUCCESSOR_SHA256"}
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+RESERVED_CHECK_NAMES = frozenset({"codex-review-freshness", "work-graph-integrity"})
+YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$])(?:[&*][A-Za-z_][A-Za-z0-9_-]*|![A-Za-z_][A-Za-z0-9_-]*)")
+UNCONDITIONAL_CRITICAL_STEPS = frozenset({
+    "Verify guard semantics", "Reject competing prose work-state or stale review evidence",
+    "Verify proposed work-graph guard semantics",
+})
 
 
 def api(path: str):
@@ -299,7 +340,310 @@ def canonical_workflow_name_violations(filename: str, text: str) -> list[str]:
     return []
 
 
+def _indented_block(lines: list[str], index: int, indent: int) -> list[str]:
+    block: list[str] = []
+    for line in lines[index + 1 :]:
+        if line.strip() and not line.lstrip().startswith("#"):
+            current = len(line) - len(line.lstrip(" "))
+            if current <= indent:
+                break
+        block.append(line)
+    return block
 
+def _unquoted_yaml_surface(text: str) -> str:
+    """Blank quoted scalars and comments before scanning YAML meta-syntax."""
+    result: list[str] = []
+    quote = None
+    escaped = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if quote:
+            result.append("\n" if char == "\n" else " ")
+            if quote == '"' and char == "\\" and not escaped:
+                escaped = True
+            elif char == quote and not escaped:
+                if quote == "'" and index + 1 < len(text) and text[index + 1] == "'":
+                    result.append(" ")
+                    index += 1
+                else:
+                    quote = None
+            else:
+                escaped = False
+        elif char in {"'", '"'}:
+            quote = char
+            result.append(" ")
+        elif char == "#":
+            while index < len(text) and text[index] != "\n":
+                result.append(" ")
+                index += 1
+            if index < len(text):
+                result.append("\n")
+        else:
+            result.append(char)
+        index += 1
+    return "".join(result)
+
+def _top_level_conjunctions(expression: str) -> list[str]:
+    clauses: list[str] = []
+    start = depth = index = 0
+    quote = None
+    while index < len(expression):
+        char = expression[index]
+        if quote:
+            if char == quote:
+                if index + 1 < len(expression) and expression[index + 1] == quote:
+                    index += 2
+                    continue
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("unbalanced parentheses")
+        elif depth == 0 and expression.startswith("||", index):
+            raise ValueError("top-level || is forbidden")
+        elif depth == 0 and expression.startswith("&&", index):
+            clauses.append(expression[start:index].strip())
+            start = index + 2
+            index += 1
+        index += 1
+    if quote or depth:
+        raise ValueError("unbalanced quotes or parentheses")
+    clauses.append(expression[start:].strip())
+    if any(not clause for clause in clauses):
+        raise ValueError("empty top-level conjunction")
+    return clauses
+
+def job_condition_violations(filename: str, job: str, line: str) -> list[str]:
+    prefix, suffix = "    if: ${{ ", " }}"
+    if not line.startswith(prefix) or not line.endswith(suffix):
+        return [f"{filename}: job {job!r} has non-canonical job-level if syntax"]
+    expression = line[len(prefix) : -len(suffix)]
+    try:
+        clauses = _top_level_conjunctions(expression)
+    except ValueError as exc:
+        return [f"{filename}: job {job!r} has unsafe job-level if: {exc}"]
+    missing = [clause for clause in REQUIRED_JOB_CLAUSES if clause not in clauses]
+    failures = []
+    if missing:
+        failures.append(
+            f"{filename}: job {job!r} is missing exact trust conjunctions: "
+            + ", ".join(missing)
+        )
+    if any(re.fullmatch(r"\(*\s*(?:true|false)\s*\)*", clause, re.IGNORECASE) for clause in clauses):
+        failures.append(f"{filename}: job {job!r} uses a constant boolean trust conjunction")
+    business = expression
+    for clause in REQUIRED_JOB_CLAUSES:
+        business = business.replace(clause, "")
+    if ONE_SHOT_WORKFLOW.search(business):
+        failures.append(f"{filename}: job {job!r} embeds a one-shot issue/PR reference")
+    return failures
+
+def trigger_violations(filename: str, lines: list[str]) -> list[str]:
+    indexes = [i for i, line in enumerate(lines) if line == "on:"]
+    if len(indexes) != 1:
+        return [f"{filename}: expected exactly one canonical root on block"]
+    failures, seen = [], set()
+    for line in _indented_block(lines, indexes[0], 0):
+        if not line.strip() or line.lstrip().startswith("#") or line.startswith("    "):
+            continue
+        match = CANONICAL_TRIGGER.fullmatch(line)
+        if not match:
+            failures.append(f"{filename}: non-canonical trigger entry is forbidden: {line!r}")
+            continue
+        event = match.group(1)
+        if event in seen:
+            failures.append(f"{filename}: duplicate trigger is forbidden: {event}")
+        seen.add(event)
+        if event not in ALLOWED_TRIGGERS:
+            failures.append(f"{filename}: untrusted or unsupported trigger is forbidden: {event}")
+        if REFERENCE_NUMBER.search(line):
+            failures.append(f"{filename}: trigger embeds a one-shot issue/PR reference")
+    if not seen:
+        failures.append(f"{filename}: workflow must declare at least one trusted trigger")
+    return failures
+
+def permission_violations(filename: str, lines: list[str]) -> list[str]:
+    failures = []
+    for line in lines:
+        if re.fullmatch(r"(?:    )?permissions\s*:.*", line) and line not in {
+            "permissions:", "    permissions:"
+        }:
+            failures.append(f"{filename}: permissions must use a canonical block")
+    for index, line in enumerate(lines):
+        if line not in {"permissions:", "    permissions:"}:
+            continue
+        indent = 0 if line == "permissions:" else 4
+        seen = set()
+        for entry in _indented_block(lines, index, indent):
+            if not entry.strip() or entry.lstrip().startswith("#"):
+                continue
+            match = CANONICAL_PERMISSION.fullmatch(entry)
+            if not match or len(match.group(1)) != indent + 2:
+                failures.append(f"{filename}: non-canonical permission entry is forbidden: {entry!r}")
+                continue
+            name, value = match.group(2), match.group(3)
+            if name in seen:
+                failures.append(f"{filename}: duplicate permission is forbidden: {name}")
+            seen.add(name)
+            if name in {"statuses", "checks"} and value == "write":
+                if filename != "work-graph-guard.yml" or name != "statuses":
+                    failures.append(f"{filename}: {name}: write is reserved for work-graph-guard.yml")
+    return failures
+
+def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
+    lines = text.splitlines()
+    failures = trigger_violations(filename, lines)
+    yaml_surface = _unquoted_yaml_surface(text)
+    if re.search(r"^\s*(?:-\s*)?\?(?:\s|$)|^\s*:(?:\s|$)", yaml_surface, re.MULTILINE):
+        failures.append(f"{filename}: explicit YAML mapping keys are forbidden")
+    if YAML_META_TOKEN.search(yaml_surface):
+        failures.append(f"{filename}: YAML anchors, aliases, and tags are forbidden")
+    if re.search(r"\\u[0-9a-fA-F]{4}", text):
+        failures.append(f"{filename}: Unicode YAML escapes are forbidden")
+    if filename.rsplit(".", 1)[0].casefold() in RESERVED_CHECK_NAMES:
+        failures.append(f"{filename}: workflow identity collides with a required status context")
+    if any(line.startswith("run-name") for line in lines):
+        failures.append(f"{filename}: top-level run-name is forbidden")
+    if any(re.search(r"[\"']?continue-on-error[\"']?\s*:", line) for line in lines):
+        failures.append(f"{filename}: continue-on-error is forbidden")
+    if ONE_SHOT_WORKFLOW.search("\n".join(_indented_block(lines, lines.index("on:"), 0)) if "on:" in lines else ""):
+        failures.append(f"{filename}: trigger block embeds a one-shot issue/PR reference")
+    if EVENT_NUMBER_REFERENCE.search(text):
+        failures.append(f"{filename}: event number fields are forbidden in durable workflows")
+
+    concurrency = [i for i, line in enumerate(lines) if line == "concurrency:"]
+    expected_queue = [CANONICAL_QUEUE_GROUP, "  cancel-in-progress: false", "  queue: max"]
+    if len(concurrency) != 1 or [
+        line for line in _indented_block(lines, concurrency[0], 0)
+        if line.strip() and not line.lstrip().startswith("#")
+    ] != expected_queue:
+        failures.append(f"{filename}: concurrency must use the canonical trusted/bypassed queue")
+
+    jobs_indexes = [i for i, line in enumerate(lines) if line == "jobs:"]
+    if len(jobs_indexes) != 1:
+        return failures + [f"{filename}: expected exactly one canonical jobs block"]
+    job_starts = []
+    for index, line in enumerate(lines[jobs_indexes[0] + 1 :], jobs_indexes[0] + 1):
+        if line and not line[0].isspace():
+            break
+        if not line.strip() or line.lstrip().startswith("#") or line.startswith("    "):
+            continue
+        match = CANONICAL_JOB_KEY.fullmatch(line)
+        if not match:
+            failures.append(f"{filename}: non-canonical indentation-two job entry: {line!r}")
+        else:
+            job_starts.append((index, match.group(1)))
+    names = [name for _, name in job_starts]
+    if not names:
+        failures.append(f"{filename}: jobs block contains no canonical job")
+        return failures
+    if len(names) != len(set(names)):
+        failures.append(f"{filename}: duplicate job key is forbidden")
+    if RESERVED_CHECK_NAMES.intersection(name.casefold() for name in names):
+        failures.append(f"{filename}: job identity collides with a required status context")
+
+    has_root_permissions = lines.count("permissions:") == 1
+    for position, (start, job) in enumerate(job_starts):
+        end = job_starts[position + 1][0] if position + 1 < len(job_starts) else len(lines)
+        body = lines[start + 1 : end]
+        properties = []
+        for line in body:
+            if not line.strip() or line.lstrip().startswith("#") or line.startswith("      "):
+                continue
+            match = CANONICAL_JOB_PROPERTY.fullmatch(line)
+            if not match:
+                failures.append(f"{filename}: job {job!r} has non-canonical property: {line!r}")
+            else:
+                properties.append((match.group(1), line))
+        keys = [key for key, _ in properties]
+        if len(keys) != len(set(keys)):
+            failures.append(f"{filename}: job {job!r} has duplicate job-level keys")
+        if "name" in keys:
+            failures.append(f"{filename}: job-level name is forbidden")
+        if not has_root_permissions and keys.count("permissions") != 1:
+            failures.append(f"{filename}: job {job!r} has no explicit token permission boundary")
+        runners = [line for key, line in properties if key == "runs-on"]
+        if runners != [PRIVATE_RUNNER]:
+            failures.append(f"{filename}: job {job!r} must use exactly the private runner pool")
+        conditions = [line for key, line in properties if key == "if"]
+        if len(conditions) != 1:
+            failures.append(f"{filename}: job {job!r} must have exactly one canonical job-level if")
+        else:
+            failures.extend(job_condition_violations(filename, job, conditions[0]))
+            if position and "always()" not in _top_level_conjunctions(
+                conditions[0][len("    if: ${{ ") : -len(" }}")]
+            ):
+                failures.append(f"{filename}: dependent job {job!r} must include top-level always()")
+        needs = [line for key, line in properties if key == "needs"]
+        expected_needs = [] if position == 0 else [f"    needs: {names[position - 1]}"]
+        if needs != expected_needs:
+            failures.append(f"{filename}: jobs must form one document-order needs chain")
+        matrix_entries = [index for index, line in enumerate(body) if line == "      matrix:"]
+        matrix_like = [line for line in body if re.match(r"\s+[\"']?(?:matrix|max-parallel)[\"']?\s*:", line)]
+        if any(line not in {"      matrix:", "      max-parallel: 1"} for line in matrix_like):
+            failures.append(f"{filename}: matrix keys must use canonical indentation and max-parallel: 1")
+        if any(key == "strategy" and line != "    strategy:" for key, line in properties):
+            failures.append(f"{filename}: strategy must use a canonical block")
+        if matrix_entries:
+            strategy_entries = [index for index, line in enumerate(body) if line == "    strategy:"]
+            if len(strategy_entries) != 1:
+                failures.append(f"{filename}: matrix job must have one canonical strategy block")
+            else:
+                strategy = _indented_block(body, strategy_entries[0], 4)
+                direct = [line for line in strategy if line.startswith("      ") and not line.startswith("        ")]
+                if direct.count("      matrix:") != 1 or direct.count("      max-parallel: 1") != 1:
+                    failures.append(f"{filename}: matrix strategy must declare exactly max-parallel: 1")
+
+    for line in lines:
+        if "runs-on:" in line and line != PRIVATE_RUNNER:
+            failures.append(f"{filename}: non-canonical runner placement is forbidden: {line!r}")
+        uses = re.fullmatch(r"\s+(?:-\s+)?uses:\s+(.+)", line)
+        if re.search(r"[\"']?uses[\"']?\s*:", line) and not uses:
+            failures.append(f"{filename}: non-canonical uses key is forbidden: {line!r}")
+        elif uses and uses.group(1).startswith("docker://") and not PINNED_DOCKER_ACTION.fullmatch(uses.group(1)):
+            failures.append(f"{filename}: Docker action must use an exact sha256 digest")
+        elif uses and uses.group(1).startswith("./"):
+            failures.append(f"{filename}: repository-local actions are forbidden until recursively pinned")
+        elif uses and not uses.group(1).startswith("docker://") and not PINNED_ACTION.fullmatch(uses.group(1)):
+            failures.append(f"{filename}: external action must use an exact 40-hex commit: {uses.group(1)!r}")
+        step_if = re.fullmatch(r"(?:      - |        )if: (.+)", line)
+        if step_if or re.fullmatch(r"(?:      - |        )[\"']?if[\"']?\s*:.*", line):
+            allowed = {
+                "always()",
+                "failure()",
+                "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+            }
+            if not step_if or step_if.group(1) not in allowed:
+                failures.append(f"{filename}: step-level if must use an approved canonical predicate")
+    for index, line in enumerate(lines):
+        match = re.fullmatch(r"      - name: (.+)", line)
+        if match and match.group(1) in UNCONDITIONAL_CRITICAL_STEPS:
+            if any(entry.startswith("        if:") for entry in _indented_block(lines, index, 6)):
+                failures.append(
+                    f"{filename}: critical step {match.group(1)!r} must run unconditionally"
+                )
+    failures.extend(permission_violations(filename, lines))
+    scrubbed_secrets = text.replace("${{ secrets.GITHUB_TOKEN }}", "")
+    if filename == "project-v2-reconcile.yml":
+        scrubbed_secrets = scrubbed_secrets.replace("${{ secrets.PROJECTS_TOKEN }}", "")
+    if re.search(r"\bsecrets\b", scrubbed_secrets, re.IGNORECASE):
+        failures.append(f"{filename}: dynamic or non-approved secret reference is forbidden")
+    if filename == "project-v2-reconcile.yml" and (
+        text.count("PROJECTS_TOKEN") != 1
+        or text.count("          github-token: ${{ secrets.PROJECTS_TOKEN }}") != 1
+    ):
+        failures.append(f"{filename}: expected one canonical PROJECTS_TOKEN binding")
+    for line in lines:
+        if line == CANONICAL_QUEUE_GROUP or line.startswith("    if: ${{ "):
+            continue
+        if ONE_SHOT_WORKFLOW.search(line):
+            failures.append(f"{filename}: durable source embeds a one-shot issue/PR reference")
+    return failures
 
 def protected_asset_violations(path: str, text: str) -> list[str]:
     """Pin complete guard-chain assets so overrides and no-op changes fail closed."""
@@ -384,6 +728,7 @@ def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], st
 
 
 def protected_guard_source_violations(text: str) -> list[str]:
+    """Accept this guard, one exact successor, or a digest-permission-only rotation."""
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
     current = Path(__file__).read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
@@ -404,8 +749,6 @@ def protected_guard_source_violations(text: str) -> list[str]:
             return []
         return [f"{GUARD_SOURCE}: digest-only preauthorization must be additive and bounded"]
     return [f"{GUARD_SOURCE}: protected guard source changed without an exact reviewed successor permission (got {actual})"]
-
-
 def workflow_inventory_violations(
     workflow_texts: dict[str, str],
     manifest_text: str,
@@ -443,6 +786,7 @@ def workflow_inventory_violations(
 
     for filename, text in sorted(workflow_texts.items()):
         failures.extend(canonical_workflow_name_violations(filename, text))
+        failures.extend(durable_workflow_policy_violations(filename, text))
         workflow_name = extract_workflow_name(text)
         if ONE_SHOT_WORKFLOW.search(filename) or (
             workflow_name != UNRESOLVED_WORKFLOW_NAME
@@ -478,12 +822,7 @@ def changed_file_paths(changed_items: list[dict]) -> list[str]:
 
 def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> None:
     pr = api(f"/repos/{REPO}/pulls/{pr_number}")
-    if pr.get("state") != "open" or pr.get("draft"):
-        return
-
-    changed_items = list(pages(f"/repos/{REPO}/pulls/{pr_number}/files"))
-    changed_paths = changed_file_paths(changed_items)
-    if not pr_changes_workflow_contract(changed_paths):
+    if pr.get("state") != "open" or pr.get("draft") or pr.get("base", {}).get("ref") != "main":
         return
 
     head_sha = pr["head"]["sha"]
@@ -493,14 +832,23 @@ def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> Non
     )
     manifest_text = decode_contents_payload(manifest_payload, DURABLE_WORKFLOW_MANIFEST)
 
-    entries = api(f"/repos/{REPO}/contents/{WORKFLOW_DIR}?ref={ref}")
+    tree = api(f"/repos/{REPO}/git/trees/{ref}?recursive=1")
+    if (not isinstance(tree, dict) or tree.get("truncated") is not False
+            or not isinstance(tree.get("tree"), list)):
+        failures.append(f"pull request #{pr_number}: recursive Git tree is missing or truncated")
+        return
+    workflow_paths = sorted(
+        entry.get("path", "")
+        for entry in tree.get("tree", [])
+        if entry.get("type") == "blob"
+        and entry.get("path", "").startswith(f"{WORKFLOW_DIR}/")
+        and "/" not in entry.get("path", "").removeprefix(f"{WORKFLOW_DIR}/")
+        and entry.get("path", "").endswith((".yml", ".yaml"))
+    )
     workflow_texts: dict[str, str] = {}
-    for entry in entries:
-        name = entry.get("name") or ""
-        if entry.get("type") != "file" or not name.endswith((".yml", ".yaml")):
-            continue
-        payload = api(f"/repos/{REPO}/contents/{WORKFLOW_DIR}/{name}?ref={ref}")
-        workflow_texts[name] = decode_contents_payload(payload, f"{WORKFLOW_DIR}/{name}")
+    for path in workflow_paths:
+        payload = api(f"/repos/{REPO}/contents/{path}?ref={ref}")
+        workflow_texts[path.removeprefix(f"{WORKFLOW_DIR}/")] = decode_contents_payload(payload, path)
 
     inventory_failures = workflow_inventory_violations(
         workflow_texts, manifest_text, require_protected_workflows=True
@@ -513,10 +861,9 @@ def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> Non
         inventory_failures.extend(
             protected_asset_violations(protected_path, protected_text)
         )
-    if GUARD_SOURCE in changed_paths:
-        payload = api(f"/repos/{REPO}/contents/{GUARD_SOURCE}?ref={ref}")
-        guard_text = decode_contents_payload(payload, GUARD_SOURCE)
-        inventory_failures.extend(protected_guard_source_violations(guard_text))
+    guard_payload = api(f"/repos/{REPO}/contents/{GUARD_SOURCE}?ref={ref}")
+    guard_text = decode_contents_payload(guard_payload, GUARD_SOURCE)
+    inventory_failures.extend(protected_guard_source_violations(guard_text))
     for finding in inventory_failures:
         failures.append(f"pull request #{pr_number}: {finding}")
 
@@ -548,6 +895,7 @@ def main() -> int:
     elif EVENT_NAME in {"schedule", "workflow_dispatch"}:
         for item in open_items:
             if "pull_request" in item:
+                require_durable_workflow_surface(item["number"], failures)
                 require_current_head_codex_review(item["number"], failures)
 
     if failures:
