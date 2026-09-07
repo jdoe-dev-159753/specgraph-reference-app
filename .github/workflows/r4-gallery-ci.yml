@@ -42,7 +42,7 @@ jobs:
     steps:
       - name: Clean container-owned outputs before checkout
         run: |
-          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/build'
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -132,5 +132,5 @@ jobs:
         run: |
           docker compose -f compose.r4.yaml down -v --remove-orphans 2>/dev/null || true
           bash scripts/ci/run-scoped-buildx.sh cleanup
-          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/e2e/reviewer-evidence /workspace/build'

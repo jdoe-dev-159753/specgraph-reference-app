@@ -4,9 +4,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_DIR="$ROOT/backend/target/source-reference"
-MAVEN_IMAGE="${MAVEN_IMAGE:-maven:3.9-eclipse-temurin-21}"
+MAVEN_IMAGE="maven:3.9-eclipse-temurin-21@sha256:8f6ac126f7810bb5549c4cd122d2bf0e9cda5bdeb0838aa928f09e779fd8bef8"
 
 cd "$ROOT"
+
+# The immutable OCI inventory is maintained source authority too. Execute the
+# offline regression suite from this PR-head script so pull_request_target
+# proves the candidate bytes even before the workflow definition itself merges.
+python3 -B -m unittest scripts/test_verify_container_images.py
+python3 -B scripts/verify_container_images.py
 
 # This generated tree is deliberately outside the source authority. Recreate it
 # from the maintained Java comments and OpenAPI contract on every invocation.
