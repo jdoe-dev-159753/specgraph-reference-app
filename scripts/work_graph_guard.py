@@ -442,7 +442,6 @@ def _indented_block(lines: list[str], index: int, indent: int) -> list[str]:
                 break
         block.append(line)
     return block
-
 def _unquoted_yaml_surface(text: str) -> str:
     """Blank quoted scalars and comments before scanning YAML meta-syntax."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -496,7 +495,6 @@ def _unquoted_yaml_surface(text: str) -> str:
             result.append(char)
         index += 1
     return "".join(result)
-
 def _top_level_conjunctions(expression: str) -> list[str]:
     clauses: list[str] = []
     start = depth = index = 0
@@ -530,7 +528,6 @@ def _top_level_conjunctions(expression: str) -> list[str]:
     if any(not clause for clause in clauses):
         raise ValueError("empty top-level conjunction")
     return clauses
-
 def job_condition_violations(filename: str, job: str, line: str) -> list[str]:
     prefix, suffix = "    if: ${{ ", " }}"
     if not line.startswith(prefix) or not line.endswith(suffix):
@@ -555,7 +552,6 @@ def job_condition_violations(filename: str, job: str, line: str) -> list[str]:
     if ONE_SHOT_WORKFLOW.search(business):
         failures.append(f"{filename}: job {job!r} embeds a one-shot issue/PR reference")
     return failures
-
 def trigger_violations(filename: str, lines: list[str]) -> list[str]:
     indexes = [i for i, line in enumerate(lines) if line == "on:"]
     if len(indexes) != 1:
@@ -579,7 +575,6 @@ def trigger_violations(filename: str, lines: list[str]) -> list[str]:
     if not seen:
         failures.append(f"{filename}: workflow must declare at least one trusted trigger")
     return failures
-
 def permission_violations(filename: str, lines: list[str]) -> list[str]:
     failures, writes = [], []
     for line in lines:
@@ -609,7 +604,6 @@ def permission_violations(filename: str, lines: list[str]) -> list[str]:
     if sorted(writes) != allowed_writes:
         failures.append(f"{filename}: required-status writers are reserved to the protected guard")
     return failures
-
 def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
     lines = text.splitlines()
     failures = trigger_violations(filename, lines)
@@ -761,7 +755,6 @@ def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
     if any(ONE_SHOT_WORKFLOW.search(re.sub(r"['\"\\]", "", surface)) for surface in surfaces):
         failures.append(f"{filename}: durable source embeds a direct lexical one-shot issue/PR reference")
     return failures
-
 def protected_asset_violations(path: str, text: str) -> list[str]:
     """Pin complete guard-chain assets so overrides and no-op changes fail closed."""
     allowed = PROTECTED_ASSET_SHA256.get(path)
@@ -866,7 +859,6 @@ def protected_guard_source_violations(text: str) -> list[str]:
             return []
         return [f"{GUARD_SOURCE}: digest-only preauthorization must be additive and bounded"]
     return [f"{GUARD_SOURCE}: protected guard source changed without an exact reviewed successor permission (got {actual})"]
-
 def workflow_inventory_violations(
     workflow_texts: dict[str, str],
     manifest_text: str,
