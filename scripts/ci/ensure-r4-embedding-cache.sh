@@ -29,7 +29,7 @@ fi
 
 # The application image runs as uid/gid 10001. Initialize the persistent cache
 # root so disposable R4 containers can write transformer resources safely.
-docker run --rm -v "${volume}:/cache" alpine:3.22 \
+docker run --rm -v "${volume}:/cache" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
   sh -c 'chown -R 10001:10001 /cache' >/dev/null
 
 # Superseded-volume retention is intentionally not performed here. Cleanup needs

@@ -57,7 +57,7 @@ jobs:
 
       - name: Clean container-owned outputs before checkout
         run: |
-          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams /workspace/build'
 
       - uses: actions/checkout@v7
@@ -96,7 +96,7 @@ jobs:
           docker run -d --name "$stub_name" --network "$network_name" \
             -v "$PWD/scripts/ci/lm-studio-contract-stub.py:/stub.py:ro" \
             -v "$PWD/e2e/test-results:/evidence" \
-            python:3.13-alpine \
+            python:3.13-alpine@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a \
             python /stub.py --port "$stub_port" --model "$R5_MODEL" \
               --request-log /evidence/r5-lm-studio-requests.jsonl
           stub_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$stub_name")"
@@ -238,6 +238,6 @@ jobs:
           [ -z "${R5_STUB_NAME:-}" ] || docker rm -f "$R5_STUB_NAME" || true
           [ -z "${R5_NETWORK_NAME:-}" ] || docker network rm "$R5_NETWORK_NAME" || true
           [ -z "${LOCAL_R5_IMAGE:-}" ] || docker image rm -f "$LOCAL_R5_IMAGE" || true
-          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/build' || true
           docker logout ghcr.io || true

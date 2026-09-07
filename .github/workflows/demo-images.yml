@@ -32,6 +32,7 @@ jobs:
       R4_BAYESIAN_PORT: '8085'
       # Retain a small hot cache between rings without allowing five builds to fill a 36 GiB runner.
       BUILDER_CACHE_MAX: '2gb'
+      BUILDKIT_IMAGE: moby/buildkit:buildx-stable-1@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8
 
     steps:
       - name: Refuse non-main publication dispatch
@@ -145,7 +146,8 @@ jobs:
       - name: Create run-scoped Buildx builder
         run: |
           # One exact builder owns both native and multi-platform cache, so every prune is scoped.
-          docker buildx create --name "$BUILDER_NAME" --driver docker-container
+          docker buildx create --name "$BUILDER_NAME" --driver docker-container \
+            --driver-opt "image=$BUILDKIT_IMAGE"
           docker buildx inspect "$BUILDER_NAME" --bootstrap
 
       - name: Build native checkpoint images for pre-publication verification
@@ -190,8 +192,8 @@ jobs:
         run: |
           # App checkpoints come from the native builds above. Runtime databases are upstream
           # dependencies, so provision them explicitly before forbidding pulls.
-          docker pull postgres:17-alpine
-          docker pull pgvector/pgvector:0.8.6-pg17
+          docker pull postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+          docker pull pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
           docker compose -f compose.oci.yaml up -d --no-build --pull never \
             r0 r1 postgres r2 r3 \
             r4-postgres-baseline r4 r4-postgres-bayesian r4-bayesian
@@ -219,7 +221,7 @@ jobs:
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8081 \
             -v "$PWD/checkpoints/r1/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test customer-review.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -227,7 +229,7 @@ jobs:
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8082 \
             -v "$PWD/checkpoints/r2/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r2-customer-review.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -235,7 +237,7 @@ jobs:
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8083 \
             -v "$PWD/checkpoints/r3/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r3-analysis-history.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -245,7 +247,7 @@ jobs:
             -e EVIDENCE_NAME=r4-baseline \
             -e EXPECT_DETECTOR=none \
             -v "$PWD/checkpoints/r4/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -255,7 +257,7 @@ jobs:
             -e EVIDENCE_NAME=r4-bayesian \
             -e EXPECT_DETECTOR=beta-binomial-review-elevation-v1 \
             -v "$PWD/checkpoints/r4/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -264,7 +266,7 @@ jobs:
             -e R4_BASELINE_URL=http://127.0.0.1:8084 \
             -e R4_BAYESIAN_URL=http://127.0.0.1:8085 \
             -v "$PWD/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-side-by-side-session-isolation.spec.ts'
 
           docker compose -f compose.oci.yaml down -v --remove-orphans
@@ -280,9 +282,9 @@ jobs:
           # The remote proof pulls these immutable upstream dependencies again after
           # publication. Do not retain the large local-proof images across both rings.
           docker image rm -f \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
-            postgres:17-alpine \
-            pgvector/pgvector:0.8.6-pg17 2>/dev/null || true
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
+            postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 \
+            pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f 2>/dev/null || true
           docker buildx du --builder "$BUILDER_NAME"
           df -h "$GITHUB_WORKSPACE"
 
@@ -342,12 +344,12 @@ jobs:
             echo "${ring_upper}_DIGEST=$digest" >> "$GITHUB_ENV"
           done
 
-          postgres_inspect="$(docker buildx imagetools inspect postgres:17-alpine)"
+          postgres_inspect="$(docker buildx imagetools inspect postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73)"
           postgres_digest="$(printf '%s\n' "$postgres_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
           printf '%s\n' "$postgres_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
           echo "POSTGRES_DIGEST=$postgres_digest" >> "$GITHUB_ENV"
 
-          pgvector_inspect="$(docker buildx imagetools inspect pgvector/pgvector:0.8.6-pg17)"
+          pgvector_inspect="$(docker buildx imagetools inspect pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f)"
           pgvector_digest="$(printf '%s\n' "$pgvector_inspect" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)"
           printf '%s\n' "$pgvector_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
           echo "PGVECTOR_DIGEST=$pgvector_digest" >> "$GITHUB_ENV"
@@ -369,8 +371,8 @@ jobs:
           export APP_R2_IMAGE="$APP_PACKAGE:$R2_IMMUTABLE"
           export APP_R3_IMAGE="$APP_PACKAGE:$R3_IMMUTABLE"
           export APP_R4_IMAGE="$APP_PACKAGE:$R4_IMMUTABLE"
-          export POSTGRES_IMAGE="postgres:17-alpine@$POSTGRES_DIGEST"
-          export PGVECTOR_IMAGE="pgvector/pgvector:0.8.6-pg17@$PGVECTOR_DIGEST"
+          export POSTGRES_IMAGE="postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73"
+          export PGVECTOR_IMAGE="pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f"
 
           docker compose -f compose.oci.yaml publish -y --resolve-image-digests "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
           docker buildx imagetools inspect "$COMPOSE_PACKAGE:$COMPOSE_IMMUTABLE"
@@ -446,7 +448,7 @@ jobs:
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8081 \
             -v "$PWD/checkpoints/r1/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test customer-review.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -454,7 +456,7 @@ jobs:
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8082 \
             -v "$PWD/checkpoints/r2/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r2-customer-review.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -462,7 +464,7 @@ jobs:
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -e BASE_URL=http://127.0.0.1:8083 \
             -v "$PWD/checkpoints/r3/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r3-analysis-history.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -472,7 +474,7 @@ jobs:
             -e EVIDENCE_NAME=r4-baseline-remote \
             -e EXPECT_DETECTOR=none \
             -v "$PWD/checkpoints/r4/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -482,7 +484,7 @@ jobs:
             -e EVIDENCE_NAME=r4-bayesian-remote \
             -e EXPECT_DETECTOR=beta-binomial-review-elevation-v1 \
             -v "$PWD/checkpoints/r4/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-complete-flow.spec.ts'
 
           docker run --rm --network host --ipc=host \
@@ -491,7 +493,7 @@ jobs:
             -e R4_BASELINE_URL=http://127.0.0.1:8084 \
             -e R4_BAYESIAN_URL=http://127.0.0.1:8085 \
             -v "$PWD/e2e:/work" -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-noble \
+            mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 \
             bash -lc 'npm install --no-package-lock --ignore-scripts && npx playwright test r4-side-by-side-session-isolation.spec.ts'
 
           docker compose -f "$compose_ref" ps
@@ -505,8 +507,8 @@ jobs:
           export APP_R2_IMAGE="$APP_PACKAGE@$R2_DIGEST"
           export APP_R3_IMAGE="$APP_PACKAGE@$R3_DIGEST"
           export APP_R4_IMAGE="$APP_PACKAGE@$R4_DIGEST"
-          export POSTGRES_IMAGE="postgres:17-alpine@$POSTGRES_DIGEST"
-          export PGVECTOR_IMAGE="pgvector/pgvector:0.8.6-pg17@$PGVECTOR_DIGEST"
+          export POSTGRES_IMAGE="postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73"
+          export PGVECTOR_IMAGE="pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f"
 
           docker compose -f compose.oci.yaml publish -y --resolve-image-digests "$COMPOSE_PACKAGE:demo"
           docker buildx imagetools inspect "$COMPOSE_PACKAGE:demo"

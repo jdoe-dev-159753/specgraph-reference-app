@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Clean container-owned outputs before checkout
         run: |
-          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/build'
 
       - uses: actions/checkout@v7
@@ -58,7 +58,7 @@ jobs:
             -e POSTGRES_DB=specgraph \
             -e POSTGRES_USER=specgraph \
             -e POSTGRES_PASSWORD=specgraph \
-            postgres:17-alpine
+            postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
 
           for attempt in $(seq 1 60); do
             if docker exec "$database" pg_isready -U specgraph -d specgraph >/dev/null 2>&1; then
