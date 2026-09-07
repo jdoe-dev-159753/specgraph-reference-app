@@ -87,28 +87,16 @@ REFERENCE_NUMBER = re.compile(
     r"(?:(?:no|number|id)(?=[^A-Za-z0-9])[^A-Za-z0-9]*)?\d+\b",
     re.IGNORECASE,
 )
-REQUIRED_JOB_CLAUSES = (
-    "!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)",
-    "!(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository)",
-    "!(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository)",
-    "(github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422)",
-    "github.event_name != 'issues'",
-)
-ALLOWED_JOB_CLAUSE = re.compile(
-    r"^(?:always\(\)|github\.event_name == 'workflow_dispatch'|inputs\.(?:compatibility|regenerate_artifact) == true|"
-    r"\(github\.event_name != '(?:pull_request|workflow_dispatch)' \|\| (?:github\.event\.pull_request\.head\.repo\.full_name == github\.repository|inputs\.(?:compatibility|regenerate_artifact) != true)\))$"
-)
+REQUIRED_JOB_CLAUSES = ("!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)", "!(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository)", "!(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository)", "(github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422)", "github.event_name != 'issues'")
+ALLOWED_JOB_CLAUSE = re.compile(r"^(?:always\(\)|github\.event_name == 'workflow_dispatch'|inputs\.(?:compatibility|regenerate_artifact) == true|\(github\.event_name != '(?:pull_request|workflow_dispatch)' \|\| (?:github\.event\.pull_request\.head\.repo\.full_name == github\.repository|inputs\.(?:compatibility|regenerate_artifact) != true)\))$")
 CANONICAL_QUEUE_GROUP = "  group: ${{ (!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && !(github.event_name == 'pull_request_review' && github.event.pull_request.head.repo.full_name != github.repository) && (github.event_name != 'pull_request_review' || github.event.review.user.id == 199175422) && github.event_name != 'issues' && (github.event_name != 'issue_comment' || github.event.comment.user.id == 199175422)) && 'specgraph-repository-queue' || format('specgraph-bypassed-{0}', github.run_id) }}"
 DIGEST_PERMISSION_NAMES = frozenset(
     {"PROTECTED_ASSET_SHA256", "APPROVED_GUARD_SUCCESSOR_SHA256"}
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 RESERVED_CHECK_NAMES = frozenset({"codex-review-freshness", "work-graph-integrity"})
-YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$>])&[^\s\[\]{},]+|(?<![A-Za-z0-9_$])\*[^\s\[\]{},]+|(?<![A-Za-z0-9_$])!(?:<[^>\r\n]+>|(?![=(])[^\s\[\]{},]+)")
-UNCONDITIONAL_CRITICAL_STEPS = frozenset({
-    "Verify guard semantics", "Reject competing prose work-state or stale review evidence",
-    "Verify proposed work-graph guard semantics",
-})
+YAML_META_TOKEN = re.compile(r"(?<![A-Za-z0-9_$>])&[^\s\[\]{},]+|(?<![A-Za-z0-9_$])\*[^\s\[\]{},]+|(?<![A-Za-z0-9_$])!(?:<[^>\r\n]+>|[^\s\[\]{},]*)")
+UNCONDITIONAL_CRITICAL_STEPS = frozenset({"Verify guard semantics", "Reject competing prose work-state or stale review evidence", "Verify proposed work-graph guard semantics"})
 
 
 def api(path: str):
@@ -340,7 +328,6 @@ def _indented_block(lines: list[str], index: int, indent: int) -> list[str]:
                 break
         block.append(line)
     return block
-
 def _unquoted_yaml_surface(text: str) -> str:
     """Blank quoted scalars and comments before scanning YAML meta-syntax."""
     masked, block_indent = [], None
@@ -353,12 +340,12 @@ def _unquoted_yaml_surface(text: str) -> str:
         bare_line = line.rstrip("\r\n")
         if re.search(r":\s*[|>](?:[+-]?[1-9]?|[1-9][+-]?)\s*$", line.split("#", 1)[0].rstrip()):
             block_indent = indent
-        if (bare_line == CANONICAL_QUEUE_GROUP or bare_line.startswith("    if: ${{ ")
-                or re.match(r"^\s+(?:run|if):(?:\s|$)", bare_line)):
+        if (bare_line == CANONICAL_QUEUE_GROUP or bare_line.startswith("    if: ${{ ") or
+                ((scalar := re.match(r"^\s+(?:-\s+)?(?:run|if):\s*(.*)$", bare_line)) and not scalar.group(1).lstrip().startswith(("&", "*", "!")))):
             masked.append("\n" if line.endswith("\n") else "")
             continue
         masked.append(line)
-    text = "".join(masked)
+    text = re.sub(r"\$\{\{.*?\}\}", lambda match: re.sub(r"[^\r\n]", " ", match.group()), "".join(masked), flags=re.DOTALL)
     result: list[str] = []
     quote = None
     escaped = False
@@ -393,7 +380,6 @@ def _unquoted_yaml_surface(text: str) -> str:
             result.append(char)
         index += 1
     return "".join(result)
-
 def _top_level_conjunctions(expression: str) -> list[str]:
     clauses: list[str] = []
     start = depth = index = 0
@@ -427,7 +413,6 @@ def _top_level_conjunctions(expression: str) -> list[str]:
     if any(not clause for clause in clauses):
         raise ValueError("empty top-level conjunction")
     return clauses
-
 def job_condition_violations(filename: str, job: str, line: str) -> list[str]:
     prefix, suffix = "    if: ${{ ", " }}"
     if not line.startswith(prefix) or not line.endswith(suffix):
@@ -452,7 +437,6 @@ def job_condition_violations(filename: str, job: str, line: str) -> list[str]:
     if ONE_SHOT_WORKFLOW.search(business):
         failures.append(f"{filename}: job {job!r} embeds a one-shot issue/PR reference")
     return failures
-
 def trigger_violations(filename: str, lines: list[str]) -> list[str]:
     indexes = [i for i, line in enumerate(lines) if line == "on:"]
     if len(indexes) != 1:
@@ -476,7 +460,6 @@ def trigger_violations(filename: str, lines: list[str]) -> list[str]:
     if not seen:
         failures.append(f"{filename}: workflow must declare at least one trusted trigger")
     return failures
-
 def permission_violations(filename: str, lines: list[str]) -> list[str]:
     failures = []
     for line in lines:
@@ -525,7 +508,6 @@ def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
         failures.append(f"{filename}: trigger block embeds a one-shot issue/PR reference")
     if EVENT_NUMBER_REFERENCE.search(text):
         failures.append(f"{filename}: event number fields are forbidden in durable workflows")
-
     concurrency = [i for i, line in enumerate(lines) if line == "concurrency:"]
     expected_queue = [CANONICAL_QUEUE_GROUP, "  cancel-in-progress: false", "  queue: max"]
     if len(concurrency) != 1 or [
@@ -691,7 +673,8 @@ def _frozenset_literals(node: ast.AST) -> frozenset[str]:
 
 
 def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], str]:
-    tree = ast.parse(text)
+    parsed = text.replace("\r\n", "\n").replace("\r", "\n")
+    tree = ast.parse(parsed)
     assignments: dict[str, ast.Assign] = {}
     for node in tree.body:
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
@@ -703,10 +686,10 @@ def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], st
             assignments[target.id] = node
     if set(assignments) != DIGEST_PERMISSION_NAMES:
         raise ValueError("guard source must define both reviewed digest permission assignments")
-    source_lines = text.splitlines()
+    source_lines = parsed.splitlines()
     for name, node in assignments.items():
         physical = "\n".join(source_lines[node.lineno - 1 : node.end_lineno]).strip()
-        segment = (ast.get_source_segment(text, node) or "").strip()
+        segment = (ast.get_source_segment(parsed, node) or "").strip()
         if node.col_offset != 0 or physical != segment:
             raise ValueError(f"{name} assignment must be the only statement on its lines")
     protected_node = assignments["PROTECTED_ASSET_SHA256"].value
@@ -739,15 +722,14 @@ def _guard_policy_and_skeleton(text: str) -> tuple[dict[str, frozenset[str]], st
 
 def protected_guard_source_violations(text: str) -> list[str]:
     """Accept this guard, one exact successor, or a digest-permission-only rotation."""
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-    current = Path(__file__).read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    actual = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    current = Path(__file__).read_bytes().decode("utf-8")
     current_hash = hashlib.sha256(current.encode("utf-8")).hexdigest()
     if actual == current_hash or actual in APPROVED_GUARD_SUCCESSOR_SHA256:
         return []
     try:
         current_policy, current_skeleton = _guard_policy_and_skeleton(current)
-        candidate_policy, candidate_skeleton = _guard_policy_and_skeleton(normalized)
+        candidate_policy, candidate_skeleton = _guard_policy_and_skeleton(text)
     except (SyntaxError, ValueError) as exc:
         return [f"{GUARD_SOURCE}: invalid digest permission policy: {exc}"]
     if candidate_skeleton == current_skeleton:

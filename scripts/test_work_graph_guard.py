@@ -464,11 +464,12 @@ class DurableWorkflowTests(unittest.TestCase):
                 "    steps:\n", "    strategy: *wide\n    steps:\n"
             ),
             *(workflow.replace("      - run: 'true'", f"      - {tag} {{run: 'true'}}") for tag in
-              ("!unsafe", "!1", "!-", "!<tag:yaml.org,2002:map>")),
+              ("!unsafe", "!1", "!-", "!<tag:yaml.org,2002:map>", "!", "!(", "!=")),
             workflow.replace("      - run: 'true'", "      - run: |\n          '\n      - ? continue-on-error\n        : true\n        run: exit 1"),
             *(workflow.replace("permissions:\n", f"env:\n  HIDDEN: &{anchor} uses\npermissions:\n").replace(
                 "      - run: 'true'", f"      - *{anchor}: actions/checkout@v6"
             ) for anchor in ("1", "-", ".", ">", "*", "&")),
+            *(workflow.replace("      - run: 'true'", f"      - name: tagged\n        run: {tag} true") for tag in ("!unsafe", "!", "!(", "!=", "&x")),
         )
         for candidate in mutations:
             self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", candidate))
@@ -655,8 +656,11 @@ class DurableWorkflowTests(unittest.TestCase):
         self.assertTrue(guard.durable_workflow_policy_violations("proof.yml", workflow.replace("permissions:\n", "env:\n  DISCOVERY_219: true\npermissions:\n")))
 
     def test_guard_source_allows_only_self_or_digest_rotation(self):
-        source = Path(guard.__file__).read_text(encoding="utf-8")
+        source = Path(guard.__file__).read_bytes().decode("utf-8")
         self.assertEqual([], guard.protected_guard_source_violations(source))
+        alternate_endings = source.replace("\r\n", "\n").replace("\r", "\n")
+        alternate_endings = alternate_endings.replace("\n", "\r\n") if alternate_endings == source else alternate_endings
+        self.assertTrue(guard.protected_guard_source_violations(alternate_endings))
         self.assertTrue(guard.protected_guard_source_violations(source + "\n# bypass\n"))
         path = ".github/workflows/work-graph-guard-tests.yml"
         deployed = next(iter(guard.PROTECTED_ASSET_SHA256[path]))
