@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import base64
+import binascii
 import hashlib
 import json
 import os
@@ -41,12 +42,12 @@ PROTECTED_ASSET_SHA256 = {
     "scripts/test_work_graph_guard.py": frozenset(
         {
             "8872cc02adc450e1c6641d1d5747c6ea0dd09901c5c376d59ffce48d638810ce",
-            "68d15bf85a028532f1e024ef73b9ba626a5ce6b7ccb9f9daf1eb5769f95aad5e",
+            "718a4bf3a8ccbc5e0cc8e67907195db09892c4f7923df1f4d38e5b82fb2c04a5",
         }
     ),
 }
 APPROVED_GUARD_SUCCESSOR_SHA256 = frozenset(
-    {"ef901dcfae00658add11f11327d18fc324d362ef5b3cddeeeb4d610e3f272743"}
+    {"c7121323cda5fe7248c689a108fb344eecd79c2fb9fdcdd71cb9d3a20c935f9e"}
 )
 
 PREFIX = re.compile(
@@ -77,6 +78,7 @@ DIGEST_PERMISSION_NAMES = frozenset(
     {"PROTECTED_ASSET_SHA256", "APPROVED_GUARD_SUCCESSOR_SHA256"}
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+GIT_OBJECT_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 def api(path: str):
@@ -247,6 +249,68 @@ def decode_contents_payload(payload: dict, path: str) -> str:
         raise RuntimeError(f"GitHub contents response for {path} is not a base64 file")
     compact = "".join((payload.get("content") or "").splitlines())
     return base64.b64decode(compact).decode("utf-8")
+
+
+def read_regular_git_blob(commit_sha: str, path: str, expected_mode: str = "100644") -> str:
+    """Read one protected path without allowing Contents API symlink resolution."""
+    if not isinstance(commit_sha, str) or GIT_OBJECT_SHA.fullmatch(commit_sha) is None:
+        raise RuntimeError(f"candidate commit SHA for {path} is invalid")
+    commit = api(f"/repos/{REPO}/git/commits/{commit_sha}")
+    if not isinstance(commit, dict) or commit.get("sha") != commit_sha:
+        raise RuntimeError(f"candidate commit object for {path} does not match {commit_sha}")
+    tree_sha = (commit.get("tree") or {}).get("sha")
+    if not isinstance(tree_sha, str) or GIT_OBJECT_SHA.fullmatch(tree_sha) is None:
+        raise RuntimeError(f"candidate commit for {path} has no valid root tree SHA")
+
+    components = path.split("/")
+    if not components or any(not component or component in {".", ".."} for component in components):
+        raise RuntimeError(f"protected Git path is invalid: {path!r}")
+    leaf_sha = ""
+    for index, component in enumerate(components):
+        tree = api(f"/repos/{REPO}/git/trees/{tree_sha}")
+        if (not isinstance(tree, dict) or tree.get("truncated") is not False
+                or not isinstance(tree.get("tree"), list)):
+            raise RuntimeError(f"Git tree for {path} is missing or truncated at {component!r}")
+        matches = [
+            entry for entry in tree["tree"]
+            if isinstance(entry, dict) and entry.get("path") == component
+        ]
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"Git tree for {path} must contain exactly one {component!r} entry"
+            )
+        entry = matches[0]
+        expected_type = "blob" if index == len(components) - 1 else "tree"
+        component_mode = expected_mode if expected_type == "blob" else "040000"
+        if entry.get("type") != expected_type or entry.get("mode") != component_mode:
+            raise RuntimeError(
+                f"Git entry for {path} at {component!r} must be "
+                f"{component_mode}/{expected_type}, got {entry.get('mode')!r}/{entry.get('type')!r}"
+            )
+        entry_sha = entry.get("sha")
+        if not isinstance(entry_sha, str) or GIT_OBJECT_SHA.fullmatch(entry_sha) is None:
+            raise RuntimeError(f"Git entry for {path} at {component!r} has no valid SHA")
+        if expected_type == "tree":
+            tree_sha = entry_sha
+        else:
+            leaf_sha = entry_sha
+
+    blob = api(f"/repos/{REPO}/git/blobs/{leaf_sha}")
+    if not isinstance(blob, dict) or blob.get("sha") != leaf_sha:
+        raise RuntimeError(f"Git blob response for {path} does not match its tree entry")
+    if blob.get("encoding") != "base64" or not isinstance(blob.get("content"), str):
+        raise RuntimeError(f"Git blob response for {path} is not base64 content")
+    compact = "".join(blob["content"].splitlines())
+    try:
+        raw = base64.b64decode(compact, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise RuntimeError(f"Git blob response for {path} has invalid base64") from exc
+    if not isinstance(blob.get("size"), int) or blob["size"] != len(raw):
+        raise RuntimeError(f"Git blob response for {path} has an inconsistent size")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(f"Git blob response for {path} is not UTF-8") from exc
 
 
 def parse_durable_workflow_manifest(text: str) -> set[str]:
@@ -478,15 +542,26 @@ def changed_file_paths(changed_items: list[dict]) -> list[str]:
 
 def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> None:
     pr = api(f"/repos/{REPO}/pulls/{pr_number}")
-    if pr.get("state") != "open" or pr.get("draft"):
-        return
-
-    changed_items = list(pages(f"/repos/{REPO}/pulls/{pr_number}/files"))
-    changed_paths = changed_file_paths(changed_items)
-    if not pr_changes_workflow_contract(changed_paths):
+    base_ref = pr.get("base", {}).get("ref")
+    if pr.get("state") != "open" or pr.get("draft") or base_ref not in {None, "main"}:
         return
 
     head_sha = pr["head"]["sha"]
+    changed_items = list(pages(f"/repos/{REPO}/pulls/{pr_number}/files"))
+    changed_paths = changed_file_paths(changed_items)
+    if base_ref == "main" or GUARD_SOURCE in changed_paths:
+        try:
+            guard_text = read_regular_git_blob(head_sha, GUARD_SOURCE)
+        except RuntimeError as exc:
+            failures.append(f"pull request #{pr_number}: {exc}")
+            return
+        guard_failures = protected_guard_source_violations(guard_text)
+        if guard_failures:
+            failures.extend(f"pull request #{pr_number}: {finding}" for finding in guard_failures)
+            return
+    if not pr_changes_workflow_contract(changed_paths):
+        return
+
     ref = parse.quote(head_sha, safe="")
     manifest_payload = api(
         f"/repos/{REPO}/contents/{DURABLE_WORKFLOW_MANIFEST}?ref={ref}"
@@ -513,10 +588,6 @@ def require_durable_workflow_surface(pr_number: int, failures: list[str]) -> Non
         inventory_failures.extend(
             protected_asset_violations(protected_path, protected_text)
         )
-    if GUARD_SOURCE in changed_paths:
-        payload = api(f"/repos/{REPO}/contents/{GUARD_SOURCE}?ref={ref}")
-        guard_text = decode_contents_payload(payload, GUARD_SOURCE)
-        inventory_failures.extend(protected_guard_source_violations(guard_text))
     for finding in inventory_failures:
         failures.append(f"pull request #{pr_number}: {finding}")
 
