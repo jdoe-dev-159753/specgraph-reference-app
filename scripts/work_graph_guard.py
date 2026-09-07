@@ -29,8 +29,7 @@ UNRESOLVED_WORKFLOW_NAME = "<unresolved-yaml-workflow-name>"
 PROTECTED_ASSET_SHA256 = {
     ".github/workflows/work-graph-guard.yml": frozenset(
         {
-            "dce4bdafcc8183eccf80c43c51cad5004d626472252e0b1e1f1eec30aa5b9751",
-            "6abee2ccbd9fd282393160640ccd4ac5717e7423defc560243c9a1588e4e7c8c",
+            "9b06a73aac2512d6069e2d5ff8f098728f66c59ceac15d66afac419ee87cdf97",
         }
     ),
     ".github/workflows/work-graph-guard-tests.yml": frozenset(
@@ -40,7 +39,7 @@ PROTECTED_ASSET_SHA256 = {
     ),
     "scripts/test_work_graph_guard.py": frozenset(
         {
-            "9c9ecf3df8d3efb7915eebbce17aa011b1c059679cc807682af3e27989afa363",
+            "790ef4ac3e557d18c9983735ff0b91254872a3a1a85fb0f7f895ca866deaa597",
         }
     ),
 }
@@ -121,6 +120,8 @@ def pages(path: str):
     while True:
         separator = "&" if "?" in path else "?"
         items = api(f"{path}{separator}per_page=100&page={page}")
+        if not isinstance(items, list):
+            raise RuntimeError(f"GitHub API pagination for {path} did not return a list")
         if not items:
             return
         yield from items
@@ -183,16 +184,29 @@ def trusted_event_target(event: dict) -> dict | None:
 
 
 def is_codex_review(review: dict) -> bool:
-    return (review.get("user") or {}).get("id") == CODEX_USER_ID
+    return (
+        (review.get("user") or {}).get("id") == CODEX_USER_ID
+        and (review.get("performed_via_github_app") or {}).get("id") == CODEX_APP_ID
+    )
+
+
+def current_head_codex_review_state(reviews, head_sha: str) -> str:
+    if not SHA40.fullmatch(head_sha):
+        return "absent"
+    states = [
+        review.get("state")
+        for review in reviews
+        if is_codex_review(review) and review.get("commit_id") == head_sha
+    ]
+    if not states or states[-1] == "DISMISSED":
+        return "absent"
+    if states[-1] in {"APPROVED", "COMMENTED"}:
+        return "acceptable"
+    return "finding" if states[-1] == "CHANGES_REQUESTED" else "absent"
 
 
 def has_current_head_codex_review(reviews, head_sha: str) -> bool:
-    return bool(SHA40.fullmatch(head_sha)) and any(
-        is_codex_review(review)
-        and review.get("state") != "DISMISSED"
-        and review.get("commit_id") == head_sha
-        for review in reviews
-    )
+    return current_head_codex_review_state(reviews, head_sha) == "acceptable"
 
 
 def clean_codex_reviewed_sha(comment: dict) -> str | None:
@@ -211,10 +225,12 @@ def clean_codex_reviewed_sha(comment: dict) -> str | None:
 
 def has_current_head_clean_codex_result(comments, head_sha: str) -> bool:
     normalized = head_sha.lower()
-    return any(
-        clean_codex_reviewed_sha(comment) == normalized
-        for comment in comments
-    )
+    codex_comments = [
+        comment for comment in comments
+        if (comment.get("user") or {}).get("id") == CODEX_USER_ID
+        and (comment.get("performed_via_github_app") or {}).get("id") == CODEX_APP_ID
+    ]
+    return bool(codex_comments) and clean_codex_reviewed_sha(codex_comments[-1]) == normalized
 
 
 def review_threads_resolved(pr_number: int) -> bool:
@@ -226,27 +242,41 @@ def review_threads_resolved(pr_number: int) -> bool:
     )
     if payload.get("errors"):
         raise RuntimeError(f"review-thread query failed: {payload['errors']}")
-    threads = (((payload.get("data") or {}).get("repository") or {}).get("pullRequest") or {}).get("reviewThreads") or {}
-    if (threads.get("pageInfo") or {}).get("hasNextPage"):
+    pr = ((payload.get("data") or {}).get("repository") or {}).get("pullRequest")
+    threads = pr.get("reviewThreads") if isinstance(pr, dict) else None
+    nodes = threads.get("nodes") if isinstance(threads, dict) else None
+    page_info = threads.get("pageInfo") if isinstance(threads, dict) else None
+    if not isinstance(nodes, list) or not isinstance(page_info, dict):
+        raise RuntimeError("review-thread query returned an incomplete payload")
+    if page_info.get("hasNextPage") is not False:
         raise RuntimeError("review-thread audit exceeds the bounded 100-thread corpus")
-    return all(thread.get("isResolved") is True for thread in threads.get("nodes") or [])
+    return all(isinstance(thread, dict) and thread.get("isResolved") is True for thread in nodes)
+
+
+def exact_head_codex_evidence_state(pr_number: int, head_sha: str) -> str:
+    review_state = current_head_codex_review_state(
+        list(pages(f"/repos/{REPO}/pulls/{pr_number}/reviews")), head_sha
+    )
+    comments = list(pages(f"/repos/{REPO}/issues/{pr_number}/comments"))
+    if review_state != "acceptable" and not has_current_head_clean_codex_result(comments, head_sha):
+        return "failure" if review_state == "finding" else "pending"
+    return "success" if review_threads_resolved(pr_number) else "failure"
 
 
 def has_exact_head_codex_evidence(pr_number: int, head_sha: str) -> bool:
-    reviews = pages(f"/repos/{REPO}/pulls/{pr_number}/reviews")
-    if has_current_head_codex_review(reviews, head_sha):
-        return review_threads_resolved(pr_number)
-    comments = list(pages(f"/repos/{REPO}/issues/{pr_number}/comments"))
-    return has_current_head_clean_codex_result(comments, head_sha) and review_threads_resolved(pr_number)
+    return exact_head_codex_evidence_state(pr_number, head_sha) == "success"
 
 
 def active_main_prs() -> list[dict]:
     active = []
     for pr in pages(f"/repos/{REPO}/pulls?state=open&base=main"):
-        sha = ((pr.get("head") or {}).get("sha") or "").lower()
-        if not pr.get("draft") and SHA40.fullmatch(sha):
-            active.append({"number": pr["number"], "sha": sha,
-                           "same_repo": ((pr.get("head") or {}).get("repo") or {}).get("full_name") == REPO})
+        if pr.get("draft"):
+            continue
+        head, number = pr.get("head") or {}, pr.get("number")
+        sha, repo = (head.get("sha") or "").lower(), (head.get("repo") or {}).get("full_name")
+        if not isinstance(number, int) or not SHA40.fullmatch(sha) or not isinstance(repo, str):
+            raise RuntimeError("active main PR list contains incomplete identity metadata")
+        active.append({"number": number, "sha": sha, "same_repo": repo == REPO})
     return active
 
 
@@ -545,7 +575,7 @@ def trigger_violations(filename: str, lines: list[str]) -> list[str]:
         failures.append(f"{filename}: workflow must declare at least one trusted trigger")
     return failures
 def permission_violations(filename: str, lines: list[str]) -> list[str]:
-    failures = []
+    failures, writes = [], []
     for line in lines:
         if re.fullmatch(r"(?:    )?permissions\s*:.*", line) and line not in {
             "permissions:", "    permissions:"
@@ -567,6 +597,11 @@ def permission_violations(filename: str, lines: list[str]) -> list[str]:
             if name in seen:
                 failures.append(f"{filename}: duplicate permission is forbidden: {name}")
             seen.add(name)
+            if value == "write" and name in {"statuses", "checks"}:
+                writes.append(name)
+    allowed_writes = ["statuses"] if filename == "work-graph-guard.yml" else []
+    if sorted(writes) != allowed_writes:
+        failures.append(f"{filename}: required-status writers are reserved to the protected guard")
     return failures
 
 def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
@@ -615,6 +650,11 @@ def durable_workflow_policy_violations(filename: str, text: str) -> list[str]:
         return failures
     if len(names) != len(set(names)):
         failures.append(f"{filename}: duplicate job key is forbidden")
+    workflow_name = extract_workflow_name(text)
+    if workflow_name.casefold() in RESERVED_CHECK_NAMES or any(
+        name.casefold() in RESERVED_CHECK_NAMES for name in names
+    ):
+        failures.append(f"{filename}: required status/check identity is reserved")
 
     has_root_permissions = lines.count("permissions:") == 1
     for position, (start, job) in enumerate(job_starts):
@@ -995,11 +1035,18 @@ def main() -> int:
             else:
                 integrity_failures.append(f"pull request #{target['number']}: fork heads are not trusted")
 
-        review_failures = []
+        review_failures, review_pending = [], []
         for target in targets:
-            if not target["same_repo"] or not has_exact_head_codex_evidence(target["number"], target["sha"]):
+            if not target["same_repo"]:
+                state = "failure"
+            else:
+                state = exact_head_codex_evidence_state(target["number"], target["sha"])
+            if state == "failure":
                 review_failures.append(f"pull request #{target['number']}: exact-head Codex evidence is absent or unresolved")
                 best_effort_status([target], REVIEW_STATUS_CONTEXT, "failure", "Exact-head Codex review absent or unresolved")
+            elif state == "pending":
+                review_pending.append(target["number"])
+                best_effort_status([target], REVIEW_STATUS_CONTEXT, "pending", "Awaiting exact-head Codex review")
             elif not publish_success_if_current(
                 [target], REVIEW_STATUS_CONTEXT, "Exact-head Codex review is current and resolved"
             ):
@@ -1018,7 +1065,10 @@ def main() -> int:
             for finding in failures:
                 print(f"- {finding}", file=sys.stderr)
             return 1
-        print("global work-graph integrity and exact-head Codex evidence are clean")
+        if review_pending:
+            print(f"global work-graph integrity is clean; exact-head Codex review pending for PRs {review_pending}")
+        else:
+            print("global work-graph integrity and exact-head Codex evidence are clean")
         return 0
     except Exception as exc:
         best_effort_status(targets, REVIEW_STATUS_CONTEXT, "failure", "Guard failed before review was proven")
