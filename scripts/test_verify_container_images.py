@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.verify_container_images import audit_sources, load_manifest
+from scripts.verify_container_images import audit_sources, audit_testcontainers_helpers, load_manifest
 
 
 DIGEST = "sha256:" + "a" * 64
@@ -99,6 +99,12 @@ class ContainerImageAuditTests(unittest.TestCase):
             )
             _, errors = load_manifest(manifest)
             self.assertTrue(any("required linux/arm64" in error for error in errors))
+
+    def test_repository_configures_every_testcontainers_helper(self):
+        root = Path(__file__).resolve().parents[1]
+        images, errors = load_manifest(root / "scripts/ci/container-images.tsv")
+        self.assertEqual(errors, [])
+        self.assertEqual(audit_testcontainers_helpers(root, images), [])
 
 
 if __name__ == "__main__":

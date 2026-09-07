@@ -20,6 +20,13 @@ FIRST_PARTY = (
     "ghcr.io/jdoe-dev-159753/specgraph-reference-compose",
     "specgraph-reference-app",
 )
+TESTCONTAINERS_HELPERS = {
+    "ryuk.container.image": "testcontainers/ryuk:0.14.0",
+    "tinyimage.container.image": "alpine:3.17",
+    "socat.container.image": "alpine/socat:1.7.4.3-r0",
+    "sshd.container.image": "testcontainers/sshd:1.3.0",
+    "vncrecorder.container.image": "testcontainers/vnc-recorder:1.3.0",
+}
 
 
 @dataclass(frozen=True)
@@ -118,6 +125,27 @@ def audit_sources(root: Path, images: dict[str, Image]) -> tuple[int, list[str]]
     return checked, sorted(set(findings))
 
 
+def audit_testcontainers_helpers(root: Path, images: dict[str, Image]) -> list[str]:
+    path = root / "backend/src/test/resources/testcontainers.properties"
+    if not path.is_file():
+        return [f"{path.relative_to(root).as_posix()}: missing Testcontainers helper configuration"]
+    values = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+    findings = []
+    for key, tag in TESTCONTAINERS_HELPERS.items():
+        governed = images.get(tag)
+        expected = governed.reference if governed else None
+        actual = values.get(key)
+        if expected is None:
+            findings.append(f"manifest is missing Testcontainers helper {tag}")
+        elif actual != expected:
+            findings.append(f"{path.relative_to(root).as_posix()}: expected {key}={expected}, found {actual or '<missing>'}")
+    return findings
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
@@ -127,7 +155,7 @@ def main() -> int:
     manifest = args.manifest or root / "scripts/ci/container-images.tsv"
     images, errors = load_manifest(manifest)
     checked, findings = audit_sources(root, images)
-    failures = errors + findings
+    failures = errors + findings + audit_testcontainers_helpers(root, images)
     if failures:
         print("Container image supply-chain audit failed:")
         for failure in failures:

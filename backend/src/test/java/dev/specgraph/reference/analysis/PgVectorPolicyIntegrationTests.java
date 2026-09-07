@@ -41,7 +41,7 @@ import org.testcontainers.utility.DockerImageName;
 final class PgVectorPolicyIntegrationTests {
     private static final int DIMENSIONS = 384;
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
-                    DockerImageName.parse("pgvector/pgvector:0.8.6-pg17")
+                    DockerImageName.parse("pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f")
                             .asCompatibleSubstituteFor("postgres"))
             .withDatabaseName("specgraph")
             .withUsername("specgraph")
