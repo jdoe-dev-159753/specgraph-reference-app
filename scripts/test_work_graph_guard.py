@@ -550,5 +550,67 @@ class DurableWorkflowTests(unittest.TestCase):
         )
 
 
+class RunnerResourceIsolationTests(unittest.TestCase):
+    ROOT = Path(__file__).resolve().parents[1]
+
+    def workflow(self, name):
+        return (self.ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+
+    def test_mutable_runtime_identities_include_run_attempt(self):
+        for name in (
+            "application-ci.yml", "demo-images.yml", "r4-acceptance-ci.yml",
+            "r4-auth-ci.yml", "r4-gallery-ci.yml", "r4-retrieval-ci.yml",
+            "r5-release.yml",
+        ):
+            with self.subTest(name=name):
+                text = self.workflow(name)
+                for line in text.splitlines():
+                    if any(marker in line for marker in (
+                        "COMPOSE_PROJECT_NAME:", "BUILDX_BUILDER:",
+                        "CACHE_VOLUME:", "NETWORK_NAME:", "STUB_NAME:",
+                    )) and "specgraph-" in line:
+                        self.assertIn("github.run_attempt", line)
+                self.assertNotIn("GITHUB_RUN_ID %", text)
+
+    def test_builds_use_and_reclaim_run_scoped_builder(self):
+        for name in (
+            "application-ci.yml", "r4-acceptance-ci.yml", "r4-auth-ci.yml",
+            "r4-gallery-ci.yml", "r4-retrieval-ci.yml", "r5-release.yml",
+        ):
+            with self.subTest(name=name):
+                text = self.workflow(name)
+                self.assertIn("run-scoped-buildx.sh prepare", text)
+                self.assertIn("run-scoped-buildx.sh cleanup", text)
+                self.assertIn("BUILDKIT_CACHE_MOUNT_NS:", text)
+        for helper in ("ensure-app-image.sh", "ensure-e2e-image.sh"):
+            text = (self.ROOT / "scripts" / "ci" / helper).read_text(encoding="utf-8")
+            self.assertIn('docker buildx build --builder "${BUILDX_BUILDER:', text)
+            self.assertIn('BUILDKIT_CACHE_MOUNT_NS=${BUILDKIT_CACHE_MOUNT_NS:', text)
+
+    def test_r4_and_r5_writable_model_caches_are_attempt_scoped(self):
+        r4 = self.workflow("r4-acceptance-ci.yml")
+        self.assertIn("R4_EMBEDDING_CACHE_VOLUME: specgraph-r4-ci-embedding-cache-${{ github.run_id }}-${{ github.run_attempt }}", r4)
+        self.assertLess(r4.index('docker volume rm -f "$R4_EMBEDDING_CACHE_VOLUME"'), r4.index("docker volume create"))
+        self.assertIn('docker volume rm -f "$R4_EMBEDDING_CACHE_VOLUME"', r4)
+        self.assertFalse((self.ROOT / "scripts" / "ci" / "ensure-r4-embedding-cache.sh").exists())
+        overlay = (self.ROOT / "compose.r5.ci.yaml").read_text(encoding="utf-8")
+        self.assertIn("R5_NETWORK_NAME:?", overlay)
+        self.assertIn("R5_EMBEDDING_CACHE_VOLUME:?", overlay)
+        retrieval = self.workflow("r4-retrieval-ci.yml")
+        self.assertIn("R4_PORT: '0'", retrieval)
+        self.assertIn('docker port "$application" 8080/tcp', retrieval)
+
+    def test_native_caches_and_credentials_are_attempt_scoped_and_cleaned(self):
+        application = self.workflow("application-ci.yml")
+        source = self.workflow("source-reference.yml")
+        self.assertIn("npm_config_cache: ${{ runner.temp }}/specgraph-npm-${{ github.run_id }}-${{ github.run_attempt }}", application)
+        self.assertIn("MAVEN_CACHE_DIR: ${{ runner.temp }}/specgraph-maven-${{ github.run_id }}-${{ github.run_attempt }}", source)
+        self.assertIn("docs/tooling/frontend-reference/node_modules", source)
+        for name in ("demo-images.yml", "r5-release.yml"):
+            text = self.workflow(name)
+            self.assertIn("DOCKER_CONFIG: /tmp/specgraph-docker-${{ github.run_id }}-${{ github.run_attempt }}", text)
+            self.assertIn('rm -rf "$DOCKER_CONFIG"', text)
+
+
 if __name__ == "__main__":
     unittest.main()
