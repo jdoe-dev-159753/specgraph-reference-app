@@ -2,7 +2,7 @@
 
 import base64
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 from scripts import work_graph_guard as guard
@@ -167,6 +167,129 @@ class ReviewFreshnessTests(unittest.TestCase):
         )
 
 
+class ProtectedGitObjectTests(unittest.TestCase):
+    HEAD = "a" * 40
+    ROOT_TREE = "b" * 40
+    SCRIPTS_TREE = "c" * 40
+    GUARD_BLOB = "d" * 40
+
+    @classmethod
+    def responses(cls, content=b"guard", leaf_mode="100644"):
+        return [
+            {"sha": cls.HEAD, "tree": {"sha": cls.ROOT_TREE}},
+            {
+                "truncated": False,
+                "tree": [{
+                    "path": "scripts", "type": "tree", "mode": "040000",
+                    "sha": cls.SCRIPTS_TREE,
+                }],
+            },
+            {
+                "truncated": False,
+                "tree": [{
+                    "path": "work_graph_guard.py", "type": "blob",
+                    "mode": leaf_mode, "sha": cls.GUARD_BLOB,
+                }],
+            },
+            {
+                "sha": cls.GUARD_BLOB,
+                "encoding": "base64",
+                "size": len(content),
+                "content": base64.b64encode(content).decode("ascii"),
+            },
+        ]
+
+    def test_regular_guard_blob_is_read_from_immutable_git_objects(self):
+        calls = []
+        responses = iter(self.responses(content=b"trusted"))
+
+        def fake_api(path):
+            calls.append(path)
+            return next(responses)
+
+        with patch.object(guard, "api", side_effect=fake_api):
+            self.assertEqual(
+                "trusted", guard.read_regular_git_blob(self.HEAD, guard.GUARD_SOURCE)
+            )
+        self.assertEqual(
+            [
+                f"/repos/{guard.REPO}/git/commits/{self.HEAD}",
+                f"/repos/{guard.REPO}/git/trees/{self.ROOT_TREE}",
+                f"/repos/{guard.REPO}/git/trees/{self.SCRIPTS_TREE}",
+                f"/repos/{guard.REPO}/git/blobs/{self.GUARD_BLOB}",
+            ],
+            calls,
+        )
+        self.assertFalse(any("/contents/" in call for call in calls))
+
+    def test_non_regular_guard_modes_are_rejected_before_blob_read(self):
+        for mode, object_type in (
+            ("100755", "blob"),
+            ("120000", "blob"),
+            ("160000", "commit"),
+            ("040000", "tree"),
+        ):
+            with self.subTest(mode=mode):
+                responses = self.responses(leaf_mode=mode)
+                responses[2]["tree"][0]["type"] = object_type
+                api_mock = Mock(side_effect=responses)
+                with patch.object(guard, "api", api_mock):
+                    with self.assertRaisesRegex(RuntimeError, "must be 100644/blob"):
+                        guard.read_regular_git_blob(self.HEAD, guard.GUARD_SOURCE)
+                self.assertEqual(3, api_mock.call_count)
+
+    def test_tree_component_integrity_fails_closed(self):
+        variants = (
+            {"truncated": True, "tree": []},
+            {"truncated": False, "tree": []},
+            {
+                "truncated": False,
+                "tree": [
+                    {"path": "scripts", "type": "tree", "mode": "040000", "sha": self.SCRIPTS_TREE},
+                    {"path": "scripts", "type": "tree", "mode": "040000", "sha": self.SCRIPTS_TREE},
+                ],
+            },
+            {
+                "truncated": False,
+                "tree": [{"path": "scripts", "type": "blob", "mode": "100644", "sha": self.SCRIPTS_TREE}],
+            },
+        )
+        for root_tree in variants:
+            with self.subTest(root_tree=root_tree):
+                responses = self.responses()
+                responses[1] = root_tree
+                with patch.object(guard, "api", side_effect=responses):
+                    with self.assertRaises(RuntimeError):
+                        guard.read_regular_git_blob(self.HEAD, guard.GUARD_SOURCE)
+
+    def test_candidate_commit_identity_and_tree_sha_are_strict(self):
+        for head, commit in (
+            ("not-a-sha", {}),
+            (self.HEAD, {"sha": "e" * 40, "tree": {"sha": self.ROOT_TREE}}),
+            (self.HEAD, {"sha": self.HEAD, "tree": {"sha": "invalid"}}),
+        ):
+            with self.subTest(head=head, commit=commit):
+                with patch.object(guard, "api", return_value=commit):
+                    with self.assertRaises(RuntimeError):
+                        guard.read_regular_git_blob(head, guard.GUARD_SOURCE)
+
+    def test_blob_identity_encoding_size_and_utf8_are_strict(self):
+        invalid_blobs = (
+            {"sha": "e" * 40, "encoding": "base64", "size": 5, "content": "Z3VhcmQ="},
+            {"sha": self.GUARD_BLOB, "encoding": "utf-8", "size": 5, "content": "guard"},
+            {"sha": self.GUARD_BLOB, "encoding": "base64", "size": 1, "content": "%%%"},
+            {"sha": self.GUARD_BLOB, "encoding": "base64", "size": 6, "content": "Z3VhcmQ="},
+            {"sha": self.GUARD_BLOB, "encoding": "base64", "size": 1, "content": "/w=="},
+        )
+        for blob in invalid_blobs:
+            with self.subTest(blob=blob):
+                responses = self.responses()
+                responses[3] = blob
+                with patch.object(guard, "api", side_effect=responses):
+                    with self.assertRaises(RuntimeError):
+                        guard.read_regular_git_blob(self.HEAD, guard.GUARD_SOURCE)
+
+
 class MainIntegrationTests(unittest.TestCase):
     def test_real_review_guard_accepts_current_clean_summary_reaction(self):
         head = "3f8fc1e6e80d0449e548795dc66154aa18f3815d"
@@ -240,6 +363,7 @@ class MainIntegrationTests(unittest.TestCase):
         pull_request = {
             "state": "open",
             "draft": False,
+            "base": {"ref": "main"},
             "head": {"sha": "b" * 40},
         }
         manifest_payload = {
@@ -269,6 +393,10 @@ class MainIntegrationTests(unittest.TestCase):
         with (
             patch.object(guard, "api", side_effect=fake_api),
             patch.object(guard, "pages", side_effect=changed),
+            patch.object(
+                guard, "read_regular_git_blob",
+                return_value=Path(guard.__file__).read_bytes().decode("utf-8"),
+            ),
         ):
             failures = []
             guard.require_durable_workflow_surface(308, failures)
@@ -283,8 +411,56 @@ class MainIntegrationTests(unittest.TestCase):
             any("scripts/test_work_graph_guard.py: protected asset changed" in item for item in failures)
         )
 
+    def test_target_only_change_cannot_bypass_a_symlinked_guard(self):
+        head = "e" * 40
+        pull_request = {
+            "state": "open", "draft": False, "base": {"ref": "main"},
+            "head": {"sha": head},
+        }
+        root_tree = "f" * 40
+        scripts_tree = "1" * 40
+        calls = []
+
+        def fake_api(path):
+            calls.append(path)
+            if path.endswith("/pulls/311"):
+                return pull_request
+            if path.endswith(f"/git/commits/{head}"):
+                return {"sha": head, "tree": {"sha": root_tree}}
+            if path.endswith(f"/git/trees/{root_tree}"):
+                return {"truncated": False, "tree": [{
+                    "path": "scripts", "type": "tree", "mode": "040000", "sha": scripts_tree,
+                }]}
+            if path.endswith(f"/git/trees/{scripts_tree}"):
+                return {"truncated": False, "tree": [{
+                    "path": "work_graph_guard.py", "type": "blob", "mode": "120000",
+                    "sha": "2" * 40,
+                }]}
+            raise AssertionError(f"unexpected API path: {path}")
+
+        with (
+            patch.object(guard, "api", side_effect=fake_api),
+            patch.object(
+                guard, "pages",
+                return_value=iter(([{"filename": "scripts/guard_target.py"}],)),
+            ),
+        ):
+            failures = []
+            guard.require_durable_workflow_surface(311, failures)
+
+        self.assertTrue(any("must be 100644/blob" in finding for finding in failures))
+        self.assertFalse(any("/contents/" in call for call in calls))
+        self.assertFalse(any("/git/blobs/" in call for call in calls))
+
 
 class DurableWorkflowTests(unittest.TestCase):
+    def test_guard_source_digest_is_line_ending_exact(self):
+        source = Path(guard.__file__).read_bytes().decode("utf-8")
+        self.assertEqual([], guard.protected_guard_source_violations(source))
+        alternate = source.replace("\r\n", "\n").replace("\r", "\n")
+        alternate = alternate.replace("\n", "\r\n") if alternate == source else alternate
+        self.assertTrue(guard.protected_guard_source_violations(alternate))
+
     def test_parse_manifest_ignores_comments_and_blank_lines(self):
         manifest = "# durable\napplication-ci.yml\n\n r4-acceptance-ci.yml \n"
         self.assertEqual(
