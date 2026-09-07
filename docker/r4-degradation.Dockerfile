@@ -1,8 +1,8 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # Layers the test-only degradation fixture onto the exact application image under test.
 FROM exact-head-image AS exact-head
 
-FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-21 AS fixture-build
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-21@sha256:8f6ac126f7810bb5549c4cd122d2bf0e9cda5bdeb0838aa928f09e779fd8bef8 AS fixture-build
 WORKDIR /workspace
 COPY backend/pom.xml ./pom.xml
 RUN --mount=type=cache,id=specgraph-maven,target=/root/.m2 \

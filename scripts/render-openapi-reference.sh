@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTRACT="backend/src/main/resources/static/openapi.yaml"
 OUTPUT_DIR="${1:-backend/target/source-reference/http-api}"
 OUTPUT="$OUTPUT_DIR/index.html"
-REDOCLY_IMAGE="${REDOCLY_IMAGE:-redocly/cli:2.51.2@sha256:2dcc3939c2180e1da96db06a40aa079cb32c4ef3bac8b35ff061f2140322da64}"
+REDOCLY_IMAGE="redocly/cli:2.51.2@sha256:2dcc3939c2180e1da96db06a40aa079cb32c4ef3bac8b35ff061f2140322da64"
 
 cd "$ROOT"
 

@@ -86,7 +86,7 @@ jobs:
     steps:
       - name: Clean container-owned outputs before checkout
         run: |
-          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams /workspace/build'
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -124,7 +124,7 @@ jobs:
           -v /var/run/docker.sock:/var/run/docker.sock
           -v "$PWD/backend:/workspace"
           -w /workspace
-          maven:3.9-eclipse-temurin-21
+          maven:3.9-eclipse-temurin-21@sha256:8f6ac126f7810bb5549c4cd122d2bf0e9cda5bdeb0838aa928f09e779fd8bef8
           mvn -B -q verify
 
       - name: Report backend test failures
@@ -174,7 +174,7 @@ jobs:
       - name: Reclaim fast-verification outputs and npm cache
         if: always()
         run: |
-          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/generated-diagrams /workspace/build /workspace/scripts/__pycache__'
           rm -rf "$RUNNER_TEMP/specgraph-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
@@ -223,7 +223,7 @@ jobs:
 
       - name: Clean container-owned outputs from previous runs
         run: |
-          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/build'
 
       - name: Recover malformed persistent workspace
@@ -290,7 +290,7 @@ jobs:
           -v "$MAVEN_CACHE_VOLUME:/root/.m2"
           -v "$PWD/backend:/workspace"
           -w /workspace
-          maven:3.9-eclipse-temurin-21
+          maven:3.9-eclipse-temurin-21@sha256:8f6ac126f7810bb5549c4cd122d2bf0e9cda5bdeb0838aa928f09e779fd8bef8
           mvn -B -q verify
 
       - name: Report backend test failures
@@ -483,7 +483,7 @@ jobs:
           docker compose down --remove-orphans || true
           docker volume rm "$MAVEN_CACHE_VOLUME" 2>/dev/null || true
           bash scripts/ci/run-scoped-buildx.sh cleanup
-          docker run --rm -v "$PWD:/workspace" alpine:3.22 \
+          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/e2e/node_modules /workspace/e2e/playwright-report /workspace/e2e/test-results /workspace/.checkpoints /workspace/build'
           rm -rf "$RUNNER_TEMP/specgraph-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           df -h "$GITHUB_WORKSPACE" || true

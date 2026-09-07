@@ -9,7 +9,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * connection properties into Spring tests. Subclasses still own schema and behavioral assertions.
  */
 public abstract class PostgresIntegrationTestSupport {
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine")
+    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73")
             .withDatabaseName("specgraph")
             .withUsername("specgraph")
             .withPassword("specgraph");
