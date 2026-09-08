@@ -51,16 +51,17 @@ The figures use UML 2.5.1 where it answers the engineering question and explicit
 
 ## 3. Modular-monolith structure
 
-The backend has exactly four Spring Modulith application modules under `dev.specgraph.reference`:
+The backend has exactly five Spring Modulith application modules under `dev.specgraph.reference`:
 
 - `identity`: real authenticated operator context, activated in R4;
 - `risk`: project-owned source-risk contracts, active from R1;
 - `customer`: customer lookup and activity-review use cases, active from R1;
-- `analysis`: staged analysis orchestration, detector/policy evidence, model synthesis and analysis history, active from R3.
+- `analysis`: staged analysis orchestration, detector/policy evidence, model synthesis and analysis history, active from R3;
+- `demo`: opt-in seeded/replayable scenario generation, materialization and provenance for reviewer-facing R5 demonstration without replacing the canonical fixed regression fixtures.
 
-The current public cross-module direction required by customer review is `customer -> risk`. Analysis may use customer-facing application contracts. Reverse infrastructure dependencies are prohibited.
+The current public cross-module direction required by customer review is `customer -> risk`. Analysis may use customer-facing application contracts. `demo` may use public customer/activity and risk contracts to materialize source-shaped replayable evidence, while `customer` and `risk` remain independent from `demo`. Reverse infrastructure dependencies are prohibited.
 
-Spring Modulith verification ratchets the physical graph: the detected module identifiers must remain exactly `identity`, `customer`, `risk`, and `analysis`. Transport, persistence or generic helper packages do not become fifth horizontal modules.
+Spring Modulith verification ratchets the physical graph: the detected module identifiers must remain exactly `identity`, `customer`, `risk`, `analysis`, and `demo`. Transport, persistence or generic helper packages do not become additional horizontal modules.
 
 ![Figure 2a - UML Package diagram](diagrams/package-modules.svg)
 
@@ -85,8 +86,9 @@ The central project-owned ports are:
 | `PolicyKnowledgePort` | return project-owned `PolicyEvidence` | static deterministic evidence R3; Spring AI pgvector retrieval under the R4 profile |
 | `AnalysisModelPort` | consume one project-owned `AnalysisEvidenceEnvelope` and return structured result plus model provenance | typed process selection: deterministic default, explicit OpenAI, or private-network LM Studio |
 | `AnalysisHistoryPort` | persist validated history, retain complete-list compatibility, and expose bounded page queries for operator review | in-memory baseline; Hibernate/JPA persistence and bounded database pagination selected for final R3+ |
+| `DemoScenarioPersistencePort` | atomically retain seeded source-shaped demonstration evidence with replay provenance | optional R5 demo path through the module-owned persistence adapter |
 
-The primary adapters are `OperatorSessionHttpAdapter`, `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `DeterministicOperatorContextAdapter`, `SpringSecurityOperatorContextAdapter`, `SyntheticActivityAdapter`, the selected `JpaCustomerActivityAdapter`, `NoOpRiskSignalDetectorAdapter`, `BayesianSequentialRiskSignalDetectorAdapter`, `FuzzyRiskSignalDetectorAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, `LmStudioAnalysisAdapter`, and the selected `JpaAnalysisHistoryAdapter`. The JPA adapters replace the accepted JDBC baseline; they do not create selectable parallel persistence paths.
+The primary adapters are `OperatorSessionHttpAdapter`, `CustomerReviewHttpAdapter`, `AnalysisHttpAdapter`, `DemoScenarioHttpAdapter`, `DeterministicOperatorContextAdapter`, `SpringSecurityOperatorContextAdapter`, `SyntheticActivityAdapter`, the selected `JpaCustomerActivityAdapter`, `JdbcDemoScenarioPersistenceAdapter`, `NoOpRiskSignalDetectorAdapter`, `BayesianSequentialRiskSignalDetectorAdapter`, `FuzzyRiskSignalDetectorAdapter`, `StaticPolicyAdapter`, `PgVectorPolicyAdapter`, `DeterministicAnalysisAdapter`, `SpringAiAnalysisAdapter`, `LmStudioAnalysisAdapter`, and the selected `JpaAnalysisHistoryAdapter`. The JPA adapters replace the accepted JDBC baseline for the product persistence ports; the optional demo module retains its dedicated materialization adapter rather than creating a selectable parallel customer persistence path.
 
 The inception-selected GoF roles remain intentionally limited:
 
@@ -369,7 +371,7 @@ The R4 refinement does not create a parallel architecture. It activates the dete
 
 A reviewer should be able to answer from this SDD without reconstructing PR history:
 
-- what the system boundary and four application modules are;
+- what the system boundary and five application modules are;
 - where framework/provider/storage/model-library types stop;
 - which ports and adapters are stable and which ring activates them;
 - how `OperatorContext` and `OperatorContextPort` keep Spring Security principals/sessions outside the application contracts while preserving persisted `OperatorId` attribution;

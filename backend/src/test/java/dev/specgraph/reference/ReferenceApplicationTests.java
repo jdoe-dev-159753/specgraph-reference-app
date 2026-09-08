@@ -2,7 +2,6 @@ package dev.specgraph.reference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.tngtech.archunit.core.domain.JavaClass;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -11,9 +10,7 @@ import org.springframework.modulith.core.ApplicationModules;
 
 @SpringBootTest
 /**
- * Smoke evidence for application startup plus the controlled four-module Spring Modulith graph.
- * Optional generated-scenario support is a demo/test adapter concern and is deliberately excluded
- * from module inspection rather than promoted into a fifth domain module.
+ * Smoke evidence for application startup plus the controlled five-module Spring Modulith graph.
  * Context loading alone is not treated as functional acceptance.
  */
 class ReferenceApplicationTests extends PostgresIntegrationTestSupport {
@@ -22,16 +19,14 @@ class ReferenceApplicationTests extends PostgresIntegrationTestSupport {
     void contextLoads() {}
 
     @Test
-    void moduleGraphMatchesTheControlledFourModuleDesign() {
-        ApplicationModules modules = ApplicationModules.of(
-                        ReferenceApplication.class,
-                        JavaClass.Predicates.resideInAPackage("dev.specgraph.reference.demo.."))
-                .verify();
+    void moduleGraphMatchesTheControlledFiveModuleDesign() {
+        ApplicationModules modules = ApplicationModules.of(ReferenceApplication.class).verify();
 
         Set<String> detected = modules.stream()
                 .map(module -> module.getIdentifier().toString())
                 .collect(Collectors.toSet());
 
-        assertThat(detected).containsExactlyInAnyOrder("identity", "risk", "customer", "analysis");
+        assertThat(detected)
+                .containsExactlyInAnyOrder("identity", "risk", "customer", "analysis", "demo");
     }
 }

@@ -13,13 +13,20 @@ package "dev.specgraph.reference.customer\n<<application module>>" as Customer {
   package "customer.persistence\n<<outbound adapter package>>" as CustomerPersistence
 }
 package "dev.specgraph.reference.analysis\n<<application module>>" as Analysis
+package "dev.specgraph.reference.demo\n<<application module>>" as Demo {
+  package "demo.web\n<<inbound adapter package>>" as DemoWeb
+  package "demo.persistence\n<<outbound adapter package>>" as DemoPersistence
+}
 
 Identity -[hidden]down-> Risk
 Risk -[hidden]down-> Customer
 Customer -[hidden]down-> Analysis
+Analysis -[hidden]down-> Demo
 
 Customer ..> Risk : public RiskEvidence contract
 Analysis ..> Customer : customer/activity application contracts
+Demo ..> Customer : generated customer/activity contracts
+Demo ..> Risk : generated risk-evidence contracts
 
 note right of CustomerWeb
   HTTP adapter is internal to the
@@ -27,16 +34,26 @@ note right of CustomerWeb
 end note
 
 note right of CustomerPersistence
-  Synthetic/JDBC persistence adapters
+  Synthetic/JPA persistence adapters
   provide CustomerActivityPort here.
 end note
 
+note right of DemoWeb
+  Opt-in scenario generation is exposed
+  through the demo module boundary.
+end note
+
+note right of DemoPersistence
+  Replayable generated evidence is
+  materialized behind the demo-owned port.
+end note
+
 note bottom
-  UML Package diagram: the four direct packages are the actual Spring Modulith module
+  UML Package diagram: the five direct packages are the actual Spring Modulith module
   bases. Adapter sub-packages remain inside their owning module. Detailed hexagonal
   Adapter/Strategy/Facade roles are shown in the component/port views rather than by
   inventing package-per-layer namespaces that do not exist in the implementation.
   Architecture verification ratchets the exact module identifiers:
-  identity, customer, risk, analysis.
+  identity, customer, risk, analysis, demo.
 end note
 @enduml

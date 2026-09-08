@@ -12,20 +12,21 @@ The SRS also requires provider-neutral analysis behaviour, deterministic verific
 
 The inception blueprint additionally requires restrained use of established Gang of Four patterns where they arise naturally, rather than treating pattern names as architecture by themselves.
 
-Spring Modulith's default detection also makes physical package topology architecturally significant: each direct sub-package under the Spring Boot application package is an application module unless a different detection strategy is explicitly selected. A new horizontal root package can therefore become a real fifth module even when its classes were intended to be only adapters.
+Spring Modulith's default detection also makes physical package topology architecturally significant: each direct sub-package under the Spring Boot application package is an application module unless a different detection strategy is explicitly selected. A new horizontal root package therefore becomes part of the controlled module graph unless deliberately excluded. The seeded scenario capability under `demo` now owns its own use-case contract, service, persistence port, HTTP adapter and replay provenance, so it earns explicit module identity rather than being hidden as an inspection exception.
 
 ## Decision
 
 Use one deployable backend process organized as a modular monolith with strict hexagonal dependency direction.
 
-The backend has exactly four application modules:
+The backend has exactly five application modules:
 
 - `identity`;
 - `customer`;
 - `risk`;
-- `analysis`.
+- `analysis`;
+- `demo`.
 
-The direct packages `dev.specgraph.reference.identity`, `.customer`, `.risk`, and `.analysis` are the Spring Modulith module bases. No horizontal top-level `web`, `persistence`, `infrastructure`, `common`, or `shared` package is an application module.
+The direct packages `dev.specgraph.reference.identity`, `.customer`, `.risk`, `.analysis`, and `.demo` are the Spring Modulith module bases. `demo` owns the optional seeded/replayable scenario-generation capability and its adapters. No horizontal top-level `web`, `persistence`, `infrastructure`, `common`, or `shared` package is an application module.
 
 Public module contracts and small application/domain value types may live directly in the module base package. Framework-facing adapters live in a small number of descriptive sub-packages of the module that owns the use case or port, for example `customer.web` and `customer.persistence`. The design does **not** require ceremonial `application/domain/adapter/in/out` package depth when those namespaces do not provide a concrete visibility or ownership benefit.
 
@@ -36,9 +37,9 @@ Domain/application code owns ports and durable contracts. Frameworks, databases,
 Use Spring Modulith to make module boundaries visible and mechanically checkable. Cross-module access goes through explicit public application contracts rather than repository/row/framework leakage. Architecture verification must assert both:
 
 1. `ApplicationModules.verify()` succeeds; and
-2. the detected module identifiers are exactly `{identity, customer, risk, analysis}`.
+2. the detected module identifiers are exactly `{identity, customer, risk, analysis, demo}`.
 
-The current customer snapshot includes the public `RiskEvidence` contract, so the accepted dependency direction is `customer -> risk`. The reverse dependency is prohibited unless a later explicit architecture decision restructures the contract boundary. Analysis may depend on the customer/risk-facing application contracts it needs for orchestration; infrastructure adapters must not reverse those dependencies.
+The current customer snapshot includes the public `RiskEvidence` contract, so the accepted dependency direction is `customer -> risk`. The reverse dependency is prohibited unless a later explicit architecture decision restructures the contract boundary. Analysis may depend on the customer/risk-facing application contracts it needs for orchestration. The `demo` module may depend on public `customer` and `risk` contracts to materialize source-shaped replayable evidence; `customer` and `risk` do not depend on `demo`. Infrastructure adapters must not reverse those dependencies.
 
 ### Pattern roles inside the architecture
 
@@ -55,7 +56,7 @@ The relational access-layer choice is controlled separately by [`ADR-007`](ADR-0
 ## Consequences
 
 - one application can be started, tested and deployed early;
-- exactly four module roots remain mechanically visible rather than silently growing through incidental top-level packages;
+- exactly five capability module roots remain mechanically visible, including the explicitly accepted `demo` capability, rather than growing silently through incidental top-level packages;
 - inbound and outbound adapters stay inside the module whose use case/port they serve;
 - the package tree remains shallow unless deeper visibility boundaries earn their cost;
 - stub adapters can be replaced without creating a parallel architecture;
