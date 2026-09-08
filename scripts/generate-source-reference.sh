@@ -19,6 +19,25 @@ python3 -B scripts/verify_container_images.py
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
+# Recompute repository metrics from the exact checked-out head without allowing
+# generated badge/report bytes to become maintained source implicitly. The
+# candidate is retained in the reviewer artifact; tracked files are restored
+# byte-for-byte from HEAD before the rest of source-reference generation runs.
+python3 -B -m unittest scripts/test_repository_metrics.py
+restore_metric_sources() {
+  git show HEAD:README.md > README.md
+  git show HEAD:docs/reviewer/repository-metrics.md > docs/reviewer/repository-metrics.md
+}
+trap restore_metric_sources EXIT
+bash scripts/repository-metrics.sh generate
+mkdir -p "$OUTPUT_DIR/repository-metrics-candidate"
+cp README.md "$OUTPUT_DIR/repository-metrics-candidate/README.md"
+cp docs/reviewer/repository-metrics.md \
+  "$OUTPUT_DIR/repository-metrics-candidate/repository-metrics.md"
+git rev-parse HEAD > "$OUTPUT_DIR/repository-metrics-candidate/source-sha.txt"
+restore_metric_sources
+trap - EXIT
+
 python3 -B -m unittest scripts/test_source_doc_coverage.py
 python3 -B scripts/source_doc_coverage.py
 python3 -B -m unittest scripts/test_maintained_source_docs.py
@@ -104,6 +123,7 @@ cat > "$OUTPUT_DIR/index.html" <<'HTML'
       <li><a href="frontend/index.html">Browser and end-to-end implementation reference</a></li>
       <li><a href="maintained-source/index.html">Scripts, migrations and executable-configuration reference</a></li>
       <li><a href="http-api/index.html">HTTP API reference</a></li>
+      <li><a href="repository-metrics-candidate/repository-metrics.md">Exact-head repository metrics candidate</a></li>
     </ul>
   </main>
 </body>
