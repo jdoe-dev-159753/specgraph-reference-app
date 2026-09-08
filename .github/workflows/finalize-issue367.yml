@@ -7,7 +7,7 @@ on:
       - '.github/workflows/finalize-issue367.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   finalize:
@@ -71,21 +71,54 @@ jobs:
           git diff --check
           python3 -B -m unittest scripts/test_work_graph_guard.py
 
-          mkdir -p issue367-final/.github/workflows issue367-final/scripts
-          cp .github/workflows/application-ci.yml issue367-final/.github/workflows/
-          cp .github/workflows/plantuml-diagrams.yml issue367-final/.github/workflows/
-          cp scripts/work_graph_guard.py issue367-final/scripts/
-          sha256sum \
-            issue367-final/.github/workflows/application-ci.yml \
-            issue367-final/.github/workflows/plantuml-diagrams.yml \
-            issue367-final/scripts/work_graph_guard.py \
-            > issue367-final/SHA256SUMS
+      - name: Upload validated bytes as unattached Git blobs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+          from urllib import request
 
-      - name: Upload exact final files
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GITHUB_TOKEN']
+          paths = [
+              '.github/workflows/application-ci.yml',
+              '.github/workflows/plantuml-diagrams.yml',
+              'scripts/work_graph_guard.py',
+          ]
+          output = []
+          for path in paths:
+              raw = Path(path).read_bytes()
+              payload = json.dumps({
+                  'content': base64.b64encode(raw).decode('ascii'),
+                  'encoding': 'base64',
+              }).encode('utf-8')
+              req = request.Request(
+                  f'https://api.github.com/repos/{repo}/git/blobs',
+                  data=payload,
+                  method='POST',
+                  headers={
+                      'Authorization': f'Bearer {token}',
+                      'Accept': 'application/vnd.github+json',
+                      'X-GitHub-Api-Version': '2022-11-28',
+                      'Content-Type': 'application/json',
+                  },
+              )
+              with request.urlopen(req, timeout=30) as response:
+                  blob = json.loads(response.read())
+              output.append({'path': path, 'blob_sha': blob['sha'], 'size': len(raw)})
+              print(f"BLOB {path} {blob['sha']} {len(raw)}")
+          Path('issue367-git-blobs.json').write_text(json.dumps(output, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Upload blob manifest
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: issue367-final-${{ github.sha }}
-          path: issue367-final/
+          name: issue367-git-blobs-${{ github.sha }}
+          path: issue367-git-blobs.json
           if-no-files-found: error
-          include-hidden-files: true
           retention-days: 7
