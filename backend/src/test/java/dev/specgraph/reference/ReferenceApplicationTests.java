@@ -10,7 +10,7 @@ import org.springframework.modulith.core.ApplicationModules;
 
 @SpringBootTest
 /**
- * Smoke evidence for application startup plus the controlled four-module Spring Modulith graph.
+ * Smoke evidence for application startup plus the controlled five-module Spring Modulith graph.
  * Context loading alone is not treated as functional acceptance.
  */
 class ReferenceApplicationTests extends PostgresIntegrationTestSupport {
@@ -19,13 +19,13 @@ class ReferenceApplicationTests extends PostgresIntegrationTestSupport {
     void contextLoads() {}
 
     @Test
-    void moduleGraphMatchesTheControlledFourModuleDesign() {
+    void moduleGraphMatchesTheControlledFiveModuleDesign() {
         ApplicationModules modules = ApplicationModules.of(ReferenceApplication.class).verify();
 
         Set<String> detected = modules.stream()
                 .map(module -> module.getIdentifier().toString())
                 .collect(Collectors.toSet());
 
-        assertThat(detected).containsExactlyInAnyOrder("identity", "risk", "customer", "analysis");
+        assertThat(detected).containsExactlyInAnyOrder("identity", "risk", "customer", "analysis", "demo");
     }
 }
