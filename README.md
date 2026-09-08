@@ -16,7 +16,22 @@
 [![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0_build--time-informational)](frontend/package.json)
 [![Playwright 1.55.0](https://img.shields.io/badge/Playwright-1.55.0_test-informational)](e2e/package.json)
 <!-- repository-metrics-badge:start -->
-[![Authored LOC](https://img.shields.io/badge/authored_LOC-21%2C100-informational)](docs/reviewer/repository-metrics.md)
+[![Authored LOC](https://img.shields.io/badge/Authored_LOC-32%2C281-informational)](docs/reviewer/repository-metrics.md)
+[![Java LOC](https://img.shields.io/badge/Java_LOC-9%2C362-informational)](docs/reviewer/repository-metrics.md)
+[![Python LOC](https://img.shields.io/badge/Python_LOC-6%2C699-informational)](docs/reviewer/repository-metrics.md)
+[![YAML LOC](https://img.shields.io/badge/YAML_LOC-4%2C201-informational)](docs/reviewer/repository-metrics.md)
+[![Markdown LOC](https://img.shields.io/badge/Markdown_LOC-2%2C956-informational)](docs/reviewer/repository-metrics.md)
+[![TypeScript LOC](https://img.shields.io/badge/TypeScript_LOC-2%2C343-informational)](docs/reviewer/repository-metrics.md)
+[![Bourne Shell LOC](https://img.shields.io/badge/Bourne_Shell_LOC-2%2C236-informational)](docs/reviewer/repository-metrics.md)
+[![PlantUML LOC](https://img.shields.io/badge/PlantUML_LOC-2%2C025-informational)](docs/reviewer/repository-metrics.md)
+[![JavaScript LOC](https://img.shields.io/badge/JavaScript_LOC-1%2C758-informational)](docs/reviewer/repository-metrics.md)
+[![Maven LOC](https://img.shields.io/badge/Maven_LOC-205-informational)](docs/reviewer/repository-metrics.md)
+[![SQL LOC](https://img.shields.io/badge/SQL_LOC-159-informational)](docs/reviewer/repository-metrics.md)
+[![JSON LOC](https://img.shields.io/badge/JSON_LOC-155-informational)](docs/reviewer/repository-metrics.md)
+[![Dockerfile LOC](https://img.shields.io/badge/Dockerfile_LOC-70-informational)](docs/reviewer/repository-metrics.md)
+[![Text LOC](https://img.shields.io/badge/Text_LOC-68-informational)](docs/reviewer/repository-metrics.md)
+[![Properties LOC](https://img.shields.io/badge/Properties_LOC-39-informational)](docs/reviewer/repository-metrics.md)
+[![HTML LOC](https://img.shields.io/badge/HTML_LOC-5-informational)](docs/reviewer/repository-metrics.md)
 <!-- repository-metrics-badge:end -->
 
 Customer Activity Analytics is a runnable customer-care application for reviewing customer activity, risk evidence, applicable policy and retained analysis history. It demonstrates how a specification-driven delivery can combine deterministic controls, statistical detectors, local retrieval and optional language-model adapters without letting generated text replace source evidence.
