@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify deterministic repository-metrics generation and badge ratchets."""
+"""Verify deterministic repository metrics generation, badge output, and stale-state ratchets."""
 
 import os
 from pathlib import Path
