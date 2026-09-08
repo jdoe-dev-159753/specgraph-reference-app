@@ -34,7 +34,6 @@ PROTECTED_ASSET_SHA256 = {
     ),
     ".github/workflows/work-graph-guard-tests.yml": frozenset(
         {
-            "22fe48af6a8ee4418643ea1f68dad53c8d5c589af0e1dedbe7573ae88e91f30c",
             "716a38d52195328dc2689b880d099c6841381da1cdf7ca9a574404f9bf8a586e",
         }
     ),
