@@ -3,13 +3,16 @@ package dev.specgraph.reference;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * Shared Testcontainers boundary that starts one PostgreSQL/pgvector service and projects its dynamic
  * connection properties into Spring tests. Subclasses still own schema and behavioral assertions.
  */
 public abstract class PostgresIntegrationTestSupport {
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73")
+    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
+                    DockerImageName.parse("postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73")
+                            .asCompatibleSubstituteFor("postgres"))
             .withDatabaseName("specgraph")
             .withUsername("specgraph")
             .withPassword("specgraph");
