@@ -87,4 +87,5 @@ jobs:
           name: issue367-final-${{ github.sha }}
           path: issue367-final/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 7
