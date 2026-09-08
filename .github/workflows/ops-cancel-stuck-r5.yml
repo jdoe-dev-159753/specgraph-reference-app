@@ -1,0 +1,19 @@
+name: ops-cancel-stuck-r5
+
+on:
+  push:
+    branches:
+      - ops/cancel-stuck-r5-34236806824
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel stuck R5 run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST repos/${{ github.repository }}/actions/runs/34236806824/cancel
