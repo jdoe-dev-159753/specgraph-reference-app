@@ -1,4 +1,4 @@
-name: ops-clear-reboot-interrupted-runs
+name: ops-force-cancel-reboot-zombie
 
 on:
   push:
@@ -13,10 +13,8 @@ jobs:
   cancel:
     runs-on: ubuntu-latest
     steps:
-      - name: Cancel reboot-interrupted and unnecessary heavy runs
+      - name: Force-cancel reboot-zombie application CI
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for run in 34236806864 34236806935; do
-            gh api --method POST "repos/${{ github.repository }}/actions/runs/${run}/cancel" || true
-          done
+          gh api --method POST "repos/${{ github.repository }}/actions/runs/34236806864/force-cancel" || true
