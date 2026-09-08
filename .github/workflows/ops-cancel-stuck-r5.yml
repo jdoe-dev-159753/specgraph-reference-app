@@ -1,4 +1,4 @@
-name: ops-cancel-stuck-r5
+name: ops-clear-reboot-interrupted-runs
 
 on:
   push:
@@ -13,7 +13,10 @@ jobs:
   cancel:
     runs-on: ubuntu-latest
     steps:
-      - name: Cancel stuck R5 run
+      - name: Cancel reboot-interrupted and unnecessary heavy runs
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api --method POST repos/${{ github.repository }}/actions/runs/34236806824/cancel
+        run: |
+          for run in 34236806864 34236806935; do
+            gh api --method POST "repos/${{ github.repository }}/actions/runs/${run}/cancel" || true
+          done
