@@ -1,0 +1,86 @@
+name: finalize-issue367
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/finalize-issue367.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Apply bounded final reconciliation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # application-ci: serialize the optional compatibility job behind fast verification.
+          path = Path('.github/workflows/application-ci.yml')
+          lines = path.read_text(encoding='utf-8').splitlines()
+          indexes = [i for i, line in enumerate(lines) if line == '  verify:']
+          assert indexes == [indexes[0]] and len(indexes) == 1, indexes
+          i = indexes[0]
+          assert lines[i + 1].startswith('    if: $'), lines[i + 1]
+          lines.insert(i + 1, '    needs: fast-verify')
+          condition_index = i + 2
+          old = (
+              "github.event_name != 'issues' && "
+              "(github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && "
+              "github.event_name == 'workflow_dispatch'"
+          )
+          new = "github.event_name != 'issues' && always() && github.event_name == 'workflow_dispatch'"
+          assert lines[condition_index].count(old) == 1, lines[condition_index]
+          lines[condition_index] = lines[condition_index].replace(old, new, 1)
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
+
+          # PlantUML: serialize regeneration behind verification while preserving dispatch-only execution.
+          path = Path('.github/workflows/plantuml-diagrams.yml')
+          lines = path.read_text(encoding='utf-8').splitlines()
+          indexes = [i for i, line in enumerate(lines) if line == '  regenerate:']
+          assert len(indexes) == 1, indexes
+          i = indexes[0]
+          assert lines[i + 1].startswith('    if: $'), lines[i + 1]
+          lines.insert(i + 1, '    needs: verify')
+          condition_index = i + 2
+          old = (
+              "github.event_name != 'issues' && "
+              "(github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && "
+              "github.event_name == 'workflow_dispatch'"
+          )
+          new = "github.event_name != 'issues' && always() && github.event_name == 'workflow_dispatch'"
+          assert lines[condition_index].count(old) == 1, lines[condition_index]
+          lines[condition_index] = lines[condition_index].replace(old, new, 1)
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
+
+          # The OCI guard-test workflow has already rotated to 716a...; retire its predecessor digest.
+          path = Path('scripts/work_graph_guard.py')
+          text = path.read_text(encoding='utf-8')
+          retired = '            "22fe48af6a8ee4418643ea1f68dad53c8d5c589af0e1dedbe7573ae88e91f30c",\n'
+          assert text.count(retired) == 1
+          text = text.replace(retired, '', 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
+          git diff --check
+          python3 -B -m unittest scripts/test_work_graph_guard.py
+
+      - name: Commit exact correction and remove bootstrap
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/application-ci.yml .github/workflows/plantuml-diagrams.yml scripts/work_graph_guard.py
+          git rm .github/workflows/finalize-issue367.yml
+          git diff --cached --check
+          git commit -m 'ci: complete durable workflow self-test'
+          git push origin HEAD:main
