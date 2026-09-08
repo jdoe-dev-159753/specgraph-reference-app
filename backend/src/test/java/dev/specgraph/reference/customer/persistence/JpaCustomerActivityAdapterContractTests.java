@@ -25,6 +25,7 @@ import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 @Tag("VFY-CUSTOMER-READ-001")
 @Tag("port_contract")
@@ -33,7 +34,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * paging and bounded statement counts. It detects N+1 regressions without benchmarking latency.
  */
 final class JpaCustomerActivityAdapterContractTests extends CustomerActivityPortContract {
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73")
+    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
+                    DockerImageName.parse("postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73")
+                            .asCompatibleSubstituteFor("postgres"))
             .withDatabaseName("specgraph")
             .withUsername("specgraph")
             .withPassword("specgraph");
