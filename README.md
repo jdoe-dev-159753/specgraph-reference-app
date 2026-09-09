@@ -2,8 +2,6 @@
 
 [![application-ci](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
 [![R5 release](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r5-release.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r5-release.yml)
-[![demo images](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
-[![Authored LOC](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjdoe-dev-159753%2Fspecgraph-reference-app%2Frepository-metrics%2Floc.json)](https://github.com/jdoe-dev-159753/specgraph-reference-app/blob/repository-metrics/repository-metrics.md)
 
 Customer Activity Analytics is a runnable synthetic customer-review application built to demonstrate specification-driven software delivery and provider-neutral AI integration.
 
@@ -120,15 +118,7 @@ The earlier R4 captures are retained as comparison/fail-safe evidence rather tha
 
 Screenshot provenance is recorded in [`docs/reviewer/screenshot-manifest.md`](docs/reviewer/screenshot-manifest.md).
 
-## Demo container images
-
-The portfolio keeps the complete checkpoint image set rather than deleting the development trajectory:
-
-- `r0`, `r1`, `r2`, `r3`, `r4` are rebuilt from the frozen `demo/r0` ... `demo/r4` branches by [`demo-images`](.github/workflows/demo-images.yml);
-- each checkpoint publishes both a stable ring tag and an immutable SHA-derived tag for `linux/amd64` and `linux/arm64`;
-- `r5` is the current full demonstrator and is proven/published independently by [`r5-release`](.github/workflows/r5-release.yml).
-
-The historical images are useful replay/fail-safe artifacts. They do not replace R5 as the portfolio target.
+Historical R0-R4 checkpoint publication and ring-replay machinery is preserved by the immutable [`submission-v1`](https://github.com/jdoe-dev-159753/specgraph-reference-app/tree/submission-v1) snapshot and Git history rather than kept active in the portfolio CI surface.
 
 ## Architecture
 
@@ -162,23 +152,14 @@ npm ci
 npm run build
 ```
 
-The active CI surface is deliberately smaller than the original delivery campaign:
+The active CI surface is deliberately small:
 
-- [`application-ci`](.github/workflows/application-ci.yml) for the application and deterministic engineering checks;
-- [`r5-provider-contracts`](.github/workflows/r5-provider-contracts.yml) for the local/OpenAI R5 Compose contract;
+- [`application-ci`](.github/workflows/application-ci.yml) for controlled-design checks, backend verification, frontend build, and both local/OpenAI R5 Compose contracts;
 - [`r4-acceptance-ci`](.github/workflows/r4-acceptance-ci.yml) for the retained deep R4 browser/failure-path fallback;
 - [`r5-release`](.github/workflows/r5-release.yml) for the final R5 image and browser proof;
-- [`demo-images`](.github/workflows/demo-images.yml) for the frozen R0-R4 checkpoint images;
-- [`plantuml-diagrams`](.github/workflows/plantuml-diagrams.yml) for controlled diagram consistency;
-- [`repository-metrics`](.github/workflows/repository-metrics.yml) for live line-count reporting.
+- [`plantuml-diagrams`](.github/workflows/plantuml-diagrams.yml) for controlled diagram consistency.
 
-## Repository metrics
-
-The **Authored LOC** badge at the top is generated from the current `main` tree, not hand-maintained. The generated report contains the per-language breakdown and excludes build/vendor outputs.
-
-[Open the current line-count report](https://github.com/jdoe-dev-159753/specgraph-reference-app/blob/repository-metrics/repository-metrics.md).
-
-Coverage and LOC are engineering signals, not correctness claims. JaCoCo remains part of ordinary Maven verification; repository-wide coverage aggregation is tracked separately.
+JaCoCo remains part of ordinary Maven verification. Repository-wide coverage aggregation is tracked separately in #488 so the eventual badge reflects the cleaned executable source set rather than a delivery-era LOC count.
 
 ## Review evidence
 
