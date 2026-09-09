@@ -10,12 +10,7 @@ on:
       - 'docker/app.Dockerfile'
       - 'compose.r5.yaml'
       - 'compose.r5.openai.yaml'
-      - 'scripts/test_frontend_lock_contract.py'
-      - 'scripts/analyze_dataset_ceiling.py'
-      - 'scripts/test_analyze_dataset_ceiling.py'
-      - 'scripts/validate_design_map.py'
-      - 'scripts/validate_verification_markers.py'
-      - 'scripts/test_validate_verification_markers.py'
+      - 'scripts/*.py'
       - 'docs/assignment/VV/verification.yaml'
       - 'docs/analysis/dataset-ceiling.md'
       - '.github/workflows/application-ci.yml'
@@ -27,12 +22,7 @@ on:
       - 'docker/app.Dockerfile'
       - 'compose.r5.yaml'
       - 'compose.r5.openai.yaml'
-      - 'scripts/test_frontend_lock_contract.py'
-      - 'scripts/analyze_dataset_ceiling.py'
-      - 'scripts/test_analyze_dataset_ceiling.py'
-      - 'scripts/validate_design_map.py'
-      - 'scripts/validate_verification_markers.py'
-      - 'scripts/test_validate_verification_markers.py'
+      - 'scripts/*.py'
       - 'docs/assignment/VV/verification.yaml'
       - 'docs/analysis/dataset-ceiling.md'
       - '.github/workflows/application-ci.yml'
@@ -63,19 +53,43 @@ jobs:
       - name: Assert exact validated source revision
         run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
 
-      - name: Validate controlled design and verification maps
+      - name: Verify Python tooling with native line coverage
         run: |
-          python3 scripts/validate_design_map.py
-          python3 -B -m unittest scripts/test_validate_verification_markers.py
-          python3 -B scripts/validate_verification_markers.py
+          set -euo pipefail
+          mkdir -p build/python-coverage
+          stdlib="$(python3 - <<'PY'
+          import sysconfig
+          print(sysconfig.get_path('stdlib'))
+          PY
+          )"
+          trace_python() {
+            python3 -B -m trace \
+              --count \
+              --file build/python-coverage.dat \
+              --coverdir build/python-coverage \
+              --missing \
+              --summary \
+              --ignore-dir "$stdlib" \
+              "$@"
+          }
 
-      - name: Verify synthetic dataset ceiling report
-        run: |
-          python3 -B -m unittest scripts/test_analyze_dataset_ceiling.py
-          python3 -B scripts/analyze_dataset_ceiling.py --check
+          trace_python scripts/validate_design_map.py
+          trace_python --module unittest scripts/test_validate_verification_markers.py
+          trace_python scripts/validate_verification_markers.py
+          trace_python --module unittest scripts/test_analyze_dataset_ceiling.py
+          trace_python scripts/analyze_dataset_ceiling.py --check
+          trace_python --module unittest scripts/test_frontend_lock_contract.py
 
-      - name: Verify frontend dependency lock contract
-        run: python3 -B -m unittest scripts/test_frontend_lock_contract.py
+      - name: Upload Python coverage evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: python-coverage-${{ env.SOURCE_SHA }}
+          path: |
+            build/python-coverage.dat
+            build/python-coverage/**
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Verify backend against Testcontainers PostgreSQL
         run: >-
