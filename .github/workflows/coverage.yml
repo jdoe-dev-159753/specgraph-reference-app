@@ -24,9 +24,11 @@ jobs:
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.sha }}
+      COVERAGE_OUTPUT_DIR: coverage-output
     steps:
       - name: Clean previous coverage outputs
         run: |
+          rm -rf "$COVERAGE_OUTPUT_DIR"
           docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/scripts/__pycache__'
 
@@ -55,18 +57,20 @@ jobs:
       - name: Render coverage summary and badge
         run: |
           test -s backend/target/site/jacoco/jacoco.xml
+          rm -rf "$COVERAGE_OUTPUT_DIR"
+          mkdir -p "$COVERAGE_OUTPUT_DIR"
           python3 scripts/jacoco_badge.py \
             --xml backend/target/site/jacoco/jacoco.xml \
-            --json backend/target/coverage-summary.json \
-            --svg backend/target/backend-coverage.svg
+            --json "$COVERAGE_OUTPUT_DIR/coverage-summary.json" \
+            --svg "$COVERAGE_OUTPUT_DIR/backend-coverage.svg"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: backend-coverage-${{ github.sha }}
           path: |
             backend/target/site/jacoco/
-            backend/target/coverage-summary.json
-            backend/target/backend-coverage.svg
+            coverage-output/coverage-summary.json
+            coverage-output/backend-coverage.svg
           if-no-files-found: error
           retention-days: 30
 
@@ -76,8 +80,8 @@ jobs:
           publish_dir="$RUNNER_TEMP/specgraph-coverage-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           rm -rf "$publish_dir"
           mkdir -p "$publish_dir"
-          cp backend/target/backend-coverage.svg "$publish_dir/backend-coverage.svg"
-          cp backend/target/coverage-summary.json "$publish_dir/coverage-summary.json"
+          cp "$COVERAGE_OUTPUT_DIR/backend-coverage.svg" "$publish_dir/backend-coverage.svg"
+          cp "$COVERAGE_OUTPUT_DIR/coverage-summary.json" "$publish_dir/coverage-summary.json"
           printf '%s\n' "$SOURCE_SHA" > "$publish_dir/source-sha.txt"
 
           git config user.name 'github-actions[bot]'
@@ -95,5 +99,6 @@ jobs:
       - name: Reclaim coverage outputs
         if: always()
         run: |
+          rm -rf "$COVERAGE_OUTPUT_DIR"
           docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
             sh -c 'rm -rf /workspace/backend/target /workspace/scripts/__pycache__'
