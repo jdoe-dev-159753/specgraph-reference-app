@@ -3,7 +3,7 @@ name: application-ci
 
 on:
   workflow_dispatch:
-  pull_request_target:
+  pull_request:
     paths:
       - 'backend/**'
       - 'frontend/**'
@@ -46,7 +46,6 @@ permissions:
 
 jobs:
   verify:
-    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
