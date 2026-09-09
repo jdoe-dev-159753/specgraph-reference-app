@@ -80,11 +80,11 @@ class FrontendLockContractTests(unittest.TestCase):
         )
         self.assertIn("npm ci --prefer-offline --no-audit --no-fund", dockerfile)
 
-    def test_ci_uses_attempt_scoped_clean_installs(self) -> None:
+    def test_ci_uses_attempt_scoped_clean_install(self) -> None:
         workflow = (self.ROOT / ".github" / "workflows" / "application-ci.yml").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(2, workflow.count("npm ci --prefer-offline --no-audit --no-fund"))
+        self.assertEqual(1, workflow.count("npm ci --prefer-offline --no-audit --no-fund"))
         self.assertNotIn("npm install --prefer-offline", workflow)
         self.assertIn(
             "specgraph-npm-${{ github.run_id }}-${{ github.run_attempt }}", workflow
