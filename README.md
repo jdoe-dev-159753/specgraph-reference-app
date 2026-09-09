@@ -1,164 +1,152 @@
 # Customer Activity Analytics
 
 [![application-ci](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
-[![demo-images](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
-[![work-graph-guard](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml)
-[![backend coverage](https://raw.githubusercontent.com/jdoe-dev-159753/specgraph-reference-app/coverage-badge/backend-coverage.svg)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/coverage.yml)
 [![Java 21](https://img.shields.io/badge/Java-21-informational)](backend/pom.xml)
-[![Maven 3.9](https://img.shields.io/badge/Maven-3.9-informational)](docker/app.Dockerfile)
 [![Spring Boot 4.1.1](https://img.shields.io/badge/Spring_Boot-4.1.1-informational)](backend/pom.xml)
-[![Spring Modulith 2.1.1](https://img.shields.io/badge/Spring_Modulith-2.1.1-informational)](backend/pom.xml)
 [![Spring AI 2.0.1](https://img.shields.io/badge/Spring_AI-2.0.1-informational)](backend/pom.xml)
-[![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-informational)](compose.yaml)
-[![pgvector 0.8.6](https://img.shields.io/badge/pgvector-0.8.6-informational)](compose.r4.yaml)
-[![Node.js 24](https://img.shields.io/badge/Node.js-24_build--time-informational)](docker/app.Dockerfile)
-[![React 19.2.8](https://img.shields.io/badge/React-19.2.8-informational)](frontend/package.json)
-[![TypeScript 7.0.2](https://img.shields.io/badge/TypeScript-7.0.2-informational)](frontend/package.json)
-[![Vite 8.1.0](https://img.shields.io/badge/Vite-8.1.0_build--time-informational)](frontend/package.json)
-[![Playwright 1.55.0](https://img.shields.io/badge/Playwright-1.55.0_test-informational)](e2e/package.json)
-<!-- repository-metrics-badge:start -->
-[![Authored LOC](https://img.shields.io/badge/Authored_LOC-32%2C281-informational)](docs/reviewer/repository-metrics.md)
-[![Java LOC](https://img.shields.io/badge/Java_LOC-9%2C362-informational)](docs/reviewer/repository-metrics.md)
-[![Python LOC](https://img.shields.io/badge/Python_LOC-6%2C699-informational)](docs/reviewer/repository-metrics.md)
-[![YAML LOC](https://img.shields.io/badge/YAML_LOC-4%2C201-informational)](docs/reviewer/repository-metrics.md)
-[![Markdown LOC](https://img.shields.io/badge/Markdown_LOC-2%2C956-informational)](docs/reviewer/repository-metrics.md)
-[![TypeScript LOC](https://img.shields.io/badge/TypeScript_LOC-2%2C343-informational)](docs/reviewer/repository-metrics.md)
-[![Bourne Shell LOC](https://img.shields.io/badge/Bourne_Shell_LOC-2%2C236-informational)](docs/reviewer/repository-metrics.md)
-[![PlantUML LOC](https://img.shields.io/badge/PlantUML_LOC-2%2C025-informational)](docs/reviewer/repository-metrics.md)
-[![JavaScript LOC](https://img.shields.io/badge/JavaScript_LOC-1%2C758-informational)](docs/reviewer/repository-metrics.md)
-[![Maven LOC](https://img.shields.io/badge/Maven_LOC-205-informational)](docs/reviewer/repository-metrics.md)
-[![SQL LOC](https://img.shields.io/badge/SQL_LOC-159-informational)](docs/reviewer/repository-metrics.md)
-[![JSON LOC](https://img.shields.io/badge/JSON_LOC-155-informational)](docs/reviewer/repository-metrics.md)
-[![Dockerfile LOC](https://img.shields.io/badge/Dockerfile_LOC-70-informational)](docs/reviewer/repository-metrics.md)
-[![Text LOC](https://img.shields.io/badge/Text_LOC-68-informational)](docs/reviewer/repository-metrics.md)
-[![Properties LOC](https://img.shields.io/badge/Properties_LOC-39-informational)](docs/reviewer/repository-metrics.md)
-[![HTML LOC](https://img.shields.io/badge/HTML_LOC-5-informational)](docs/reviewer/repository-metrics.md)
-<!-- repository-metrics-badge:end -->
+[![React 19](https://img.shields.io/badge/React-19-informational)](frontend/package.json)
+[![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector_0.8.6-informational)](compose.r4.yaml)
 
-Customer Activity Analytics is a runnable customer-care application for reviewing customer activity, risk evidence, applicable policy and retained analysis history. It demonstrates how a specification-driven delivery can combine deterministic controls, statistical detectors, local retrieval and optional language-model adapters without letting generated text replace source evidence.
+Customer Activity Analytics is a runnable synthetic customer-review application built to demonstrate specification-driven software delivery and provider-neutral AI integration.
 
-The demo data is synthetic. Detector scores are reviewer signals for this bounded scenario; they are not calibrated production AML probabilities and do not assert wrongdoing.
+It keeps source activity, source risk, derived detector signals, retrieved policy evidence and generated advisory text as separate evidence classes. Language-model output never becomes source truth merely because a model produced it.
 
-## Start here
+> **Scope:** this is a technical demonstrator using synthetic data. Detector scores and generated analyses are reviewer signals, not calibrated production AML decisions and not assertions of wrongdoing.
 
-| What | Link |
-| --- | --- |
-| **R5 interview demonstrator** | [Run the full local-model demo](#docker-quickstart) |
-| R5 implementation guide | [Open the reviewer guide](docs/reviewer/r5-runtime.md) |
-| R4 comparison fallback | [Open the retained R4 gallery](docs/reviewer/r4-gallery.md) |
-| J5 immutable submission | [Track the final release](https://github.com/jdoe-dev-159753/specgraph-reference-app/issues/127) |
+## What it demonstrates
 
-R5 is the one full interview configuration: authenticated customer review, Bayesian + fuzzy + Random Forest Stage-1 evidence, PostgreSQL/pgvector grounding, and advisory synthesis by the local Ministral model in LM Studio. It is a dense one-week demonstrator, not a production AML platform.
+The application combines:
 
-## Docker quickstart
+- a Java 21 / Spring Boot modular monolith with Spring Modulith architecture checks;
+- explicit hexagonal ports for persistence, retrieval, detector and analysis-model boundaries;
+- PostgreSQL and pgvector with Flyway-owned schema evolution;
+- authenticated multi-operator review flows and retained analysis provenance;
+- interchangeable Stage-1 detectors including Bayesian, fuzzy and packaged Random Forest mechanisms;
+- local MiniLM embeddings and pgvector policy retrieval;
+- deterministic, local LM Studio and optional OpenAI Stage-3 analysis adapters behind one application-owned model port;
+- React + TypeScript reviewer UI and browser-level Playwright evidence;
+- controlled requirements, architecture decisions, design and V&V artifacts tied to executable evidence.
 
-Prerequisites: LM Studio on Windows, Docker Compose 2.34+ on `watch-infra-01`, and read access to the repository's private GHCR packages. In LM Studio, set **Context Length** to `8192` for `ministral-3-8b-instruct-2512`, reload the model, enable **Serve on Local Network**, and open **Developer > Logs**. The densest R5 request is conservatively estimated at 4,163 tokens including its 512-token output reserve, leaving comfortable headroom.
+The AI path is deliberately staged:
 
-From `watch-infra-01`, copy and run this block. The first command proves the VPS-to-LM-Studio route before Docker starts anything:
-
-```bash
-docker login ghcr.io -u jdoe-dev-159753
-curl -fsS http://10.77.0.1:1234/v1/models
-export SPECGRAPH_LOCAL_BASE_URL=http://10.77.0.1:1234/v1
-export SPECGRAPH_LOCAL_MODEL=ministral-3-8b-instruct-2512
-export R5_BIND_ADDRESS=10.77.0.31
-export R5_PORT=8088
-docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-f6b989af9574a8d54249e29ffff2045129d8f127 \
-  up -d --wait --no-build --pull always
-docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-f6b989af9574a8d54249e29ffff2045129d8f127 ps
+```text
+source activity + source risk
+          │
+          ▼
+Stage 1: derived detector evidence
+          │
+          ▼
+Stage 2: policy retrieval / grounding
+          │
+          ▼
+bounded application-owned evidence envelope
+          │
+          ▼
+Stage 3: advisory synthesis
+          │
+          ▼
+validation + retained provenance/history
 ```
 
-This immutable candidate was proven and published by the successful R5 workflow. The shorter `:r5` tag is promoted only after merge to `main`.
+Changing a detector, retrieval implementation or model provider does not redefine the application contracts around it.
 
-If the VPS cannot route `10.77.0.1`, retry the route check with the LM Studio address reported by Windows, currently `169.254.123.79`, and use that same address in `SPECGRAPH_LOCAL_BASE_URL`. Do not continue until `/v1/models` returns the Ministral model.
+## Run the deterministic demo
 
-Open [http://10.77.0.31:8088/](http://10.77.0.31:8088/), then sign in with either repository-owned demo account:
+The deterministic R4 configuration requires Docker Compose but no external model credential.
+
+```bash
+docker compose -f compose.r4.yaml up -d --build
+```
+
+Open <http://localhost:8084/> and sign in with either synthetic demo operator:
 
 | Operator | Password |
 | --- | --- |
 | `operator-alpha` | `alpha-demo-2026` |
 | `operator-beta` | `beta-demo-2026` |
 
-The optional **Replayable scenario lab** accepts a signed 64-bit seed and an ordinary, cross-border, or mixed-red-flag family. Its returned identity makes the synthetic input exactly replayable without changing the four fixed regression personas; generated patterns are neither production statistics nor evidence of crime.
+A useful review case is customer:
 
-Its browser proof is deliberately separate from the fixed-persona regression suite: invoke `npx playwright test generated-scenario-demo.spec.ts` only against an R4/R5 runtime prepared for optional scenario generation.
-
-Search for customer `44444444-4444-4444-4444-444444444444` and select **Run analysis**. LM Studio Developer Logs must show the OpenAI-compatible request; the browser must then show the generated analysis, all three detector artifacts, pgvector grounding, `backend: local`, the Ministral model identity, and `external transmission: no`. Reload the page to confirm retained history.
-
-Stop and reset the R5 demo with the same OCI Compose package:
-
-```bash
-docker compose -p specgraph-r5 \
-  -f oci://ghcr.io/jdoe-dev-159753/specgraph-reference-app-compose:r5-f6b989af9574a8d54249e29ffff2045129d8f127 \
-  down -v
+```text
+44444444-4444-4444-4444-444444444444
 ```
 
-From a repository checkout, `./scripts/r5-runtime-up.sh` is the stricter alternative: it invokes the same Compose topology, pulls the registered R5 image by default, and performs the model, login, analysis and provenance preflights before printing the reviewer URL. Set `R5_SOURCE_BUILD=true` only when deliberately rebuilding from source.
+Run an analysis, inspect detector evidence and pgvector grounding, then reload the page to verify retained history.
 
-## Screenshot fallback
+Stop and remove the disposable demo state with:
 
-These unedited screenshots were promoted from successful browser-validation artifacts. They keep the interface and evidence story reviewable if the live model or network is unavailable during the interview.
+```bash
+docker compose -f compose.r4.yaml down -v
+```
 
-### R5 full composite with local-model provenance
+The first R4 startup may populate the local embedding-model cache. The richer local-model R5 configuration is documented separately in [`docs/reviewer/r5-runtime.md`](docs/reviewer/r5-runtime.md); it is not required for the default portfolio path.
 
-![Authenticated R5 full composite with three detector artifacts, pgvector grounding and local model provenance](docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png)
+## Verify from source
 
-[Open the full-size R5 screenshot](docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png)
+Backend verification, including PostgreSQL/Testcontainers integration tests and JaCoCo generation:
 
-This unedited capture comes from the exact workflow that published the immutable WatchInfra candidate above. Its Stage-3 endpoint is the deterministic LM Studio contract double; the manual WatchInfra rehearsal proves the same candidate against the real LM Studio process and Developer Logs.
+```bash
+mvn -f backend/pom.xml verify
+```
 
-### R4 deterministic baseline
+Frontend type-check and production build:
 
-![Authenticated R4 baseline with pgvector grounding and retained analysis](docs/reviewer/screenshots/R4_baseline_customer_444.png)
+```bash
+cd frontend
+npm ci
+npm run build
+```
 
-### R4 Bayesian detector
+The retained [`r4-acceptance-ci`](.github/workflows/r4-acceptance-ci.yml) workflow exercises the complete authenticated browser flow, grounding, history, determinism and degradation behavior against an exact source revision.
 
-![Authenticated R4 Bayesian variant with pgvector grounding and retained analysis](docs/reviewer/screenshots/R4_bayesian_customer_444.png)
+Repository-wide coverage is being consolidated from the native language reports rather than represented by a Java-only percentage. Coverage is treated as a regression signal, not as proof of correctness.
 
-## What the reviewer is seeing
-
-The application keeps four authorities distinct:
-
-1. persisted CARD, PAYMENT and CRYPTO activity plus source risk assessments;
-2. three separately retained detector artifacts from Bayesian, fuzzy and Random Forest mechanisms;
-3. relevant policy evidence retrieved from PostgreSQL/pgvector with local MiniLM embeddings;
-4. structured advisory synthesis, selected explicitly as deterministic, local LM Studio or external OpenAI.
-
-Only bounded, citable evidence crosses the model boundary. The deterministic backend is the no-credential default; provider credentials configure an adapter but never select it implicitly.
-
-LM Studio is selected explicitly through `SPECGRAPH_ANALYSIS_BACKEND=local`; its base URL must use a loopback, private, link-local or ULA IP literal rather than a hostname. The R5 Compose package fixes the detector selection and local-model backend while keeping generated output advisory.
+## Architecture
 
 ![Hexagonal architecture, ports and adapters](docs/assignment/SDD/diagrams/hexagonal-architecture.svg)
 
-The runtime is one modular monolith with hexagonal boundaries. HTTP/UI, relational persistence, detectors, retrieval and model providers remain adapters behind application-owned ports. R5 extends evidence and capability maturity without creating another runtime stack.
+The backend keeps module ownership explicit and prevents provider/framework types from leaking into application contracts. Spring owns composition and lifecycle; application-owned ports own substitution semantics.
 
-## Evidence
+Key boundaries include:
 
-- [R5 copy/paste Docker commands and evidence boundaries](docs/reviewer/r5-runtime.md)
-- [R4 fallback gallery](docs/reviewer/r4-gallery.md)
+- `CustomerActivityPort` for customer activity and source-risk reads;
+- `RiskSignalDetectorPort` for interchangeable derived Stage-1 evidence;
+- `PolicyKnowledgePort` for grounded policy retrieval;
+- `AnalysisModelPort` for Stage-3 synthesis;
+- `AnalysisHistoryPort` for retained completed analyses and provenance.
+
+The frontend consumes the same bounded HTTP contracts and exposes evidence provenance rather than collapsing the pipeline into one opaque “AI result”.
+
+## Review evidence
+
+- [SRS: requirements and acceptance semantics](docs/assignment/SRS/SRS.md)
+- [SDD: architecture, modules and trust boundaries](docs/assignment/SDD/SDD.md)
+- [Architecture decisions](docs/assignment/ADR/)
+- [V&V strategy and evidence model](docs/assignment/VV/VV.md)
+- [OpenAPI contract](backend/src/main/resources/static/openapi.yaml)
+- [Architecture figures](docs/reviewer/architecture-figures.md)
 - [Authentic screenshot provenance](docs/reviewer/screenshot-manifest.md)
-- [Architecture figures and controlled sources](docs/reviewer/architecture-figures.md)
-- [Application CI runs](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
-- [Backend JaCoCo coverage and report artifacts](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/coverage.yml) — the badge reports backend line coverage; retained XML/HTML also expose branch and instruction coverage.
-- [Published-image and remote-pull proof](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
-- [Configuration-sensitive R4 browser evidence](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r4-gallery-ci.yml)
-- [R5 registered image and browser evidence](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r5-release.yml)
+- [R4 fallback gallery](docs/reviewer/r4-gallery.md)
+- [R5 local-model reviewer guide](docs/reviewer/r5-runtime.md)
+- [Current presentation](docs/presentation/output/SpecGraph_presentation_working_v0.8.pptx)
 
-## Engineering documents
+The original assignment state remains preserved by the immutable [`submission-v1`](https://github.com/jdoe-dev-159753/specgraph-reference-app/tree/submission-v1) tag. Portfolio cleanup happens after that boundary so delivery evidence remains auditable without forcing every delivery-era mechanism to stay active forever.
 
-The completed delivery has also been distilled into a small, domain-neutral
-[project bootstrap template](docs/project-template/README.md). It preserves the reusable governance,
-controlled-artifact, Project v2, and self-hosted CI patterns without copying this repository's
-domain, milestones, or delivery history.
+## Repository map
 
-- [SRS — requirements and acceptance semantics](docs/assignment/SRS/SRS.md)
-- [SDD — architecture, modules and trust boundaries](docs/assignment/SDD/SDD.md)
-- [Architecture decisions](docs/assignment/ADR/), including the [public product identity and final-freeze boundary](docs/assignment/ADR/ADR-008-customer-activity-analytics-identity.md)
-- [V&V — verification strategy and evidence model](docs/assignment/VV/VV.md)
-- [OpenAPI — deployed HTTP contract](backend/src/main/resources/static/openapi.yaml)
-- [Source-derived Java, frontend and HTTP reference](docs/reviewer/source-reference.md) — run `./scripts/generate-source-reference.sh`, or download the `source-reference-<source SHA>` artifact from the `source-reference` workflow
-- [Proprietary evaluation license](LICENSE)
+```text
+backend/          Spring Boot application, ports, adapters and tests
+frontend/         React / TypeScript reviewer UI
+e2e/              Playwright acceptance scenarios
+docs/assignment/  controlled requirements, design, ADR and V&V artifacts
+docs/reviewer/    compact reviewer evidence and runtime notes
+docs/presentation current presentation source and output
+docker/           application and test container recipes
+scripts/          retained build, verification and runtime tooling
+```
 
-PlantUML sources beside the rendered SVGs are authoritative. GitHub issues, pull requests, checks and exact-SHA artifacts own delivery state; this README stays a concise entry point rather than duplicating those records.
+The portfolio edition is intentionally simplifying the last three surfaces: redundant delivery workflows, compatibility overlays and orchestration wrappers are removed when the frozen submission history already preserves their evidence.
+
+## License
+
+See [LICENSE](LICENSE). The repository is published for evaluation and review under its stated proprietary evaluation terms.
