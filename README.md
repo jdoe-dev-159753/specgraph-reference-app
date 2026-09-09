@@ -1,87 +1,152 @@
 # Customer Activity Analytics
 
 [![application-ci](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
-[![Java 21](https://img.shields.io/badge/Java-21-informational)](backend/pom.xml)
-[![Spring Boot 4.1.1](https://img.shields.io/badge/Spring_Boot-4.1.1-informational)](backend/pom.xml)
-[![Spring AI 2.0.1](https://img.shields.io/badge/Spring_AI-2.0.1-informational)](backend/pom.xml)
-[![React 19](https://img.shields.io/badge/React-19-informational)](frontend/package.json)
-[![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL_17-pgvector_0.8.6-informational)](compose.r4.yaml)
+[![R5 release](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r5-release.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r5-release.yml)
+[![demo images](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
+[![Authored LOC](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjdoe-dev-159753%2Fspecgraph-reference-app%2Frepository-metrics%2Floc.json)](https://github.com/jdoe-dev-159753/specgraph-reference-app/blob/repository-metrics/repository-metrics.md)
 
 Customer Activity Analytics is a runnable synthetic customer-review application built to demonstrate specification-driven software delivery and provider-neutral AI integration.
 
-It keeps source activity, source risk, derived detector signals, retrieved policy evidence and generated advisory text as separate evidence classes. Language-model output never becomes source truth merely because a model produced it.
+The portfolio target is the **full R5 system**, not an earlier deterministic checkpoint. R5 runs all three Stage-1 detector families, PostgreSQL/pgvector grounding, authenticated multi-operator review and a real Stage-3 model adapter. Stage 3 can be backed by OpenAI or a local LM Studio model without changing the application-owned contracts around it.
 
-> **Scope:** this is a technical demonstrator using synthetic data. Detector scores and generated analyses are reviewer signals, not calibrated production AML decisions and not assertions of wrongdoing.
+> **Scope:** the data is synthetic. Detector scores and generated analyses are reviewer signals for this demonstrator, not calibrated production AML decisions and not assertions of wrongdoing.
 
-## What it demonstrates
+## Full R5 demonstrator
 
-The application combines:
+R5 combines:
 
-- a Java 21 / Spring Boot modular monolith with Spring Modulith architecture checks;
-- explicit hexagonal ports for persistence, retrieval, detector and analysis-model boundaries;
-- PostgreSQL and pgvector with Flyway-owned schema evolution;
-- authenticated multi-operator review flows and retained analysis provenance;
-- interchangeable Stage-1 detectors including Bayesian, fuzzy and packaged Random Forest mechanisms;
-- local MiniLM embeddings and pgvector policy retrieval;
-- deterministic, local LM Studio and optional OpenAI Stage-3 analysis adapters behind one application-owned model port;
-- React + TypeScript reviewer UI and browser-level Playwright evidence;
-- controlled requirements, architecture decisions, design and V&V artifacts tied to executable evidence.
-
-The AI path is deliberately staged:
+- Bayesian, fuzzy and packaged Random Forest Stage-1 evidence;
+- local MiniLM embeddings and PostgreSQL/pgvector Stage-2 policy retrieval;
+- authenticated review and retained analysis history;
+- a bounded application-owned evidence envelope;
+- provider-selectable Stage-3 advisory synthesis;
+- explicit detector, retrieval, model and prompt provenance;
+- React + TypeScript UI and Playwright acceptance evidence.
 
 ```text
 source activity + source risk
           │
           ▼
-Stage 1: derived detector evidence
+Bayesian + fuzzy + Random Forest evidence
           │
           ▼
-Stage 2: policy retrieval / grounding
+MiniLM + pgvector policy grounding
           │
           ▼
 bounded application-owned evidence envelope
           │
           ▼
-Stage 3: advisory synthesis
+OpenAI or local LM Studio synthesis
           │
           ▼
 validation + retained provenance/history
 ```
 
-Changing a detector, retrieval implementation or model provider does not redefine the application contracts around it.
+### Run R5 with OpenAI
 
-## Run the deterministic demo
-
-The deterministic R4 configuration requires Docker Compose but no external model credential.
+Set the repository-scoped credential variable and start the complete topology directly with Compose:
 
 ```bash
-docker compose -f compose.r4.yaml up -d --build
+export SPECGRAPH_OPENAI_API_KEY='...'
+export OPENAI_MODEL='gpt-5-mini'
+docker compose \
+  -f compose.r5.yaml \
+  -f compose.r5.openai.yaml \
+  up -d --build --wait
 ```
 
-Open <http://localhost:8084/> and sign in with either synthetic demo operator:
+Open <http://localhost:8088/>.
+
+### Run R5 with a local LM Studio model
+
+Expose the LM Studio OpenAI-compatible endpoint on an address reachable from Docker, then run:
+
+```bash
+export SPECGRAPH_LOCAL_BASE_URL='http://HOST_REACHABLE_FROM_DOCKER:1234/v1'
+export SPECGRAPH_LOCAL_MODEL='ministral-3-8b-instruct-2512'
+docker compose -f compose.r5.yaml up -d --build --wait
+```
+
+The same application topology and the same three Stage-1 detectors are used. Only the Stage-3 provider changes.
+
+The two synthetic demo operators are:
 
 | Operator | Password |
 | --- | --- |
 | `operator-alpha` | `alpha-demo-2026` |
 | `operator-beta` | `beta-demo-2026` |
 
-A useful review case is customer:
+A useful full-flow customer is:
 
 ```text
 44444444-4444-4444-4444-444444444444
 ```
 
-Run an analysis, inspect detector evidence and pgvector grounding, then reload the page to verify retained history.
+Run an analysis, inspect all three detector artifacts, inspect pgvector grounding and model provenance, then reload the page to confirm retained history.
 
-Stop and remove the disposable demo state with:
+Stop the topology with the same Compose surface used to start it. For OpenAI:
 
 ```bash
-docker compose -f compose.r4.yaml down -v
+docker compose -f compose.r5.yaml -f compose.r5.openai.yaml down -v
 ```
 
-The first R4 startup may populate the local embedding-model cache. The richer local-model R5 configuration is documented separately in [`docs/reviewer/r5-runtime.md`](docs/reviewer/r5-runtime.md); it is not required for the default portfolio path.
+For LM Studio:
 
-## Verify from source
+```bash
+docker compose -f compose.r5.yaml down -v
+```
+
+No launcher script is required for the public demo path. Compose is the entry point.
+
+## Demo screenshots
+
+The full R5 screenshot is the primary visual fallback if a live provider is unavailable during review.
+
+### R5 full ensemble + pgvector + local-model provenance
+
+![R5 full ensemble customer review](docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png)
+
+[Open the R5 screenshot at full size](docs/reviewer/screenshots/R5_lmstudio_ensemble_customer_444.png)
+
+The earlier R4 captures are retained as comparison/fail-safe evidence rather than the main demonstration.
+
+### R4 deterministic baseline
+
+![R4 deterministic baseline](docs/reviewer/screenshots/R4_baseline_customer_444.png)
+
+### R4 Bayesian checkpoint
+
+![R4 Bayesian checkpoint](docs/reviewer/screenshots/R4_bayesian_customer_444.png)
+
+Screenshot provenance is recorded in [`docs/reviewer/screenshot-manifest.md`](docs/reviewer/screenshot-manifest.md).
+
+## Demo container images
+
+The portfolio keeps the complete checkpoint image set rather than deleting the development trajectory:
+
+- `r0`, `r1`, `r2`, `r3`, `r4` are rebuilt from the frozen `demo/r0` ... `demo/r4` branches by [`demo-images`](.github/workflows/demo-images.yml);
+- each checkpoint publishes both a stable ring tag and an immutable SHA-derived tag for `linux/amd64` and `linux/arm64`;
+- `r5` is the current full demonstrator and is proven/published independently by [`r5-release`](.github/workflows/r5-release.yml).
+
+The historical images are useful replay/fail-safe artifacts. They do not replace R5 as the portfolio target.
+
+## Architecture
+
+![Hexagonal architecture, ports and adapters](docs/assignment/SDD/diagrams/hexagonal-architecture.svg)
+
+The backend is a Java 21 / Spring Boot modular monolith with explicit hexagonal boundaries. Frameworks and providers sit behind application-owned ports rather than defining durable domain contracts.
+
+Key boundaries include:
+
+- `CustomerActivityPort` for activity and source-risk reads;
+- `RiskSignalDetectorPort` for interchangeable derived Stage-1 evidence;
+- `PolicyKnowledgePort` for grounded policy retrieval;
+- `AnalysisModelPort` for Stage-3 synthesis;
+- `AnalysisHistoryPort` for retained completed analyses and provenance.
+
+The application deliberately distinguishes source facts, derived detector evidence, retrieved grounding and generated advisory text. A language model cannot silently promote its output into source truth.
+
+## Verification
 
 Backend verification, including PostgreSQL/Testcontainers integration tests and JaCoCo generation:
 
@@ -97,25 +162,23 @@ npm ci
 npm run build
 ```
 
-The retained [`r4-acceptance-ci`](.github/workflows/r4-acceptance-ci.yml) workflow exercises the complete authenticated browser flow, grounding, history, determinism and degradation behavior against an exact source revision.
+The active CI surface is deliberately smaller than the original delivery campaign:
 
-Repository-wide coverage is being consolidated from the native language reports rather than represented by a Java-only percentage. Coverage is treated as a regression signal, not as proof of correctness.
+- [`application-ci`](.github/workflows/application-ci.yml) for the application and deterministic engineering checks;
+- [`r5-provider-contracts`](.github/workflows/r5-provider-contracts.yml) for the local/OpenAI R5 Compose contract;
+- [`r4-acceptance-ci`](.github/workflows/r4-acceptance-ci.yml) for the retained deep R4 browser/failure-path fallback;
+- [`r5-release`](.github/workflows/r5-release.yml) for the final R5 image and browser proof;
+- [`demo-images`](.github/workflows/demo-images.yml) for the frozen R0-R4 checkpoint images;
+- [`plantuml-diagrams`](.github/workflows/plantuml-diagrams.yml) for controlled diagram consistency;
+- [`repository-metrics`](.github/workflows/repository-metrics.yml) for live line-count reporting.
 
-## Architecture
+## Repository metrics
 
-![Hexagonal architecture, ports and adapters](docs/assignment/SDD/diagrams/hexagonal-architecture.svg)
+The **Authored LOC** badge at the top is generated from the current `main` tree, not hand-maintained. The generated report contains the per-language breakdown and excludes build/vendor outputs.
 
-The backend keeps module ownership explicit and prevents provider/framework types from leaking into application contracts. Spring owns composition and lifecycle; application-owned ports own substitution semantics.
+[Open the current line-count report](https://github.com/jdoe-dev-159753/specgraph-reference-app/blob/repository-metrics/repository-metrics.md).
 
-Key boundaries include:
-
-- `CustomerActivityPort` for customer activity and source-risk reads;
-- `RiskSignalDetectorPort` for interchangeable derived Stage-1 evidence;
-- `PolicyKnowledgePort` for grounded policy retrieval;
-- `AnalysisModelPort` for Stage-3 synthesis;
-- `AnalysisHistoryPort` for retained completed analyses and provenance.
-
-The frontend consumes the same bounded HTTP contracts and exposes evidence provenance rather than collapsing the pipeline into one opaque “AI result”.
+Coverage and LOC are engineering signals, not correctness claims. JaCoCo remains part of ordinary Maven verification; repository-wide coverage aggregation is tracked separately.
 
 ## Review evidence
 
@@ -125,12 +188,12 @@ The frontend consumes the same bounded HTTP contracts and exposes evidence prove
 - [V&V strategy and evidence model](docs/assignment/VV/VV.md)
 - [OpenAPI contract](backend/src/main/resources/static/openapi.yaml)
 - [Architecture figures](docs/reviewer/architecture-figures.md)
-- [Authentic screenshot provenance](docs/reviewer/screenshot-manifest.md)
+- [Screenshot provenance](docs/reviewer/screenshot-manifest.md)
+- [R5 reviewer guide](docs/reviewer/r5-runtime.md)
 - [R4 fallback gallery](docs/reviewer/r4-gallery.md)
-- [R5 local-model reviewer guide](docs/reviewer/r5-runtime.md)
 - [Current presentation](docs/presentation/output/SpecGraph_presentation_working_v0.8.pptx)
 
-The original assignment state remains preserved by the immutable [`submission-v1`](https://github.com/jdoe-dev-159753/specgraph-reference-app/tree/submission-v1) tag. Portfolio cleanup happens after that boundary so delivery evidence remains auditable without forcing every delivery-era mechanism to stay active forever.
+The original assignment state remains preserved by the immutable [`submission-v1`](https://github.com/jdoe-dev-159753/specgraph-reference-app/tree/submission-v1) tag. Portfolio cleanup happens after that boundary, so the original delivery remains auditable without forcing every delivery-era control to stay active forever.
 
 ## Repository map
 
@@ -139,13 +202,11 @@ backend/          Spring Boot application, ports, adapters and tests
 frontend/         React / TypeScript reviewer UI
 e2e/              Playwright acceptance scenarios
 docs/assignment/  controlled requirements, design, ADR and V&V artifacts
-docs/reviewer/    compact reviewer evidence and runtime notes
+docs/reviewer/    reviewer evidence and runtime notes
 docs/presentation current presentation source and output
 docker/           application and test container recipes
-scripts/          retained build, verification and runtime tooling
+scripts/          retained verification/runtime helpers not replaced cleanly by native tools
 ```
-
-The portfolio edition is intentionally simplifying the last three surfaces: redundant delivery workflows, compatibility overlays and orchestration wrappers are removed when the frozen submission history already preserves their evidence.
 
 ## License
 
