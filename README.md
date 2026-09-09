@@ -3,6 +3,7 @@
 [![application-ci](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
 [![demo-images](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
 [![work-graph-guard](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml/badge.svg?branch=main)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/work-graph-guard.yml)
+[![backend coverage](https://raw.githubusercontent.com/jdoe-dev-159753/specgraph-reference-app/coverage-badge/backend-coverage.svg)](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/coverage.yml)
 [![Java 21](https://img.shields.io/badge/Java-21-informational)](backend/pom.xml)
 [![Maven 3.9](https://img.shields.io/badge/Maven-3.9-informational)](docker/app.Dockerfile)
 [![Spring Boot 4.1.1](https://img.shields.io/badge/Spring_Boot-4.1.1-informational)](backend/pom.xml)
@@ -140,6 +141,7 @@ The runtime is one modular monolith with hexagonal boundaries. HTTP/UI, relation
 - [Authentic screenshot provenance](docs/reviewer/screenshot-manifest.md)
 - [Architecture figures and controlled sources](docs/reviewer/architecture-figures.md)
 - [Application CI runs](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/application-ci.yml)
+- [Backend JaCoCo coverage and report artifacts](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/coverage.yml) — the badge reports backend line coverage; retained XML/HTML also expose branch and instruction coverage.
 - [Published-image and remote-pull proof](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/demo-images.yml)
 - [Configuration-sensitive R4 browser evidence](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r4-gallery-ci.yml)
 - [R5 registered image and browser evidence](https://github.com/jdoe-dev-159753/specgraph-reference-app/actions/workflows/r5-release.yml)
