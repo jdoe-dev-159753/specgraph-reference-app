@@ -35,23 +35,16 @@ R5 combines:
 - explicit detector, retrieval, model and prompt provenance;
 - React + TypeScript UI and Playwright acceptance evidence.
 
-```text
-source activity + source risk
-          │
-          ▼
-Bayesian + fuzzy + Random Forest evidence
-          │
-          ▼
-MiniLM + pgvector policy grounding
-          │
-          ▼
-bounded application-owned evidence envelope
-          │
-          ▼
-local LM Studio synthesis
-          │
-          ▼
-validation + retained provenance/history
+```mermaid
+flowchart TD
+    Source["Source activity + source risk"] --> Stage1["Stage 1: Bayesian + fuzzy + Random Forest evidence"]
+    Stage1 --> Stage2["Stage 2: MiniLM + pgvector policy grounding"]
+    Stage2 --> Envelope["Bounded application-owned evidence envelope"]
+    Envelope --> Port["AnalysisModelPort"]
+    Port --> Local["LM Studio / local adapter<br/>portfolio demo path"]
+    Port -. "alternative implementation" .-> Cloud["OpenAI / cloud adapter"]
+    Local --> Result["Validation + retained provenance/history"]
+    Cloud --> Result
 ```
 
 ### Run the R5 demo with LM Studio
