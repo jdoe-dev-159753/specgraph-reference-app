@@ -1,82 +1,34 @@
-# R4 side-by-side demo gallery
+# R4 fallback evidence
 
-R0-R4 are capability-maturity rings. R4 backend/detector variants remain **R4** and run as separate configured processes, not as pseudo-rings.
+R4 is retained as the credential-free fallback for reviewing the application without the richer R5 local-model setup. The active portfolio keeps the R4 Compose topology and consolidated browser acceptance workflow, but no longer carries the delivery-era side-by-side launcher family.
 
-The canonical demo runtime is **`watch-infra-01`**, a Linux host running Docker Compose. Run these commands from a checkout of this repository on that host.
+The original `r4-variant-*` and `r4-gallery-*` launchers, their shell regression test, and the specialized `r4-gallery-ci` workflow remain preserved under the immutable [`submission-v1`](https://github.com/jdoe-dev-159753/specgraph-reference-app/tree/submission-v1) tag and Git history.
 
-Current executable source variants:
+## Run the current R4 fallback
 
-| Port | Ring | Stage 1 | Stage 2 | Stage 3 | External transmission |
-| ---: | --- | --- | --- | --- | --- |
-| 8084 | R4 baseline | no-op | pgvector + local all-MiniLM-L6-v2 | deterministic | no |
-| 8085 | R4 Bayesian | Bayesian beta-binomial | pgvector + local all-MiniLM-L6-v2 | deterministic | no |
-| 8086 | R4 local, optional | configured detector | same RAG | LM Studio/private model | no |
-| 8087 | R4 external, optional | configured detector | same RAG | OpenAI | yes, only with deliberate credential + backend selection |
-
-## Linux commands on `watch-infra-01`
-
-Baseline:
+From a current checkout:
 
 ```bash
-docker compose -p specgraph-r4-baseline -f compose.r4.yaml up -d --build --wait
+docker compose -p specgraph-r4 -f compose.r4.yaml up -d --build --wait
 ```
 
-The repository-owned launcher makes the Stage-3 choice explicit and produces a reviewer manifest:
+Open <http://localhost:8084/> and sign in with either synthetic demo operator documented in the root README. The default R4 profile uses PostgreSQL/pgvector grounding, local MiniLM embeddings and deterministic Stage-3 synthesis, so it requires no model-provider credential.
+
+Stop and remove the disposable state with:
 
 ```bash
-./scripts/r4-variant-up.sh baseline 8084 deterministic
-OPENAI_API_KEY=... ./scripts/r4-variant-up.sh external 8087 openai
-SPECGRAPH_LOCAL_BASE_URL=http://WINDOWS_LAN_IP:1234/v1 \
-  SPECGRAPH_LOCAL_MODEL=ministral-3-8b-instruct-2512 \
-  SPECGRAPH_LOCAL_API_KEY=... \
-  ./scripts/r4-variant-up.sh local 8086 local
+docker compose -p specgraph-r4 -f compose.r4.yaml down -v
 ```
 
-Run the local command on `watch-infra-01` while LM Studio listens on the Windows workstation. Replace the placeholder with its private LAN IP literal; hostnames are rejected to prevent DNS rebinding. Restrict the Windows firewall rule to the Linux host, and omit `SPECGRAPH_LOCAL_API_KEY` when LM Studio authentication is disabled. The adapter rejects public endpoints and records `externalTransmission=false`; CI uses a deterministic loopback OpenAI-compatible server and requires neither LM Studio, a GPU nor Internet access.
+The retained [`r4-acceptance-ci`](../../.github/workflows/r4-acceptance-ci.yml) workflow is the active executable evidence for the R4 path. It exercises the authenticated browser flow, analysis, pgvector grounding, retained history, deterministic behavior and degradation handling against an exact source revision.
 
-`./scripts/r4-gallery-up.sh` first stops any previously launched external project when `OPENAI_API_KEY` is absent, then starts the baseline and adds the external variant only when the key is deliberately present. The Compose definition accepts provider tokens only through launcher-owned projections. The launcher clears both public token inputs for every Compose invocation and populates only the selected backend's projection, so raw deterministic commands cannot inherit an exported OpenAI or LM Studio credential. The opt-out therefore remains effective even if baseline startup fails. `./scripts/r4-gallery-down.sh` attempts both teardowns and returns nonzero if either fails.
+## Preserved side-by-side evidence
 
-Bayesian variant on the adjacent port:
+The repository keeps the unedited screenshots promoted from the delivered side-by-side R4 proof:
 
-```bash
-R4_PORT=8085 R4_PROFILES=r4,bayesian-detector \
-  docker compose -p specgraph-r4-bayesian -f compose.r4.yaml up -d --build --wait
-```
+- [`R4_baseline_customer_444.png`](screenshots/R4_baseline_customer_444.png) shows the deterministic baseline with pgvector grounding and retained history;
+- [`R4_bayesian_customer_444.png`](screenshots/R4_bayesian_customer_444.png) shows the Bayesian detector variant with the same grounding path.
 
-Open from a machine that can reach `watch-infra-01`:
+Their exact workflow run, artifact IDs and digests are recorded in [`screenshot-manifest.md`](screenshot-manifest.md). Those captures are historical evidence from the submitted implementation, not claims that the retired gallery workflow still runs on current `main`.
 
-```text
-http://watch-infra-01:8084/
-http://watch-infra-01:8085/
-```
-
-Use the host IP instead of the hostname if local DNS does not resolve it.
-
-Inspect the two isolated projects:
-
-```bash
-docker compose -p specgraph-r4-baseline -f compose.r4.yaml ps
-R4_PORT=8085 R4_PROFILES=r4,bayesian-detector \
-  docker compose -p specgraph-r4-bayesian -f compose.r4.yaml ps
-```
-
-Stop one variant without touching the other:
-
-```bash
-docker compose -p specgraph-r4-baseline -f compose.r4.yaml down -v
-R4_PORT=8085 R4_PROFILES=r4,bayesian-detector \
-  docker compose -p specgraph-r4-bayesian -f compose.r4.yaml down -v
-```
-
-Each Compose project owns an isolated PostgreSQL/pgvector instance and analysis history. Starting or stopping one variant therefore does not mutate the other variant's history.
-
-## CI / screenshot evidence
-
-`r4-gallery-ci` exercises the same baseline and Bayesian configurations on isolated CI ports. Before taking a screenshot, Playwright asserts the advertised configuration:
-
-- baseline: no detector provenance, real pgvector + `all-MiniLM-L6-v2`, deterministic Stage 3, no external transmission;
-- Bayesian: `beta-binomial-review-elevation-v1` detector provenance and `DETECTOR_SIGNAL` references, the same pgvector/MiniLM grounding, deterministic Stage 3, no external transmission.
-
-Each successful variant uploads a separate `r4-gallery-<variant>-<sha>` artifact containing the screenshot and a small provenance manifest. Selected PNGs are then promoted unchanged into `docs/reviewer/screenshots/` for the README evidence gallery.
-
-`R4_PROFILES` remains the detector-side selection seam in this stack. Stage 3 is independently selected through the application-owned `specgraph.analysis.backend` dimension (`SPECGRAPH_ANALYSIS_BACKEND` in Compose); provider credentials configure a leaf but never select it. #224/#254 own the later Composite detector topology and calibrated ensemble semantics. The local Stage-3 adapter is independently selected and does not change Stage-1 or Stage-2 topology.
+The assignment SDD and design map intentionally retain the delivered ring/variant design. For the post-submission portfolio runtime, `compose.r4.yaml` plus `r4-acceptance-ci` are the maintained R4 surfaces; R5 remains the primary richer demonstration path.
