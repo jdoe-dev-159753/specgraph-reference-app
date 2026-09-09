@@ -1,0 +1,99 @@
+name: demo-images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/app.Dockerfile'
+      - '.github/workflows/demo-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-checkpoint:
+    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - ring: r0
+            ref: demo/r0
+          - ring: r1
+            ref: demo/r1
+          - ring: r2
+            ref: demo/r2
+          - ring: r3
+            ref: demo/r3
+          - ring: r4
+            ref: demo/r4
+    env:
+      APP_PACKAGE: ghcr.io/${{ github.repository_owner }}/specgraph-reference-app
+      BUILDER_NAME: specgraph-demo-${{ matrix.ring }}-${{ github.run_id }}-${{ github.run_attempt }}
+      BUILDKIT_IMAGE: moby/buildkit:buildx-stable-1@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8
+      DOCKER_CONFIG: /tmp/specgraph-demo-docker-${{ matrix.ring }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Checkout current packaging surface
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: packaging
+          persist-credentials: false
+
+      - name: Checkout frozen demo checkpoint
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ matrix.ref }}
+          path: packaging/checkpoint
+          persist-credentials: false
+
+      - name: Resolve immutable checkpoint identity
+        working-directory: packaging
+        run: |
+          set -euo pipefail
+          checkpoint_sha="$(git -C checkpoint rev-parse HEAD)"
+          checkpoint_short="$(printf '%s' "$checkpoint_sha" | cut -c1-12)"
+          echo "CHECKPOINT_SHA=$checkpoint_sha" >> "$GITHUB_ENV"
+          echo "IMMUTABLE_TAG=${{ matrix.ring }}-${checkpoint_short}" >> "$GITHUB_ENV"
+
+      - name: Authenticate to GHCR
+        run: |
+          mkdir -p "$DOCKER_CONFIG"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Create isolated multi-platform builder
+        run: |
+          docker buildx create --name "$BUILDER_NAME" --driver docker-container \
+            --driver-opt "image=$BUILDKIT_IMAGE"
+          docker buildx inspect "$BUILDER_NAME" --bootstrap
+
+      - name: Publish stable and immutable checkpoint image
+        working-directory: packaging
+        run: |
+          set -euo pipefail
+          docker buildx build --builder "$BUILDER_NAME" \
+            --platform linux/amd64,linux/arm64 \
+            -f docker/app.Dockerfile \
+            --build-arg SOURCE_ROOT=checkpoint \
+            --label "org.opencontainers.image.revision=$CHECKPOINT_SHA" \
+            --label "dev.specgraph.delivery-ring=${{ matrix.ring }}" \
+            -t "$APP_PACKAGE:${{ matrix.ring }}" \
+            -t "$APP_PACKAGE:$IMMUTABLE_TAG" \
+            --push .
+
+      - name: Verify published platforms
+        run: |
+          set -euo pipefail
+          inspect="$(docker buildx imagetools inspect "$APP_PACKAGE:$IMMUTABLE_TAG")"
+          printf '%s\n' "$inspect"
+          printf '%s\n' "$inspect" | grep -E 'Platform:[[:space:]]+linux/amd64'
+          printf '%s\n' "$inspect" | grep -E 'Platform:[[:space:]]+linux/arm64'
+
+      - name: Reclaim publisher state
+        if: always()
+        run: |
+          docker buildx rm -f "$BUILDER_NAME" 2>/dev/null || true
+          rm -rf "$DOCKER_CONFIG"

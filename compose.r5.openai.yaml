@@ -1,0 +1,11 @@
+# OpenAI provider overlay for the full R5 topology.
+# R5 still owns the same three Stage-1 detectors and pgvector grounding; only Stage 3 changes provider.
+services:
+  r5:
+    environment:
+      SPECGRAPH_ANALYSIS_BACKEND: openai
+      # Intentionally use a repository-specific host variable rather than inheriting an ambient
+      # OPENAI_API_KEY into the container accidentally.
+      OPENAI_API_KEY: "${SPECGRAPH_OPENAI_API_KEY:?set SPECGRAPH_OPENAI_API_KEY for the OpenAI R5 demo}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5-mini}"
+      SPECGRAPH_LOCAL_API_KEY: ""
