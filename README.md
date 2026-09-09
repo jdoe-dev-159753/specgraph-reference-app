@@ -5,7 +5,7 @@
 
 Customer Activity Analytics is a runnable synthetic customer-review application built to demonstrate specification-driven software delivery and provider-neutral AI integration.
 
-The portfolio target is the **full R5 system**, not an earlier deterministic checkpoint. R5 runs all three Stage-1 detector families, PostgreSQL/pgvector grounding, authenticated multi-operator review and a real Stage-3 model adapter. Stage 3 can be backed by OpenAI or a local LM Studio model without changing the application-owned contracts around it.
+The portfolio target is the **full R5 system**, not an earlier deterministic checkpoint. R5 runs all three Stage-1 detector families, PostgreSQL/pgvector grounding, authenticated multi-operator review and a real Stage-3 model adapter. The application keeps provider-neutral Stage-3 contracts and both local/cloud adapter implementations, but the **portfolio demonstration runs locally through LM Studio** and does not require paid API credits or cloud credentials.
 
 > **Scope:** the data is synthetic. Detector scores and generated analyses are reviewer signals for this demonstrator, not calibrated production AML decisions and not assertions of wrongdoing.
 
@@ -17,7 +17,7 @@ R5 combines:
 - local MiniLM embeddings and PostgreSQL/pgvector Stage-2 policy retrieval;
 - authenticated review and retained analysis history;
 - a bounded application-owned evidence envelope;
-- provider-selectable Stage-3 advisory synthesis;
+- provider-neutral Stage-3 advisory synthesis, demonstrated with LM Studio;
 - explicit detector, retrieval, model and prompt provenance;
 - React + TypeScript UI and Playwright acceptance evidence.
 
@@ -34,28 +34,13 @@ MiniLM + pgvector policy grounding
 bounded application-owned evidence envelope
           │
           ▼
-OpenAI or local LM Studio synthesis
+local LM Studio synthesis
           │
           ▼
 validation + retained provenance/history
 ```
 
-### Run R5 with OpenAI
-
-Set the repository-scoped credential variable and start the complete topology directly with Compose:
-
-```bash
-export SPECGRAPH_OPENAI_API_KEY='...'
-export OPENAI_MODEL='gpt-5-mini'
-docker compose \
-  -f compose.r5.yaml \
-  -f compose.r5.openai.yaml \
-  up -d --build --wait
-```
-
-Open <http://localhost:8088/>.
-
-### Run R5 with a local LM Studio model
+### Run the R5 demo with LM Studio
 
 Expose the LM Studio OpenAI-compatible endpoint on an address reachable from Docker, then run:
 
@@ -65,7 +50,9 @@ export SPECGRAPH_LOCAL_MODEL='ministral-3-8b-instruct-2512'
 docker compose -f compose.r5.yaml up -d --build --wait
 ```
 
-The same application topology and the same three Stage-1 detectors are used. Only the Stage-3 provider changes.
+Open <http://localhost:8088/>.
+
+This is the supported portfolio demo path. The cloud-provider adapter and its selection tests remain in the codebase to demonstrate replaceability behind `AnalysisModelPort`, but a live cloud call is not required for demonstration or review.
 
 The two synthetic demo operators are:
 
@@ -82,13 +69,7 @@ A useful full-flow customer is:
 
 Run an analysis, inspect all three detector artifacts, inspect pgvector grounding and model provenance, then reload the page to confirm retained history.
 
-Stop the topology with the same Compose surface used to start it. For OpenAI:
-
-```bash
-docker compose -f compose.r5.yaml -f compose.r5.openai.yaml down -v
-```
-
-For LM Studio:
+Stop the topology with:
 
 ```bash
 docker compose -f compose.r5.yaml down -v
@@ -98,7 +79,7 @@ No launcher script is required for the public demo path. Compose is the entry po
 
 ## Demo screenshots
 
-The full R5 screenshot is the primary visual fallback if a live provider is unavailable during review.
+The full R5 screenshot is the primary visual fallback if the local model is unavailable during review.
 
 ### R5 full ensemble + pgvector + local-model provenance
 
@@ -154,9 +135,9 @@ npm run build
 
 The active CI surface is deliberately small:
 
-- [`application-ci`](.github/workflows/application-ci.yml) for controlled-design checks, backend verification, frontend build, and both local/OpenAI R5 Compose contracts;
+- [`application-ci`](.github/workflows/application-ci.yml) for controlled-design checks, Python tooling coverage, backend verification, frontend build, the LM Studio/local R5 Compose contract, and non-network configuration checks for the alternate cloud-provider path;
 - [`r4-acceptance-ci`](.github/workflows/r4-acceptance-ci.yml) for the retained deep R4 browser/failure-path fallback;
-- [`r5-release`](.github/workflows/r5-release.yml) for the final R5 image and browser proof;
+- [`r5-release`](.github/workflows/r5-release.yml) for the final R5 image and browser proof using the local-model contract;
 - [`plantuml-diagrams`](.github/workflows/plantuml-diagrams.yml) for controlled diagram consistency.
 
 JaCoCo remains part of ordinary Maven verification. Repository-wide coverage aggregation is tracked separately in #488 so the eventual badge reflects the cleaned executable source set rather than a delivery-era LOC count.
