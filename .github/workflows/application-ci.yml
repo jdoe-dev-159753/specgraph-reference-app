@@ -1,5 +1,5 @@
 name: application-ci
-# Main application gate for the current portfolio system. Historical ring replay lives in frozen demo images.
+# Main application gate for the current portfolio system. Historical ring replay lives in submission-v1.
 
 on:
   workflow_dispatch:
@@ -109,8 +109,24 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
           npm run build
 
-      - name: Validate the full R5 Compose topology
-        run: docker compose -f compose.r5.yaml config --quiet
+      - name: Validate R5 local and OpenAI Compose contracts
+        run: |
+          set -euo pipefail
+
+          local_config="$(SPECGRAPH_LOCAL_BASE_URL=http://192.0.2.10:1234/v1 \
+            docker compose -f compose.r5.yaml config)"
+          printf '%s\n' "$local_config" | grep -q 'SPECGRAPH_ANALYSIS_BACKEND: local'
+          printf '%s\n' "$local_config" | grep -q 'SPECGRAPH_ANALYSIS_DETECTORS_0: BAYESIAN'
+          printf '%s\n' "$local_config" | grep -q 'SPECGRAPH_ANALYSIS_DETECTORS_1: FUZZY'
+          printf '%s\n' "$local_config" | grep -q 'SPECGRAPH_ANALYSIS_DETECTORS_2: RANDOM_FOREST'
+
+          openai_config="$(SPECGRAPH_OPENAI_API_KEY=contract-test-key OPENAI_MODEL=contract-test-model \
+            docker compose -f compose.r5.yaml -f compose.r5.openai.yaml config)"
+          printf '%s\n' "$openai_config" | grep -q 'SPECGRAPH_ANALYSIS_BACKEND: openai'
+          printf '%s\n' "$openai_config" | grep -q 'OPENAI_MODEL: contract-test-model'
+          printf '%s\n' "$openai_config" | grep -q 'SPECGRAPH_ANALYSIS_DETECTORS_0: BAYESIAN'
+          printf '%s\n' "$openai_config" | grep -q 'SPECGRAPH_ANALYSIS_DETECTORS_1: FUZZY'
+          printf '%s\n' "$openai_config" | grep -q 'SPECGRAPH_ANALYSIS_DETECTORS_2: RANDOM_FOREST'
 
       - name: Reclaim build outputs
         if: always()
