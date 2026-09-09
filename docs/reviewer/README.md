@@ -1,28 +1,13 @@
-# Reviewer visual evidence
+# Reviewer evidence
 
-This directory is the stable repository home for reviewer-facing visual evidence that is safe to show outside CI logs.
+This directory contains the compact reviewer-facing evidence intentionally retained by the post-submission portfolio edition.
 
-## Required delivery summaries
+- [`architecture-figures.md`](architecture-figures.md) maps the principal architecture views back to their controlled SDD sources.
+- [`r4-gallery.md`](r4-gallery.md) documents the maintained credential-free R4 fallback and the preserved side-by-side R4 captures.
+- [`r5-runtime.md`](r5-runtime.md) documents the richer R5 local-model demonstration and its provenance checks.
+- [`screenshot-manifest.md`](screenshot-manifest.md) records the source revisions, workflow runs, artifact identifiers and digests behind promoted screenshots.
+- [`screenshots/`](screenshots/) contains only representative unedited captures retained for reviewer fallback.
 
-- [`DEL-003` — model and provider choice](delivery/del-003-model-choice.md)
-- [`DEL-004` — AI development-agent instructions](delivery/del-004-agent-instructions.md)
+The assignment-specific DEL-003/DEL-004 summaries, older fallback-video planning notes and other delivery-era reviewer scaffolding remain available under the immutable [`submission-v1`](https://github.com/jdoe-dev-159753/specgraph-reference-app/tree/submission-v1) tag and Git history rather than staying active in the portfolio tree.
 
-## Controlled architecture figures
-
-The canonical sources remain under `docs/assignment/SDD/diagrams/`. The root README embeds selected rendered SVGs directly from that controlled directory rather than copying them here.
-
-## Application screenshots
-
-Authentic browser screenshots are produced by the repository-owned Playwright/CI flows. When a screenshot is promoted into the repository it must retain:
-
-- the exact source SHA or immutable checkpoint identity;
-- the ring / runtime variant that produced it;
-- the customer/scenario identity;
-- the workflow/run provenance from which it was captured;
-- no secret or real customer data.
-
-Do not add mockups or manually reconstructed screenshots to satisfy this section. Existing CI screenshots for R1/R2/R3/R4 are the source material for the first promotion pass owned by #145.
-
-## Demo fallback video
-
-A short recorded walkthrough may be retained here (or linked from a durable release artifact) as a fallback for a failed live demonstration. It must show the same executable rings/configurations documented in the root README and must not be presented as fresher than the revision it actually records.
+Canonical requirements, design decisions, architecture and verification semantics remain under [`docs/assignment/`](../assignment/). The reviewer directory is evidence and navigation, not a second source of architectural truth.
