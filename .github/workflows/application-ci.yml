@@ -36,15 +36,10 @@ permissions:
 
 jobs:
   verify:
-    runs-on: [self-hosted, linux, x64, specgraph-reference-app, ci, docker]
+    runs-on: ubuntu-24.04
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Clean previous build outputs
-        run: |
-          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
-            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/build /workspace/scripts/__pycache__'
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.SOURCE_SHA }}
@@ -150,10 +145,3 @@ jobs:
           printf '%s\n' "$openai_config" | grep -q 'SPECGRAPH_ANALYSIS_DETECTORS_0: BAYESIAN'
           printf '%s\n' "$openai_config" | grep -q 'SPECGRAPH_ANALYSIS_DETECTORS_1: FUZZY'
           printf '%s\n' "$openai_config" | grep -q 'SPECGRAPH_ANALYSIS_DETECTORS_2: RANDOM_FOREST'
-
-      - name: Reclaim build outputs
-        if: always()
-        run: |
-          docker run --rm -v "$PWD:/workspace" alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce \
-            sh -c 'rm -rf /workspace/backend/target /workspace/frontend/node_modules /workspace/frontend/dist /workspace/build /workspace/scripts/__pycache__'
-          rm -rf "$RUNNER_TEMP/specgraph-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
