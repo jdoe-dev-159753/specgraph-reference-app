@@ -42,7 +42,7 @@ flowchart TD
     Stage2 --> Envelope["Bounded application-owned evidence envelope"]
     Envelope --> Port["AnalysisModelPort"]
     Port --> Local["LM Studio / local adapter<br/>portfolio demo path"]
-    Port -. "alternative implementation" .-> Cloud["OpenAI / cloud adapter"]
+    Port -. alternative implementation .-> Cloud["OpenAI / cloud adapter"]
     Local --> Result["Validation + retained provenance/history"]
     Cloud --> Result
 ```
